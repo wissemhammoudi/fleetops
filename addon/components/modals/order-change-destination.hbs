@@ -21,12 +21,12 @@
                                     <Badge @status="info" class="uppercase">Current</Badge>
                                 {{else if option.isSelected}}
                                     <Badge @status="success" class="uppercase">Selected</Badge>
-                                {{else if option.waypoint.complete}}
+                                {{else if option.stop.complete}}
                                     <Badge @status="completed" class="uppercase">Complete</Badge>
-                                {{else if option.waypoint.status_code}}
-                                    <Badge @status={{dasherize option.waypoint.status_code}} class="uppercase">{{option.waypoint.status_code}}</Badge>
-                                {{else if option.waypoint.status}}
-                                    <Badge @status={{dasherize option.waypoint.status}} class="uppercase">{{option.waypoint.status}}</Badge>
+                                {{else if option.stop.statusCode}}
+                                    <Badge @status={{dasherize option.stop.statusCode}} class="uppercase">{{option.stop.statusCode}}</Badge>
+                                {{else if option.stop.status}}
+                                    <Badge @status={{dasherize option.stop.status}} class="uppercase">{{option.stop.status}}</Badge>
                                 {{/if}}
                             </div>
                             <div class="mt-1 truncate text-xs text-gray-600 dark:text-gray-300">{{or option.waypoint.address option.waypoint.street1}}</div>

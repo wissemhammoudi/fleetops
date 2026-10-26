@@ -3,6 +3,8 @@
 namespace Fleetbase\FleetOps\Models;
 
 use Fleetbase\Casts\Json;
+use Fleetbase\FleetOps\Support\PackagingInspection;
+use Fleetbase\FleetOps\Support\RecipientHandoff;
 use Fleetbase\Models\Model;
 use Fleetbase\Traits\HasApiModelBehavior;
 use Fleetbase\Traits\HasMetaAttributes;
@@ -78,6 +80,19 @@ class ManifestStop extends Model
         'tracking_number',
         'address',
     ];
+
+    public static function boot(): void
+    {
+        parent::boot();
+
+        static::saving(function (ManifestStop $stop) {
+            if ($stop->isDirty('status') && $stop->status === 'completed' && $stop->order_uuid) {
+                $order = Order::findOrFail($stop->order_uuid);
+                PackagingInspection::assertCanProgress($order, 'completed');
+                RecipientHandoff::assertManifestStop($order, $stop->place_uuid, $stop->waypoint_uuid);
+            }
+        });
+    }
 
     // ── Relationships ─────────────────────────────────────────────────────────
 

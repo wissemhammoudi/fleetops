@@ -80,20 +80,46 @@ export function buildServiceStopsFromPayload(payload) {
     const stops = [];
     const waypoints = payload.waypoints ?? [];
 
+    // Stop descriptors retain visit identity when Ember Data shares a place record.
+    if (Array.isArray(payload.service_stops)) {
+        const places = [payload.pickup, ...Array.from(waypoints).map(waypointToPlace), payload.dropoff].filter(Boolean);
+        return payload.service_stops.map((stop, index) => ({
+            role: stop.role,
+            stopKey: stop.key,
+            place: places.find((place) => [place.uuid, place.id].includes(stop.place_uuid)),
+            stopNumber: index + 1,
+            trackingNumberUuid: stop.tracking_number_uuid,
+            tracking: stop.tracking,
+            status: stop.status,
+            statusCode: stop.status_code,
+            complete: stop.complete,
+        })).filter((stop) => stop.place);
+    }
+
     if (payload.pickup) {
-        stops.push({ role: 'pickup', place: payload.pickup, trackingNumberUuid: endpointTrackingNumberUuid(payload, 'pickup') });
+        stops.push({ role: 'pickup', stopKey: 'pickup', place: payload.pickup, trackingNumberUuid: endpointTrackingNumberUuid(payload, 'pickup') });
     }
 
     waypoints.forEach((waypoint, index) => {
         const place = waypointToPlace(waypoint);
 
         if (place) {
-            stops.push({ role: 'waypoint', place, stopNumber: index + 1, trackingNumberUuid: waypointTrackingNumberUuid(waypoint) });
+            stops.push({
+                role: ['pickup', 'dropoff'].includes(waypoint.type) ? waypoint.type : 'waypoint',
+                stopKey: waypoint.service_stop_key ?? (waypoint.waypoint_uuid ? `waypoint:${waypoint.waypoint_uuid}` : null),
+                place,
+                stopNumber: index + 1,
+                trackingNumberUuid: waypointTrackingNumberUuid(waypoint),
+                tracking: waypoint.tracking,
+                status: waypoint.status,
+                statusCode: waypoint.status_code,
+                complete: waypoint.complete,
+            });
         }
     });
 
     if (payload.dropoff) {
-        stops.push({ role: 'dropoff', place: payload.dropoff, trackingNumberUuid: endpointTrackingNumberUuid(payload, 'dropoff') });
+        stops.push({ role: 'dropoff', stopKey: 'dropoff', place: payload.dropoff, trackingNumberUuid: endpointTrackingNumberUuid(payload, 'dropoff') });
     }
 
     if (payload.return) {

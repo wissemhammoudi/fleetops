@@ -9,6 +9,9 @@ use Fleetbase\FleetOps\Events\OrderCompleted;
 use Fleetbase\FleetOps\Events\OrderDispatched;
 use Fleetbase\FleetOps\Events\OrderDriverAssigned;
 use Fleetbase\FleetOps\Flow\Activity;
+use Fleetbase\FleetOps\Support\DeliveryOptions;
+use Fleetbase\FleetOps\Support\PackagingInspection;
+use Fleetbase\FleetOps\Support\RecipientHandoff;
 use Fleetbase\FleetOps\Support\LabelPdf;
 use Fleetbase\FleetOps\Support\OrderTracker;
 use Fleetbase\FleetOps\Support\Utils;
@@ -36,6 +39,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
@@ -61,6 +65,30 @@ class Order extends Model
      * @var string
      */
     protected $table = 'orders';
+
+    protected ?Order $authorizedOriginalReturnOrder = null;
+    protected bool $recordingPackagingInspection = false;
+    protected bool $recordingRecipientHandoff = false;
+
+    public function recordRecipientHandoff(array $result): void
+    {
+        $meta = $this->meta ?? [];
+        $history = data_get($meta, 'recipient_handoff.history', []);
+        $history[] = $result;
+        data_set($meta, 'recipient_handoff', ['latest' => $result, 'history' => $history]);
+        $this->meta = $meta;
+        $this->recordingRecipientHandoff = true;
+    }
+
+    public function recordPackagingInspection(array $result): void
+    {
+        $meta = $this->meta ?? [];
+        $history = data_get($meta, 'packaging_inspection.history', []);
+        $history[] = $result;
+        data_set($meta, 'packaging_inspection', ['latest' => $result, 'history' => $history]);
+        $this->meta = $meta;
+        $this->recordingPackagingInspection = true;
+    }
 
     /**
      * The type of public Id to generate.
@@ -244,12 +272,81 @@ class Order extends Model
         '_key',
     ];
 
+    // Call only after resolving the original order through the caller's customer/account scope.
+    public function setAuthorizedOriginalReturnOrder(Order $original): self
+    {
+        $this->authorizedOriginalReturnOrder = $original;
+
+        return $this;
+    }
+
     /**
      * Enforce a morph map.
      */
     public static function boot(): void
     {
         parent::boot();
+
+        static::saving(function (Order $order) {
+            $originalMeta = $order->getOriginal('meta') ?? [];
+            if (!$order->recordingRecipientHandoff && data_get($order->meta, 'recipient_handoff') !== data_get($originalMeta, 'recipient_handoff')) {
+                throw ValidationException::withMessages(['meta.recipient_handoff' => 'Recipient handoff can only be recorded through the assigned-driver handoff endpoint.']);
+            }
+            if (!$order->recordingPackagingInspection && data_get($order->meta, 'packaging_inspection') !== data_get($originalMeta, 'packaging_inspection')) {
+                throw ValidationException::withMessages(['meta.packaging_inspection' => 'Packaging checks can only be recorded by the assigned driver through the packaging-check endpoint.']);
+            }
+            $meta = $order->meta ?? [];
+            if (!$order->exists) {
+                data_set($meta, 'packaging_policy_revision', DeliveryOptions::REVISION);
+                data_set($meta, 'recipient_handoff_policy_revision', 1);
+            } elseif (data_get($meta, 'packaging_policy_revision') !== data_get($originalMeta, 'packaging_policy_revision')) {
+                throw ValidationException::withMessages(['meta.packaging_policy_revision' => 'The packaging pickup policy cannot be changed.']);
+            }
+            if ($order->exists && data_get($meta, 'recipient_handoff_policy_revision') !== data_get($originalMeta, 'recipient_handoff_policy_revision')) {
+                throw ValidationException::withMessages(['meta.recipient_handoff_policy_revision' => 'The recipient handoff policy cannot be changed.']);
+            }
+            if (!$order->exists || data_get($meta, 'delivery.service_level') !== data_get($originalMeta, 'delivery.service_level')) {
+                DeliveryOptions::validateNewService($meta);
+            }
+            $order->meta = $meta;
+            if ($order->isDirty('status')) {
+                PackagingInspection::assertCanProgress($order, (string) $order->status);
+                if (in_array($order->status, ['completed', 'delivered', 'done', 'order_completed'], true)) {
+                    RecipientHandoff::assertCanComplete($order);
+                }
+            }
+            $validateMeta = !$order->exists || $order->isDirty('meta');
+            if ($validateMeta) {
+                DeliveryOptions::validateOrderMeta($order->meta);
+            }
+            $delivery = data_get($order->meta, 'delivery');
+            if ($delivery === null) {
+                return;
+            }
+            $originalId = data_get($delivery, 'original_order_uuid');
+            if ($validateMeta && $originalId) {
+                $originalCustomerUuid = $order->authorizedOriginalReturnOrder?->uuid === $originalId
+                    ? $order->authorizedOriginalReturnOrder->customer_uuid
+                    : $order->customer_uuid;
+                $original = static::where('company_uuid', $order->company_uuid)
+                    ->where('customer_uuid', $originalCustomerUuid)
+                    ->where('uuid', $originalId)
+                    ->whereNull('deleted_at')
+                    ->first();
+                if (!$original || $original->uuid === $order->uuid || data_get($delivery, 'purpose') !== 'return') {
+                    throw ValidationException::withMessages([
+                        'meta.delivery.original_order_uuid' => 'Select an original order belonging to this customer for a Return order.',
+                    ]);
+                }
+            }
+            $order->orchestrator_priority = data_get($delivery, 'service_level') === 'express'
+                ? DeliveryOptions::EXPRESS_PRIORITY
+                : DeliveryOptions::STANDARD_PRIORITY;
+        });
+        static::saved(function (Order $order) {
+            $order->recordingPackagingInspection = false;
+            $order->recordingRecipientHandoff = false;
+        });
 
         Relation::morphMap(
             [
@@ -289,16 +386,37 @@ class Order extends Model
 
                 return data_get($upload, 'uuid') ?? data_get($upload, 'id');
             })
-            ->filter()
             ->unique()
             ->values();
 
         if ($ids->isEmpty()) {
             return $this;
         }
+        if ($ids->contains(fn ($id) => !is_string($id) || $id === '')) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['files' => 'Document references must be nonempty strings.']);
+        }
 
-        \Fleetbase\Models\File::whereIn('uuid', $ids)->get()->each(function ($file) {
-            $file->setKey($this);
+        (new \Fleetbase\Models\File())->getConnection()->transaction(function () use ($ids) {
+            $files = \Fleetbase\Models\File::where('company_uuid', $this->company_uuid)->whereIn('uuid', $ids)->lockForUpdate()->get();
+            if ($files->count() !== $ids->count()) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['files' => 'One or more document references are invalid or unavailable.']);
+            }
+            foreach ($files as $file) {
+                $alreadyAttached = $file->subject_uuid === $this->uuid && $file->subject_type === static::class;
+                if ($alreadyAttached) {
+                    continue;
+                }
+                if ($file->subject_uuid || $file->subject_type || $file->uploader_uuid !== session('user') || $file->type !== 'order_file') {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['files' => 'Only your own unattached order-document uploads may be attached.']);
+                }
+                \Fleetbase\Support\OrderDocumentPolicy::assertMetadata($file->original_filename, $file->content_type, $file->file_size);
+                if (!$file->created_at || $file->created_at->lt(now()->subDays(7))) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['files' => 'This draft document expired. Upload it again.']);
+                }
+            }
+            foreach ($files as $file) {
+                $file->setKey($this);
+            }
         });
 
         return $this;
@@ -874,6 +992,7 @@ class Order extends Model
         }
 
         $payload = Payload::create($attributes);
+        $payload->snapshotEndpointContacts();
 
         if ($setPayload) {
             $this->setPayload($payload);
@@ -943,6 +1062,7 @@ class Order extends Model
         // @codeCoverageIgnoreEnd
 
         $payload = Payload::find($uuid);
+        $payload->snapshotEndpointContacts();
 
         $payload->fireModelEvent('created', false);
 
@@ -1391,6 +1511,10 @@ class Order extends Model
             return $this;
         }
 
+        PackagingInspection::assertCanProgress($this, (string) $activity->get('code'));
+        if ($activity->completesOrder()) {
+            RecipientHandoff::assertCanComplete($this);
+        }
         $location = $this->getLastLocation();
 
         $this->insertActivity($activity, $location, $proof);
@@ -1434,6 +1558,8 @@ class Order extends Model
      */
     public function complete(?Proof $proof = null): self
     {
+        RecipientHandoff::assertCanComplete($this);
+        PackagingInspection::assertCanProgress($this, 'completed');
         $doesntHaveCompletedActivity = TrackingStatus::where(['tracking_number_uuid' => $this->tracking_number_uuid, 'code' => 'COMPLETED'])->doesntExist();
         if ($doesntHaveCompletedActivity) {
             $activity = $this->config()->getCompletedActivity();

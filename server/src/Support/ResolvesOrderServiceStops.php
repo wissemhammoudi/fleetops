@@ -17,7 +17,6 @@ use Fleetbase\FleetOps\Models\Waypoint;
 use Fleetbase\LaravelMysqlSpatial\Types\Point;
 use Fleetbase\Support\TemplateString;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 trait ResolvesOrderServiceStops
 {
@@ -87,6 +86,7 @@ trait ResolvesOrderServiceStops
         if ($payload->pickup instanceof Place) {
             $stops->push([
                 'type'                 => 'pickup',
+                'key'                  => 'pickup',
                 'place'                => $payload->pickup,
                 'waypoint'             => null,
                 'tracking_number_uuid' => $payload->pickup_tracking_number_uuid,
@@ -101,7 +101,8 @@ trait ResolvesOrderServiceStops
 
                 if ($waypoint->place instanceof Place) {
                     $stops->push([
-                        'type'                 => 'waypoint',
+                        'type'                 => in_array($waypoint->type, ['pickup', 'dropoff'], true) ? $waypoint->type : 'waypoint',
+                        'key'                  => 'waypoint:' . $waypoint->uuid,
                         'place'                => $waypoint->place,
                         'waypoint'             => $waypoint,
                         'tracking_number_uuid' => $waypoint->tracking_number_uuid,
@@ -114,6 +115,7 @@ trait ResolvesOrderServiceStops
                 if ($place instanceof Place) {
                     $stops->push([
                         'type'                 => 'waypoint',
+                        'key'                  => 'place:' . $place->uuid,
                         'place'                => $place,
                         'waypoint'             => null,
                         'tracking_number_uuid' => null,
@@ -126,6 +128,7 @@ trait ResolvesOrderServiceStops
         if ($payload->dropoff instanceof Place) {
             $stops->push([
                 'type'                 => 'dropoff',
+                'key'                  => 'dropoff',
                 'place'                => $payload->dropoff,
                 'waypoint'             => null,
                 'tracking_number_uuid' => $payload->dropoff_tracking_number_uuid,
@@ -144,6 +147,13 @@ trait ResolvesOrderServiceStops
         }
 
         $currentStopId = $payload?->current_waypoint_uuid;
+        $currentKey = data_get($payload?->meta, 'service_stop.key');
+        if ($currentKey) {
+            $current = $stops->first(fn (array $stop) => ($stop['key'] ?? null) === $currentKey && data_get($stop, 'place.uuid') === $currentStopId);
+            if ($current) {
+                return $current;
+            }
+        }
         if ($currentStopId) {
             $current = $stops->first(function (array $stop) use ($currentStopId) {
                 $place    = $stop['place'] ?? null;
@@ -169,7 +179,7 @@ trait ResolvesOrderServiceStops
         }
 
         $place = $stop['place'] ?? null;
-        if ($place instanceof Place && $payload->current_waypoint_uuid !== $place->uuid) {
+        if ($place instanceof Place && ($payload->current_waypoint_uuid !== $place->uuid || data_get($payload->meta, 'service_stop.key') !== ($stop['key'] ?? null))) {
             $this->setPayloadCurrentServiceStop($payload, $stop);
         }
 
@@ -183,12 +193,12 @@ trait ResolvesOrderServiceStops
             return null;
         }
 
-        $payload->current_waypoint_uuid = $place->uuid;
-        $payload->saveQuietly();
-        $payload->setRelation('currentWaypoint', $place);
+        $payload->setCurrentServiceStop($place, $stop['key'] ?? 'place:' . $place->uuid);
 
         if (($stop['waypoint'] ?? null) instanceof Waypoint) {
             $payload->setRelation('currentWaypointMarker', $stop['waypoint']);
+        } else {
+            $payload->unsetRelation('currentWaypointMarker');
         }
 
         return $place;
@@ -200,13 +210,20 @@ trait ResolvesOrderServiceStops
             return null;
         }
 
-        return $this->payloadServiceStops($payload)->first(function (array $stop) use ($key) {
+        $stops = $this->payloadServiceStops($payload);
+        $exact = $stops->first(fn (array $stop) => ($stop['key'] ?? null) === $key);
+        if ($exact) {
+            return $exact;
+        }
+        $matches = $stops->filter(function (array $stop) use ($key) {
             $place    = $stop['place'] ?? null;
             $waypoint = $stop['waypoint'] ?? null;
 
             return $place instanceof Place && in_array($key, [$place->uuid, $place->public_id, $place->id], true)
                 || $waypoint instanceof Waypoint && in_array($key, [$waypoint->uuid, $waypoint->public_id, $waypoint->place_uuid], true);
         });
+        // A place can be visited more than once; callers must use its marker key.
+        return $matches->count() === 1 ? $matches->first() : null;
     }
 
     protected function nextIncompleteServiceStop(Order $order, Payload $payload): ?array
@@ -219,14 +236,14 @@ trait ResolvesOrderServiceStops
             ->first(fn (array $stop) => !$this->serviceStopIsComplete($order, $payload, $stop));
     }
 
-    protected function serviceStopIsComplete(Order $order, Payload $payload, array $stop): bool
+    protected function serviceStopIsComplete(Order $order, Payload $payload, array $stop, bool $ignoreOrderStatus = false): bool
     {
-        if (in_array($order->status, ['completed', 'canceled'], true)) {
+        if (!$ignoreOrderStatus && in_array($order->status, ['completed', 'canceled'], true)) {
             return true;
         }
 
         $type = $stop['type'] ?? null;
-        if ($type === 'waypoint') {
+        if (($stop['waypoint'] ?? null) instanceof Waypoint || $type === 'waypoint') {
             $waypoint = $stop['waypoint'] ?? null;
 
             return $waypoint instanceof Waypoint && $this->waypointMarkerIsComplete($waypoint);
@@ -247,13 +264,19 @@ trait ResolvesOrderServiceStops
         if (!$payload || !$stop || !Utils::isActivity($activity) || !$location) {
             return $stop;
         }
+        if (in_array($order->status, ['completed', 'delivered', 'done', 'order_completed', 'canceled', 'cancelled', 'order_canceled'], true)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['activity' => 'Finished deliveries cannot update route-stop activity.']);
+        }
+        if ($activity->complete() && ($stop['type'] ?? null) !== 'pickup') {
+            RecipientHandoff::assertCanComplete($order, false);
+        }
 
         $waypoint = $stop['waypoint'] ?? null;
         if ($waypoint instanceof Waypoint) {
             $payload->loadMissing(['entities']);
             $activityId = $waypoint->insertActivity($activity, $location, $proof);
             if ($activityId && $waypoint->tracking_number_uuid) {
-                DB::table((new TrackingNumber())->getTable())->where('uuid', $waypoint->tracking_number_uuid)->update(['status_uuid' => $activityId]);
+                $waypoint->getConnection()->table((new TrackingNumber())->getTable())->where('uuid', $waypoint->tracking_number_uuid)->update(['status_uuid' => $activityId]);
                 if ($waypoint->relationLoaded('trackingNumber')) {
                     $waypoint->trackingNumber->status_uuid = $activityId;
                     $waypoint->trackingNumber->unsetRelation('status');
@@ -297,6 +320,16 @@ trait ResolvesOrderServiceStops
         $this->setPayloadCurrentServiceStop($payload, $nextStop);
 
         return $nextStop;
+    }
+
+    protected function syncClassicServiceStopDestination(Order $order, Activity $activity): void
+    {
+        if (in_array($activity->code, ['picked_up', 'in_transit', 'out_for_delivery'], true)) {
+            $dropoff = $this->payloadServiceStops($order->payload)->firstWhere('type', 'dropoff');
+            if ($dropoff) {
+                $this->setPayloadCurrentServiceStop($order->payload, $dropoff);
+            }
+        }
     }
 
     protected function payloadHasCurrentServiceStopActivity(?Payload $payload, Activity $activity): bool
@@ -390,7 +423,7 @@ trait ResolvesOrderServiceStops
         }
         // @codeCoverageIgnoreEnd
 
-        DB::table($payload->getTable())->where('uuid', $payload->uuid)->update([$column => $trackingNumberUuid]);
+        $payload->getConnection()->table($payload->getTable())->where('uuid', $payload->uuid)->update([$column => $trackingNumberUuid]);
         $payload->{$column} = $trackingNumberUuid;
 
         return TrackingNumber::where('uuid', $trackingNumberUuid)->first();
@@ -416,7 +449,7 @@ trait ResolvesOrderServiceStops
         ]);
 
         if ($activityId) {
-            DB::table($trackingNumber->getTable())->where('uuid', $trackingNumber->uuid)->update(['status_uuid' => $activityId]);
+            $trackingNumber->getConnection()->table($trackingNumber->getTable())->where('uuid', $trackingNumber->uuid)->update(['status_uuid' => $activityId]);
             $trackingNumber->status_uuid = $activityId;
         }
 

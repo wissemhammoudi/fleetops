@@ -11,11 +11,18 @@ export default class OrderFormComponent extends Component {
     @service customFieldsRegistry;
     @service mapManager;
     @service currentUser;
+    @service orderCreation;
     @tracked customFields;
 
     constructor() {
         super(...arguments);
         this.orderConfigActions.loadAll.perform();
+    }
+
+    @action setDeliveryMeta(meta) {
+        this.args.resource.set('meta', meta);
+        this.args.resource.set('orchestrator_priority', meta.delivery.service_level === 'express' ? 100 : 50);
+        this.orderCreation.requestServiceQuoteRefresh('delivery.options.changed', this.args.resource);
     }
 
     @action selectFacilitator(model) {

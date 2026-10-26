@@ -14,6 +14,7 @@ export default class OrderFormServiceRateComponent extends Component {
     @tracked serviceQuotes = [];
     @tracked isAutoRefreshingServiceQuotes = false;
     serviceQuoteRefreshRequestId = 0;
+    quoteRequestId = 0;
 
     constructor() {
         super(...arguments);
@@ -69,6 +70,7 @@ export default class OrderFormServiceRateComponent extends Component {
 
     @task *queryServiceRates(toggled) {
         this.args.resource.servicable = toggled;
+        this.clearServiceQuotes();
         if (!toggled) return;
         this.serviceRates = yield this.serviceRateActions.queryServiceRatesForOrder.perform(this.args.resource);
     }
@@ -104,6 +106,7 @@ export default class OrderFormServiceRateComponent extends Component {
         if (this.hasServiceQuoteOverride) {
             return;
         }
+        this.clearServiceQuotes();
 
         if (this.args.resource?.servicable && !this.serviceRates?.length && !this.queryServiceRates.isRunning) {
             this.queryServiceRates.perform(true);
@@ -120,9 +123,18 @@ export default class OrderFormServiceRateComponent extends Component {
     }
 
     async loadServiceQuotes(serviceRate) {
+        this.clearServiceQuotes();
+        const requestId = this.quoteRequestId;
         const serviceQuotes = await this.serviceRateActions.getServiceQuotes.perform(serviceRate, this.args.resource);
+        if (requestId !== this.quoteRequestId || this.isDestroying || this.isDestroyed) return;
         this.serviceQuotes = serviceQuotes ?? [];
         this.clearStaleSelectedServiceQuote();
+    }
+
+    clearServiceQuotes() {
+        this.quoteRequestId++;
+        this.serviceQuotes = [];
+        this.args.resource.service_quote_uuid = null;
     }
 
     clearStaleSelectedServiceQuote() {

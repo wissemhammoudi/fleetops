@@ -41,11 +41,13 @@ class GreedyOrchestrationEngine implements OrchestrationEngineInterface
     public function allocate(Collection $orders, Collection $vehicles, array $options = []): array
     {
         $allowMulti = (bool) ($options['allow_multi_order'] ?? false);
+        $now = now();
 
-        // Sort orders: highest priority first, then earliest scheduled_at
+        // Sort orders: highest priority first, then earliest schedule and creation time.
         $sorted = $orders->sortBy([
             fn ($a, $b) => ($b->orchestrator_priority ?? 0) <=> ($a->orchestrator_priority ?? 0),
-            fn ($a, $b) => ($a->scheduled_at ?? now()) <=> ($b->scheduled_at ?? now()),
+            fn ($a, $b) => ($a->scheduled_at ?? $now) <=> ($b->scheduled_at ?? $now),
+            fn ($a, $b) => ($a->created_at ?? $now) <=> ($b->created_at ?? $now),
         ])->values();
 
         // Build a mutable list of available vehicles with their current location

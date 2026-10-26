@@ -1,1 +1,2 @@
 <Table::Cell::Identity @row={{@row}} @column={{@column}} @value={{@value}} @onClick={{@onClick}} @resourceType="order" ...attributes />
+{{#if (eq @row.meta.delivery.service_level "express")}}<Badge @status="warning">Express</Badge>{{/if}}

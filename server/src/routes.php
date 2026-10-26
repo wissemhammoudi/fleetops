@@ -192,6 +192,10 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
                 $router->match(['post', 'patch'], '{id}/schedule', 'OrderController@scheduleOrder');
                 $router->match(['post', 'patch'], '{id}/dispatch', 'OrderController@dispatchOrder');
                 $router->post('{id}/start', 'OrderController@startOrder');
+                $router->get('{id}/packaging-check', 'PackagingInspectionController@show');
+                $router->post('{id}/packaging-check', 'PackagingInspectionController@store');
+                $router->get('{id}/recipient-handoff', 'RecipientHandoffController@show');
+                $router->post('{id}/recipient-handoff', 'RecipientHandoffController@store');
                 $router->delete('{id}/cancel', 'OrderController@cancelOrder');
                 $router->match(['post', 'patch'], '{id}/update-activity', 'OrderController@updateActivity');
                 $router->post('{id}/complete', 'OrderController@completeOrder');
@@ -422,6 +426,7 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
                     ],
                     function ($router) {
                         $router->get('search', 'SearchController@search');
+                        $router->get('delivery-options', 'DeliveryOptionsController@index');
 
                         $router->fleetbaseRoutes(
                             'contacts',
@@ -535,6 +540,8 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
                                 $router->post('process-imports', $controller('importFromFiles'));
                                 $router->patch('route/{id}', $controller('editOrderRoute'));
                                 $router->patch('set-destination/{id}/{placeId}', $controller('setDestination'));
+                                $router->post('{id}/files', $controller('attachOrderDocuments'));
+                                $router->delete('{id}/files/{fileId}', $controller('removeOrderDocument'));
                                 $router->patch('update-activity/{id}', $controller('updateActivity'));
                                 $router->get('{id}/proofs/{subjectId?}', $controller('proofs'));
                                 $router->patch('bulk-assign-driver', $controller('bulkAssignDriver'));

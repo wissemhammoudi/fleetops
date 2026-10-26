@@ -53,6 +53,22 @@
             </div>
         </div>
         <div>
+            {{#if @resource.meta.delivery}}
+                <div class="field-info-container field-vertical-container dashed-bottom">
+                    <div class="field-name">Delivery options</div>
+                    <div class="field-value">{{smart-humanize @resource.meta.delivery.purpose}} / {{smart-humanize @resource.meta.delivery.service_level}}</div>
+                </div>
+            {{/if}}
+            <div class="field-info-container field-vertical-container">
+                <div class="field-name">Recipient opening</div>
+                <div class="field-value">{{if @resource.meta.delivery.opening_allowed "Allowed: supervised visual inspection before acceptance/payment. No use or testing." "Not allowed before acceptance."}}</div>
+            </div>
+            {{#if (eq @resource.meta.recipient_handoff.latest.status "refused")}}
+                <div role="alert">
+                    <strong>Recipient refused: {{@resource.meta.recipient_handoff.latest.reason}}</strong>
+                    <p>Arrange a return with the sender. Do not mark delivered or collect COD. Return charges require an agreed policy.</p>
+                </div>
+            {{/if}}
             <div class="field-info-container field-vertical-container dashed-bottom">
                 <div class="field-name">ID</div>
                 <ClickToCopy @value={{@resource.public_id}} class="field-value">{{n-a @resource.public_id}}</ClickToCopy>
@@ -119,4 +135,11 @@
             {{/if}}
         </div>
     </ContentPanel>
+{{/if}}
+{{#if (eq @resource.meta.packaging_inspection.latest.status "refused")}}
+    <div role="alert" class="p-3 border rounded">
+        <strong>Pickup blocked: non-compliant packaging.</strong>
+        <p>{{@resource.meta.packaging_inspection.latest.reason}}</p>
+        <p>Await repackaging and a new check by the assigned driver. The order has not been canceled.</p>
+    </div>
 {{/if}}

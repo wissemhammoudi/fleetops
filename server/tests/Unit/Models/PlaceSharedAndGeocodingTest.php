@@ -76,7 +76,7 @@ function fleetopsPlaceSharedBoot(): SQLiteConnection
 
     $schema = $connection->getSchemaBuilder();
     $tables = [
-        'places' => ['uuid', 'public_id', 'company_uuid', 'owner_uuid', 'name', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'location', 'meta', 'avatar_url', '_key'],
+        'places' => ['uuid', 'public_id', 'company_uuid', 'owner_uuid', 'name', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'location', 'meta', 'avatar_url', '_key', 'type'],
         'files'  => ['uuid', 'public_id', 'company_uuid', 'type', 'original_filename', 'path', 'bucket', 'disk'],
     ];
     foreach ($tables as $table => $columns) {

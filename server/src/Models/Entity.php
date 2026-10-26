@@ -131,6 +131,11 @@ class Entity extends Model
     public static function boot()
     {
         parent::boot();
+        static::saving(function ($model) {
+            if (!$model->exists || $model->isDirty('meta')) {
+                \Fleetbase\FleetOps\Support\DeliveryOptions::validateParcelMeta($model->meta);
+            }
+        });
         static::creating(function ($model) {
             $model->qr_code = DNS2D::getBarcodePNG($model->uuid, 'QRCODE');
             $model->barcode = DNS2D::getBarcodePNG($model->uuid, 'PDF417');

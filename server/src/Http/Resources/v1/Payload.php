@@ -3,6 +3,7 @@
 namespace Fleetbase\FleetOps\Http\Resources\v1;
 
 use Fleetbase\FleetOps\Support\Utils;
+use Fleetbase\FleetOps\Support\ResolvesOrderServiceStops;
 use Fleetbase\Http\Resources\FleetbaseResource;
 use Fleetbase\Models\Model;
 use Fleetbase\Support\Http;
@@ -10,6 +11,8 @@ use Illuminate\Support\Collection;
 
 class Payload extends FleetbaseResource
 {
+    use ResolvesOrderServiceStops;
+
     /**
      * Transform the resource into an array.
      *
@@ -33,10 +36,11 @@ class Payload extends FleetbaseResource
             'return_uuid'                  => $this->when(Http::isInternalRequest(), $this->return_uuid),
             'return_tracking_number_uuid'  => $this->when(Http::isInternalRequest(), $this->return_tracking_number_uuid),
             'current_waypoint'             => $this->when(Http::isPublicRequest() && $this->currentWaypoint, data_get($this, 'currentWaypoint.public_id')),
-            'pickup'                       => $this->getPlace($this->pickup),
-            'dropoff'                      => $this->getPlace($this->dropoff),
+            'pickup'                       => $this->getPlace($this->pickup, false, 'pickup'),
+            'dropoff'                      => $this->getPlace($this->dropoff, false, 'dropoff'),
             'return'                       => new Place($this->return),
             'waypoints'                    => Waypoint::collection($this->getWaypoints($withRouteETA)),
+            'service_stops'                => $this->when(Http::isInternalRequest(), fn () => $this->getServiceStops()),
             'entities'                     => Entity::collection($this->entities),
             'cod_amount'                   => $this->cod_amount ?? null,
             'cod_currency'                 => $this->cod_currency ?? null,
@@ -48,8 +52,12 @@ class Payload extends FleetbaseResource
         ];
     }
 
-    private function getPlace(?Model $place, bool $withRouteETA = false): Place
+    private function getPlace(?Model $place, bool $withRouteETA = false, ?string $stopKey = null): Place
     {
+        if ($place) {
+            $place = clone $place;
+            $place->service_stop_key = $stopKey;
+        }
         if ($place && $withRouteETA) {
             $place->eta = $this->tracker()->getWaypointETA($place);
         }
@@ -57,8 +65,36 @@ class Payload extends FleetbaseResource
         return new Place($place);
     }
 
+    private function getServiceStops(): array
+    {
+        return $this->payloadServiceStops($this->resource)->map(fn (array $stop) => [
+            'key' => $stop['key'],
+            'role' => $stop['type'],
+            'place_uuid' => $stop['place']->uuid,
+            'tracking_number_uuid' => $stop['tracking_number_uuid'],
+            'tracking' => data_get($stop, 'waypoint.tracking'),
+            'status' => data_get($stop, 'waypoint.status'),
+            'status_code' => data_get($stop, 'waypoint.status_code'),
+            'complete' => data_get($stop, 'waypoint.complete', false),
+        ])->all();
+    }
+
     private function getWaypoints(bool $withRouteETA = false): Collection
     {
+        if ($this->waypointMarkers->isNotEmpty()) {
+            return $this->waypointMarkers->sortBy('order')->values()
+                ->filter(fn ($marker) => $marker->place !== null)
+                ->map(function ($marker) use ($withRouteETA) {
+                    $place = clone $marker->place;
+                    $place->payload_uuid = $this->uuid;
+                    $place->setRelation('serviceWaypoint', $marker);
+                    if ($withRouteETA) {
+                        $place->eta = $this->tracker()->getWaypointETA($place);
+                    }
+
+                    return $place;
+                })->values();
+        }
         if ($this->waypoints instanceof Collection) {
             return $this->waypoints->map(function ($waypoint) use ($withRouteETA) {
                 $waypoint->payload_uuid = $this->uuid;

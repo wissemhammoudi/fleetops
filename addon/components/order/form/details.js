@@ -14,6 +14,30 @@ export default class OrderFormDetailsComponent extends Component {
     @service leafletLayerVisibilityManager;
     @service currentUser;
     @tracked customFields;
+    @tracked codAmount = '';
+
+    get collectCash() {
+        return this.args.resource.payload.cod_payment_method === 'cash';
+    }
+
+    @action toggleCollectCash() {
+        const enabled = !this.collectCash;
+        this.codAmount = '';
+        this.args.resource.payload.setProperties({
+            cod_amount: enabled ? '' : null,
+            cod_currency: enabled ? 'TND' : null,
+            cod_payment_method: enabled ? 'cash' : null,
+        });
+        this.requestServiceQuoteRefresh('details.cod.changed');
+    }
+
+    @action setCodAmount(event) {
+        this.codAmount = event.target.value;
+        const [whole, fraction = ''] = this.codAmount.split('.');
+        const amount = /^\d+(\.\d{1,3})?$/.test(this.codAmount) ? `${whole}.${fraction.padEnd(3, '0')}` : this.codAmount;
+        this.args.resource.payload.set('cod_amount', amount);
+        this.requestServiceQuoteRefresh('details.cod.changed');
+    }
 
     constructor() {
         super(...arguments);

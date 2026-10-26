@@ -117,6 +117,8 @@ class DispatchAdhocOrders extends Command
             })
             ->whereHas('payload')
             ->with(['company', 'payload'])
+            ->orderByDesc('orchestrator_priority')
+            ->orderBy('created_at')
             ->get();
     }
 

@@ -25,6 +25,7 @@ use Fleetbase\FleetOps\Models\Proof;
 use Fleetbase\FleetOps\Models\ServiceQuote;
 use Fleetbase\FleetOps\Models\Waypoint;
 use Fleetbase\FleetOps\Support\ResolvesOrderServiceStops;
+use Fleetbase\FleetOps\Support\PackagingInspection;
 use Fleetbase\FleetOps\Support\Utils;
 use Fleetbase\Http\Controllers\Controller;
 use Fleetbase\Http\Resources\Comment as CommentResource;
@@ -1052,46 +1053,34 @@ class OrderController extends Controller
      */
     public function updateActivity($id, Request $request)
     {
-        $skipDispatch = $request->or(['skip_dispatch', 'skipDispatch'], false);
-        $proof        = $request->input('proof', null);
-        $order        = null;
-
-        // if instance of order is passed directly to this method
-        if ($id instanceof Order) {
-            /** @var Order $order */
-            $order = $id;
-        }
-
-        // if string $id
-        if (!$order) {
-            try {
-                $order = $this->findOrder($id, [
-                    'driverAssigned',
-                    'payload.entities',
-                    'payload.pickup',
-                    'payload.dropoff',
-                    'payload.return',
-                    'payload.currentWaypoint',
-                    'payload.waypoints',
-                    'payload.waypointMarkers.place',
-                    'payload.waypointMarkers.trackingNumber.status',
-                ]);
-            } catch (ModelNotFoundException $exception) {
-                return response()->apiError('Order resource not found.', 404);
-            }
-        }
-
-        // if no order found
-        //
-        // Unreachable: findOrder() above is typed `: Order`, so it either returns
-        // an order or throws — it never yields null. This is independent of the
-        // upstream findByIdOrFail defect and stays unreachable after that is
-        // fixed; the catch above is what becomes live then, not this guard.
-        // @codeCoverageIgnoreStart
-        if (!$order) {
+        try {
+            $order = $id instanceof Order ? $id : $this->findOrder($id);
+        } catch (ModelNotFoundException $exception) {
             return response()->apiError('Order resource not found.', 404);
         }
-        // @codeCoverageIgnoreEnd
+
+        return $order->getConnection()->transaction(function () use ($order, $request) {
+            $locked = Order::where('uuid', $order->uuid)->lockForUpdate()->firstOrFail();
+
+            return $this->updateLockedActivity($locked, $request);
+        });
+    }
+
+    protected function updateLockedActivity(Order $order, Request $request)
+    {
+        $skipDispatch = $request->or(['skip_dispatch', 'skipDispatch'], false);
+        $proof        = $request->input('proof', null);
+        $order->loadMissing([
+            'driverAssigned',
+            'payload.entities',
+            'payload.pickup',
+            'payload.dropoff',
+            'payload.return',
+            'payload.currentWaypoint',
+            'payload.waypoints',
+            'payload.waypointMarkers.place',
+            'payload.waypointMarkers.trackingNumber.status',
+        ]);
 
         // if order is still status of `created` trigger started flag
         if ($order->status === 'created') {
@@ -1100,8 +1089,8 @@ class OrderController extends Controller
         }
 
         // if order is already completed
-        if ($order->status === 'completed') {
-            return response()->apiError('Order is already completed.');
+        if (in_array($order->status, ['completed', 'delivered', 'done', 'order_completed', 'canceled', 'cancelled', 'order_canceled'], true)) {
+            return response()->apiError('Finished deliveries cannot update activity.', 422);
         }
 
         // Get the order config
@@ -1117,6 +1106,7 @@ class OrderController extends Controller
         }
 
         // handle pickup/dropoff order activity update as normal
+        PackagingInspection::assertCanProgress($order, (string) $activity->get('code'));
         if (Utils::isActivity($activity) && $activity->is('dispatched')) {
             // make sure driver is assigned if not trigger failed dispatch
             if (!$order->hasDriverAssigned && !$order->adhoc) {
@@ -1138,10 +1128,12 @@ class OrderController extends Controller
 
         // Classic pickup/dropoff orders and static lifecycle statuses update the order.
         if (!$usesServiceStopActivity || $isLifecycleActivity) {
+            $this->assertActivityStopToken($order, $request);
             // Update order activity
             $order->updateActivity($activity, $proof);
 
             if (!$usesServiceStopActivity) {
+                $this->syncClassicServiceStopDestination($order, $activity);
                 foreach ($order->payload->entities as $entity) {
                     $entity->insertActivity($activity, $location, $proof);
                 }
@@ -1160,13 +1152,15 @@ class OrderController extends Controller
             return $this->orderResource($order->refresh());
         }
 
-        if (!$order->started && in_array($order->status, ['created', 'dispatched'], true)) {
+        if (!$order->started && !$order->started_at
+            && !in_array($order->status, ['started', 'picked_up', 'in_transit', 'out_for_delivery', 'arrived_at_dropoff'], true)
+            && !$activity->is('canceled')) {
             return response()->apiError('Order must be started before waypoint activity can be updated.', 422);
         }
 
         $currentStop               = $this->ensurePayloadCurrentServiceStop($order->payload);
         $isCompletingCurrentStop   = Utils::isActivity($activity) && $activity->complete();
-
+        $this->assertActivityStopToken($order, $request);
         $this->updateCurrentServiceStopActivity($order, $activity, $location, $proof);
 
         if (Utils::isActivity($activity) && $activity->is('canceled')) {
@@ -1186,6 +1180,14 @@ class OrderController extends Controller
         }
 
         return $this->orderResource($order->refresh());
+    }
+
+    protected function assertActivityStopToken(Order $order, Request $request): void
+    {
+        if ($request->filled('stop_token')) {
+            $token = \Fleetbase\FleetOps\Support\RecipientHandoff::stage($order)['stop_token'];
+            abort_unless(is_string($request->input('stop_token')) && hash_equals($token, $request->input('stop_token')), 409, 'The delivery stop changed. Refresh before submitting activity or proof.');
+        }
     }
 
     /**
@@ -1222,6 +1224,9 @@ class OrderController extends Controller
             $stop = $waypointId
                 ? $this->resolveServiceStopFromKey($order->payload, $waypointId)
                 : $this->payloadCurrentServiceStop($order->payload);
+            if ($waypointId && !$stop) {
+                return response()->apiError('Select an unambiguous route stop and retry.', 422);
+            }
         }
 
         $orderConfig = $order->ensureOrderConfig();
@@ -1258,6 +1263,21 @@ class OrderController extends Controller
         try {
             $order = $this->findOrder($id);
         } catch (ModelNotFoundException $exception) {
+            return response()->apiError('Order resource not found.', 404);
+        }
+
+        return $order->getConnection()->transaction(function () use ($order, $id) {
+            Order::where('uuid', $order->uuid)->lockForUpdate()->firstOrFail();
+
+            return $this->completeLockedOrder($id);
+        });
+    }
+
+    protected function completeLockedOrder(string $id)
+    {
+        try {
+            $order = $this->findOrder($id);
+        } catch (ModelNotFoundException $exception) {
             return $this->jsonResponse(
                 [
                     'error' => 'Order resource not found.',
@@ -1276,6 +1296,8 @@ class OrderController extends Controller
             return response()->apiError('Not all waypoints completed for order.');
         }
 
+        \Fleetbase\FleetOps\Support\RecipientHandoff::assertCanComplete($order);
+        PackagingInspection::assertCanProgress($order, 'completed');
         $activity = $order->config()->getCompletedActivity();
         if ($order->driverAssigned) {
             // unset from driver current job
@@ -1323,6 +1345,21 @@ class OrderController extends Controller
     public function setDestination(string $id, string $placeId)
     {
         try {
+            $order = $this->findOrder($id);
+        } catch (ModelNotFoundException $exception) {
+            return response()->apiError('Order resource not found.', 404);
+        }
+
+        return $order->getConnection()->transaction(function () use ($order, $id, $placeId) {
+            Order::where('uuid', $order->uuid)->lockForUpdate()->firstOrFail();
+
+            return $this->setLockedDestination($id, $placeId);
+        });
+    }
+
+    protected function setLockedDestination(string $id, string $placeId)
+    {
+        try {
             $order = $this->findOrder($id, [
                 'payload.pickup',
                 'payload.dropoff',
@@ -1340,6 +1377,7 @@ class OrderController extends Controller
         }
 
         // Get the order payload
+        abort_if(in_array($order->status, ['completed', 'delivered', 'done', 'order_completed', 'canceled', 'cancelled', 'order_canceled'], true), 422, 'Finished deliveries cannot change destination.');
         $payload = $order->payload;
 
         $stop = $this->resolveServiceStopFromKey($payload, $placeId);

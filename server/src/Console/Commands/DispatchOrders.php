@@ -72,6 +72,8 @@ class DispatchOrders extends Command
             ->whereIn('status', ['pending', 'created'])
             ->whereDate('scheduled_at', Carbon::today())
             ->whereNull('deleted_at')
+            ->orderByDesc('orchestrator_priority')
+            ->orderBy('created_at')
             ->get();
     }
 }

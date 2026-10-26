@@ -66,16 +66,16 @@
                                         </div>
                                         <div class="space-y-2">
                                             <div>
-                                                <Input @value={{entity.name}} @type="text" class="w-full form-input form-input-sm" placeholder={{t "common.name"}} />
+                                                <input value={{entity.name}} type="text" class="w-full form-input form-input-sm" placeholder={{t "common.name"}} {{on "input" (fn this.setEntityQuoteInput entity "name")}} />
                                             </div>
                                             <div>
-                                                <Input @value={{entity.sku}} @type="text" class="w-full form-input form-input-sm" placeholder={{t "order.fields.sku"}} />
+                                                <input value={{entity.sku}} type="text" class="w-full form-input form-input-sm" placeholder={{t "order.fields.sku"}} {{on "input" (fn this.setEntityQuoteInput entity "sku")}} />
                                             </div>
                                             <div class="fleetbase-model-select fleetbase-power-select ember-model-select">
                                                 <PowerSelect
                                                     @options={{get-fleet-ops-options "entityTypes"}}
                                                     @selected={{find-by "value" entity.type (get-fleet-ops-options "entityTypes")}}
-                                                    @onChange={{set-model-attr entity "type"}}
+                                                    @onChange={{fn this.setEntityQuoteField entity "type"}}
                                                     @placeholder="Select entity type"
                                                     @triggerClass="form-select"
                                                     as |type|
@@ -89,6 +89,7 @@
                                             <RegistryYield @registry="fleet-ops:component:order:form:payload:entity:form" as |RegistryComponent|>
                                                 <RegistryComponent @entity={{entity}} @order={{@resource}} @controller={{this}} />
                                             </RegistryYield>
+                                            <ParcelPackaging @meta={{entity.meta}} @onChange={{fn this.setEntityQuoteField entity "meta"}} />
                                             <Button @icon="pencil" @text={{t "order.fields.edit-item"}} @size="sm" @onClick={{fn this.editEntity entity}} />
                                         </div>
                                         <div class="absolute top-0 right-0 p-2">
@@ -118,16 +119,16 @@
                             </div>
                             <div class="space-y-2">
                                 <div>
-                                    <Input @value={{entity.name}} @type="text" class="w-full form-input form-input-sm" placeholder={{t "common.name"}} />
+                                    <input value={{entity.name}} type="text" class="w-full form-input form-input-sm" placeholder={{t "common.name"}} {{on "input" (fn this.setEntityQuoteInput entity "name")}} />
                                 </div>
                                 <div>
-                                    <Input @value={{entity.sku}} @type="text" class="w-full form-input form-input-sm" placeholder={{t "order.fields.sku"}} />
+                                    <input value={{entity.sku}} type="text" class="w-full form-input form-input-sm" placeholder={{t "order.fields.sku"}} {{on "input" (fn this.setEntityQuoteInput entity "sku")}} />
                                 </div>
                                 <div class="fleetbase-model-select fleetbase-power-select ember-model-select">
                                     <PowerSelect
                                         @options={{get-fleet-ops-options "entityTypes"}}
                                         @selected={{find-by "value" entity.type (get-fleet-ops-options "entityTypes")}}
-                                        @onChange={{set-model-attr entity "type"}}
+                                        @onChange={{fn this.setEntityQuoteField entity "type"}}
                                         @placeholder="Select entity type"
                                         @triggerClass="form-select"
                                         as |type|
@@ -141,6 +142,7 @@
                                 <RegistryYield @registry="fleet-ops:component:order:form:payload:entity:form" as |RegistryComponent|>
                                     <RegistryComponent @entity={{entity}} @order={{@resource}} @controller={{this}} />
                                 </RegistryYield>
+                                <ParcelPackaging @meta={{entity.meta}} @onChange={{fn this.setEntityQuoteField entity "meta"}} />
                                 {{#if @resource.payload.waypoints.length}}
                                     <Select
                                         @value={{entity.destination_uuid}}

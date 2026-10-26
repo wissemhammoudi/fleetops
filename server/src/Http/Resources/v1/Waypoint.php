@@ -35,6 +35,7 @@ class Waypoint extends FleetbaseResource
             'customer_uuid'          => $this->when(Http::isInternalRequest(), $waypoint->customer_uuid),
             'customer_type'          => $this->when(Http::isInternalRequest(), $waypoint->customer_type ? Utils::toEmberResourceType($waypoint->customer_type) : null),
             'order'                  => $waypoint->order,
+            'service_stop_key'       => $waypoint ? 'waypoint:' . $waypoint->uuid : null,
             'tracking'               => $waypoint->tracking,
             'status'                 => $waypoint->status,
             'status_code'            => $waypoint->status_code,
@@ -78,6 +79,9 @@ class Waypoint extends FleetbaseResource
      */
     private function getWaypoint(): ?WaypointModel
     {
+        if ($this->resource->relationLoaded('serviceWaypoint')) {
+            return $this->resource->getRelation('serviceWaypoint');
+        }
         return WaypointModel::where(['payload_uuid' => $this->payload_uuid, 'place_uuid' => $this->uuid])->without(['place'])->with(['trackingNumber'])->first();
     }
 

@@ -19,9 +19,40 @@ use Fleetbase\Traits\HasUuid;
 use Fleetbase\Traits\TracksApiCredential;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class Payload extends Model
 {
+    protected array $deliveryContactSnapshots = [];
+
+    protected function snapshotDeliveryPlace(Place $place): Place
+    {
+        $snapshot = $place->snapshotForDelivery();
+        foreach ([$place->uuid, $place->public_id] as $key) {
+            if ($key && !isset($this->deliveryContactSnapshots[$key])) {
+                $this->deliveryContactSnapshots[$key] = $snapshot->uuid;
+            }
+        }
+        return $snapshot;
+    }
+
+    public function snapshotEndpointContacts(): self
+    {
+        foreach (['pickup', 'dropoff', 'return'] as $role) {
+            $originalUuid = $this->getAttribute($role . '_uuid');
+            if (!$originalUuid) {
+                continue;
+            }
+            $place = Place::findOrFail($originalUuid);
+            $this->setPlace($role, $place);
+            if ($this->current_waypoint_uuid === $originalUuid) {
+                $this->setCurrentServiceStop($this->getRelation($role), $role, false);
+            }
+        }
+        $this->saveQuietly();
+        return $this;
+    }
+
     use HasUuid;
     use HasPublicId;
     use HasApiModelBehavior;
@@ -108,6 +139,19 @@ class Payload extends Model
      * @var array
      */
     protected $hidden = [];
+
+    protected static function boot()
+    {
+        parent::boot();
+        static::saving(function (Payload $payload) {
+            if ($payload->exists && $payload->isDirty('current_waypoint_uuid')) {
+                throw ValidationException::withMessages(['current_waypoint_uuid' => 'The current route stop can only be changed through delivery destination controls.']);
+            }
+            if ($payload->exists && data_get($payload->meta, 'service_stop') !== data_get($payload->getOriginal('meta'), 'service_stop')) {
+                throw ValidationException::withMessages(['meta.service_stop' => 'The current route stop can only be changed through delivery destination controls.']);
+            }
+        });
+    }
 
     /**
      * Address/name of the dropoff location.
@@ -256,6 +300,10 @@ class Payload extends Model
         }
 
         foreach ($entities as $attributes) {
+            if (isset($attributes['destination_uuid'], $this->deliveryContactSnapshots[$attributes['destination_uuid']])) {
+                $attributes['destination_uuid'] = $this->deliveryContactSnapshots[$attributes['destination_uuid']];
+            }
+            \Fleetbase\FleetOps\Support\DeliveryOptions::validateParcelMeta($attributes['meta'] ?? []);
             if (isset($attributes['_import_id'])) {
                 $waypoint = $this->waypoints->firstWhere('_import_id', $attributes['_import_id']);
 
@@ -310,6 +358,10 @@ class Payload extends Model
         $this->load(['waypoints']);
 
         foreach ($entities as $attributes) {
+            if (isset($attributes['destination_uuid'], $this->deliveryContactSnapshots[$attributes['destination_uuid']])) {
+                $attributes['destination_uuid'] = $this->deliveryContactSnapshots[$attributes['destination_uuid']];
+            }
+            \Fleetbase\FleetOps\Support\DeliveryOptions::validateParcelMeta($attributes['meta'] ?? []);
             if (isset($attributes['_import_id']) && !isset($attributes['destination_uuid'])) {
                 $waypoint = $this->waypoints->firstWhere('_import_id', $attributes['_import_id']);
 
@@ -358,14 +410,37 @@ class Payload extends Model
 
     public function setCurrentWaypoint(Place|Waypoint $destination, bool $save = true): Payload
     {
+        $key = null;
         if ($destination instanceof Waypoint) {
+            $key = 'waypoint:' . $destination->uuid;
             $destination = $destination->getPlace();
         }
 
+        if (!$key) {
+            $key = $destination->uuid === $this->pickup_uuid ? 'pickup' : ($destination->uuid === $this->dropoff_uuid ? 'dropoff' : null);
+        }
+        if (!$key) {
+            $marker = $this->waypointMarkers->sortBy('order')->firstWhere('place_uuid', $destination->uuid);
+            $key = $marker ? 'waypoint:' . $marker->uuid : 'place:' . $destination->uuid;
+        }
+
+        return $this->setCurrentServiceStop($destination, $key, $save);
+    }
+
+    public function setCurrentServiceStop(Place $destination, string $key, bool $save = true): Payload
+    {
+        $meta = $this->meta ?? [];
+        $previousKey = data_get($meta, 'service_stop.key');
+        data_set($meta, 'service_stop', [
+            'key' => $key,
+            'visit' => (int) data_get($meta, 'service_stop.visit', 0) + ($previousKey !== $key || $this->current_waypoint_uuid !== $destination->uuid ? 1 : 0),
+        ]);
+        $this->meta = $meta;
         $this->current_waypoint_uuid = $destination->uuid;
         if ($save) {
-            DB::table($this->getTable())->where('uuid', $this->uuid)->update(['current_waypoint_uuid' => $destination->uuid]);
+            $this->saveQuietly();
         }
+        $this->setRelation('currentWaypoint', $destination);
 
         return $this;
     }
@@ -423,7 +498,9 @@ class Payload extends Model
             $placeUuid = null;
 
             // Path 1: explicit place_uuid, ensure it exists
-            if (
+            if (data_get($raw, 'place') instanceof Place) {
+                $placeUuid = $this->snapshotDeliveryPlace(data_get($raw, 'place'))->uuid;
+            } elseif (
                 is_array($attributes)
                 && isset($attributes['place_uuid'])
                 && Place::where('uuid', $attributes['place_uuid'])->exists()
@@ -456,6 +533,10 @@ class Payload extends Model
                 }
 
                 $placeUuid = $place->uuid;
+            }
+
+            if (!(data_get($raw, 'place') instanceof Place)) {
+                $placeUuid = $this->snapshotDeliveryPlace(Place::findOrFail($placeUuid))->uuid;
             }
 
             // -------- Resolve Customer (uuid) --------
@@ -546,6 +627,8 @@ class Payload extends Model
                 $waypoint['place_uuid'] = $placeUuid;
             }
 
+            $waypoint['place_uuid'] = $this->snapshotDeliveryPlace(Place::findOrFail($waypoint['place_uuid']))->uuid;
+
             // Handle customer assosciation for waypoint
             $customerId   = data_get($attributes, 'customer_uuid');
             $customerType = data_get($attributes, 'customer_type', 'fleetops:contact');
@@ -613,6 +696,11 @@ class Payload extends Model
                 }
 
                 $placeUuid = $place->uuid;
+            }
+
+            $resolvedPlace = Place::findOrFail($placeUuid);
+            if ($resolvedPlace->type !== 'order_contact' || $resolvedPlace->owner_uuid) {
+                $placeUuid = $this->snapshotDeliveryPlace($resolvedPlace)->uuid;
             }
 
             $customerUuid          = null;
@@ -907,7 +995,7 @@ class Payload extends Model
     public function setPlace($property, Place $place, array $options = [])
     {
         $attr     = $property . '_uuid';
-        $instance = Place::createFromMixed($place);
+        $instance = $this->snapshotDeliveryPlace($place);
         $save     = data_get($options, 'save', false);
         $callback = data_get($options, 'callback', false);
 

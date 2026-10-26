@@ -36,7 +36,7 @@ export default class ModalsOrderChangeDestinationComponent extends Component {
         const activeStop = this.order?.tracker_data?.active_stop;
         const payload = this.order?.payload;
 
-        return activeStop?.uuid ?? activeStop?.public_id ?? payload?.current_waypoint_uuid ?? payload?.current_waypoint;
+        return payload?.meta?.service_stop?.key ?? activeStop?.uuid ?? activeStop?.public_id ?? payload?.current_waypoint_uuid ?? payload?.current_waypoint;
     }
 
     get waypointOptions() {
@@ -44,8 +44,8 @@ export default class ModalsOrderChangeDestinationComponent extends Component {
             waypoint: stop.place,
             stop,
             index,
-            id: this.waypointId(stop.place),
-            isCurrent: this.isCurrentWaypoint(stop.place),
+            id: stop.stopKey ?? this.waypointId(stop.place),
+            isCurrent: this.isCurrentWaypoint(stop),
             isSelected: this.isSelectedStop(stop),
             label: describeRoutePoint(stop, this.routeColor).label,
             title: describeRoutePoint(stop, this.routeColor).title,
@@ -57,18 +57,21 @@ export default class ModalsOrderChangeDestinationComponent extends Component {
         return waypoint?.id ?? waypoint?.public_id ?? waypoint?.uuid;
     }
 
-    isCurrentWaypoint(waypoint) {
-        return [waypoint?.id, waypoint?.uuid, waypoint?.public_id, waypoint?.waypoint_public_id].includes(this.currentWaypointId);
+    isCurrentWaypoint(stop) {
+        if (this.order?.payload?.meta?.service_stop?.key) {
+            return stop.stopKey === this.currentWaypointId;
+        }
+        const waypoint = stop.place;
+        const matchingStops = this.serviceStops.filter(({ place }) => [place?.id, place?.uuid, place?.public_id].includes(this.currentWaypointId));
+        return matchingStops.length === 1 && [waypoint?.id, waypoint?.uuid, waypoint?.public_id].includes(this.currentWaypointId);
     }
 
     isSelectedStop(stop) {
-        const selectedPlace = this.selectedOption?.waypoint;
-
-        return [selectedPlace?.id, selectedPlace?.uuid, selectedPlace?.public_id, selectedPlace?.waypoint_public_id].includes(this.waypointId(stop?.place));
+        return this.selectedOption?.id === (stop.stopKey ?? this.waypointId(stop.place));
     }
 
     trackingForStop(stop) {
-        return stop?.place?.tracking ?? stop?.place?.tracking_number ?? stop?.trackingNumberUuid ?? this.order?.tracking ?? this.order?.tracking_number;
+        return stop?.tracking ?? stop?.trackingNumberUuid ?? stop?.place?.tracking ?? stop?.place?.tracking_number ?? this.order?.tracking ?? this.order?.tracking_number;
     }
 
     @action selectOption(option) {
@@ -80,7 +83,7 @@ export default class ModalsOrderChangeDestinationComponent extends Component {
     @task *confirmSelection(modal) {
         const option = this.selectedOption;
         const waypoint = option?.waypoint;
-        const waypointId = this.waypointId(waypoint);
+        const waypointId = option?.id;
         if (!waypointId) {
             modal.stopLoading();
             return this.notifications.warning('Select a destination first.');
@@ -89,7 +92,7 @@ export default class ModalsOrderChangeDestinationComponent extends Component {
         modal.startLoading();
 
         try {
-            const order = yield this.fetch.patch(`orders/set-destination/${this.order.id}/${waypointId}`);
+            const order = yield this.fetch.patch(`orders/set-destination/${this.order.id}/${encodeURIComponent(waypointId)}`);
             this.notifications.success(`Current destination changed to ${waypoint.name ?? waypoint.address ?? waypointId}.`);
 
             if (typeof this.args.options?.onChange === 'function') {

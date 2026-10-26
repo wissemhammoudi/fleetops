@@ -15,12 +15,14 @@ export default class OrderValidationService extends Service {
     }
 
     validate(order, cfManager = null) {
-        if (!order) return false;
+        if (!order?.payload) return false;
 
         cfManager = cfManager ?? order?.cfManager ?? this.orderCreation.getContext('cfManager');
         const hasOrderConfig = isNotEmpty(order.order_config_uuid);
         const hasOrderType = isNotEmpty(order.type);
-        const hasWaypoints = order.payload.waypoints.length >= 2;
+        const waypoints = order.payload.waypoints ?? [];
+        const hasWaypoints = waypoints.length >= 2 && waypoints.every((waypoint) => waypoint.place || waypoint.place_uuid);
+        const hasValidWaypoints = !waypoints.length || waypoints.every((waypoint) => waypoint.place || waypoint.place_uuid);
         const hasPickup = isNotEmpty(order.payload.pickup);
         const hasDropoff = isNotEmpty(order.payload.dropoff);
         const hasValidCustomFields = cfManager ? this.isCustomFieldsValid(cfManager) : true;
@@ -30,7 +32,7 @@ export default class OrderValidationService extends Service {
             return hasOrderConfig && hasOrderType && hasValidCustomFields && hasValidExtensionRules;
         }
 
-        return hasPickup && hasDropoff && hasOrderConfig && hasOrderType && hasValidCustomFields && hasValidExtensionRules;
+        return hasPickup && hasDropoff && hasValidWaypoints && hasOrderConfig && hasOrderType && hasValidCustomFields && hasValidExtensionRules;
     }
 
     validationFails(order, cfManager) {

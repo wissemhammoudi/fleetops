@@ -36,6 +36,93 @@ class Place extends Model
     use HasMetaAttributes;
     use HasCustomFields;
 
+    protected static function boot()
+    {
+        parent::boot();
+        static::updating(function (Place $place) {
+            if ($place->getOriginal('type') === 'order_contact' && $place->isDirty(['type', 'owner_uuid', 'owner_type'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['place' => 'Delivery contact snapshot identity cannot be changed.']);
+            }
+            if ($place->isDirty(['name', 'phone', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'location', 'building', 'security_access_code'])) {
+                if ($place->type === 'order_contact' || $place->getOriginal('type') === 'order_contact') {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['place' => 'Delivery contact snapshots are immutable. Replace the stop through the order route editor.']);
+                }
+                $place->preserveLegacyDeliveryContacts();
+            }
+        });
+        static::deleting(function (Place $place) {
+            if ($place->type === 'order_contact' || $place->getOriginal('type') === 'order_contact') {
+                throw \Illuminate\Validation\ValidationException::withMessages(['place' => 'Delivery contact snapshots cannot be deleted through the address book.']);
+            }
+            $place->preserveLegacyDeliveryContacts();
+        });
+    }
+
+    protected function preserveLegacyDeliveryContacts(): void
+    {
+        $connection = $this->getConnection();
+        $connection->transaction(function () use ($connection) {
+            $original = static::where('uuid', $this->uuid)->lockForUpdate()->firstOrFail();
+            $payloads = $connection->table('payloads')->where('company_uuid', $this->company_uuid)
+                ->where(function ($query) {
+                    foreach (['pickup_uuid', 'dropoff_uuid', 'return_uuid', 'current_waypoint_uuid'] as $field) {
+                        $query->orWhere($field, $this->uuid);
+                    }
+                    $query->orWhereIn('uuid', fn ($markers) => $markers->select('payload_uuid')->from('waypoints')->where('place_uuid', $this->uuid));
+                })->lockForUpdate()->get();
+            if ($payloads->isEmpty()) {
+                return;
+            }
+            $snapshot = $original->snapshotForDelivery();
+            foreach ($payloads as $payload) {
+                $changes = [];
+                foreach (['pickup_uuid', 'dropoff_uuid', 'return_uuid', 'current_waypoint_uuid'] as $field) {
+                    if (($payload->$field ?? null) === $this->uuid) {
+                        $changes[$field] = $snapshot->uuid;
+                    }
+                }
+                if ($changes) {
+                    $connection->table('payloads')->where('uuid', $payload->uuid)->update($changes);
+                }
+            }
+            $payloadIds = $payloads->pluck('uuid');
+            $connection->table('waypoints')->whereIn('payload_uuid', $payloadIds)->where('place_uuid', $this->uuid)->update(['place_uuid' => $snapshot->uuid]);
+            $connection->table('entities')->whereIn('payload_uuid', $payloadIds)->where('destination_uuid', $this->uuid)->update(['destination_uuid' => $snapshot->uuid]);
+        });
+    }
+
+    public function setPhoneAttribute($value): void
+    {
+        if ($value === null || trim((string) $value) === '') {
+            $this->attributes['phone'] = null;
+            return;
+        }
+        $phone = trim((string) $value);
+        // Strip presentation separators only; retain extensions and do not infer country codes.
+        $this->attributes['phone'] = preg_match('/^\+?[0-9\s().-]+$/', $phone)
+            ? preg_replace('/[\s().-]+/', '', $phone) : $phone;
+    }
+
+    public function snapshotForDelivery(): Place
+    {
+        $snapshot = new static();
+        $values = array_intersect_key($this->getAttributes(), array_flip($this->getFillable()));
+        unset($values['_key'], $values['_import_id']);
+        if (array_key_exists('location', $values)) {
+            $values['location'] = $this->location;
+        }
+        if (array_key_exists('meta', $values)) {
+            $values['meta'] = $this->meta;
+        }
+        $snapshot->fill($values);
+        $snapshot->owner_uuid = null;
+        $snapshot->owner_type = null;
+        $snapshot->type = 'order_contact';
+        $snapshot->save();
+
+        return $snapshot;
+    }
+
     /**
      * The database table used by the model.
      *
@@ -496,6 +583,7 @@ class Place extends Model
         $existingPlace = static::query()
             ->where('company_uuid', $companyUuid)
             ->whereNull('owner_uuid')
+            ->where(fn ($query) => $query->whereNull('type')->orWhere('type', '!=', 'order_contact'))
             ->whereNull('deleted_at')
             ->where('street1', $street1)
             ->where('city', $city)
@@ -525,6 +613,7 @@ class Place extends Model
         return static::query()
                 ->where('company_uuid', $companyUuid)
                 ->whereNull('owner_uuid')
+                ->where(fn ($query) => $query->whereNull('type')->orWhere('type', '!=', 'order_contact'))
                 ->whereNull('deleted_at')
                 ->where('street1', $street1)
                 ->where('city', $city)

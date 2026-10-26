@@ -97,6 +97,7 @@ class OrderController extends FleetOpsController
      */
     public function createRecord(Request $request)
     {
+        \Fleetbase\FleetOps\Support\DeliveryOptions::validateInput((array) $request->input('order', []));
         // Create validation request
         $createOrderRequest  = CreateOrderRequest::createFrom($request);
         $rules               = $createOrderRequest->rules();
@@ -859,7 +860,24 @@ class OrderController extends FleetOpsController
      */
     public function updateActivity(string $id, Request $request)
     {
-        $order = $this->findOrderById($id, [
+        $order = $this->findOrderById($id);
+        if (!$order) {
+            return response()->error('No order found.');
+        }
+
+        return $order->getConnection()->transaction(function () use ($order, $request) {
+            $locked = Order::where('uuid', $order->uuid)->lockForUpdate()->firstOrFail();
+
+            return $this->updateLockedActivity($locked, $request);
+        });
+    }
+
+    protected function updateLockedActivity(Order $order, Request $request)
+    {
+        if (in_array($order->status, ['completed', 'delivered', 'done', 'order_completed', 'canceled', 'cancelled', 'order_canceled'], true)) {
+            return response()->error('Finished deliveries cannot update activity.', 422);
+        }
+        $order->loadMissing([
             'driverAssigned',
             'payload.entities',
             'payload.pickup',
@@ -870,9 +888,6 @@ class OrderController extends FleetOpsController
             'payload.waypointMarkers.place',
             'payload.waypointMarkers.trackingNumber.status',
         ]);
-        if (!$order) {
-            return response()->error('No order found.');
-        }
 
         $proof       = $request->input('proof');
         $bypassProof = $request->boolean('bypass_proof');
@@ -884,6 +899,7 @@ class OrderController extends FleetOpsController
         if ($requiresProof && !$proof && !$bypassProof) {
             return response()->error('Proof of delivery is required for this activity or must be explicitly bypassed.', 422);
         }
+        \Fleetbase\FleetOps\Support\PackagingInspection::assertCanProgress($order, (string) $activity->get('code'));
 
         // Handle pickup/dropoff order activity update as normal
         if (Utils::isActivity($activity) && $activity->is('dispatched')) {
@@ -910,6 +926,7 @@ class OrderController extends FleetOpsController
             $order->updateActivity($activity, $proof);
 
             if (!$usesServiceStopActivity) {
+                $this->syncClassicServiceStopDestination($order, $activity);
                 foreach ($order->payload->entities as $entity) {
                     $entity->insertActivity($activity, $location, $proof);
                 }
@@ -929,7 +946,9 @@ class OrderController extends FleetOpsController
             return new OrderResource($order->refresh());
         }
 
-        if (!$order->started && in_array($order->status, ['created', 'dispatched'])) {
+        if (!$order->started && !$order->started_at
+            && !in_array($order->status, ['started', 'picked_up', 'in_transit', 'out_for_delivery', 'arrived_at_dropoff'], true)
+            && !$activity->is('canceled')) {
             return response()->error('Order must be started before waypoint activity can be updated.', 422);
         }
 
@@ -990,6 +1009,9 @@ class OrderController extends FleetOpsController
             $stop = $request->filled('waypoint')
                 ? $this->resolveServiceStopFromKey($order->payload, $request->input('waypoint'))
                 : $this->payloadCurrentServiceStop($order->payload);
+            if ($request->filled('waypoint') && !$stop) {
+                return response()->error('Select an unambiguous route stop and retry.', 422);
+            }
         }
         $orderConfig = $order->ensureOrderConfig();
         if (!$orderConfig) {
@@ -1020,7 +1042,40 @@ class OrderController extends FleetOpsController
      *
      * @return \Fleetbase\Http\Resources\v1\Order
      */
+    public function attachOrderDocuments(Request $request, string $id)
+    {
+        $order = $this->findOrderById($id);
+        abort_unless($order, 404, 'Order not found.');
+        $request->validate(['files' => 'required|array|min:1', 'files.*' => 'required|string']);
+        $order->attachFiles($request->input('files'));
+        return new OrderResource($order->refresh());
+    }
+
+    public function removeOrderDocument(string $id, string $fileId)
+    {
+        $order = $this->findOrderById($id);
+        abort_unless($order, 404, 'Order not found.');
+        $file = $order->files()->where('uuid', $fileId)->firstOrFail();
+        abort_unless($file->type === 'order_file', 422, 'Generated delivery documents cannot be removed.');
+        $file->delete();
+        return new OrderResource($order->refresh());
+    }
+
     public function setDestination(string $id, string $placeId)
+    {
+        $order = $this->findOrderById($id);
+        if (!$order) {
+            return response()->error('No order found.');
+        }
+
+        return $order->getConnection()->transaction(function () use ($order, $id, $placeId) {
+            Order::where('uuid', $order->uuid)->lockForUpdate()->firstOrFail();
+
+            return $this->setLockedDestination($id, $placeId);
+        });
+    }
+
+    protected function setLockedDestination(string $id, string $placeId)
     {
         $order = $this->findOrderById($id, [
             'payload.pickup',
@@ -1037,6 +1092,7 @@ class OrderController extends FleetOpsController
         if (!$order) {
             return response()->error('No order found.');
         }
+        abort_if(in_array($order->status, ['completed', 'delivered', 'done', 'order_completed', 'canceled', 'cancelled', 'order_canceled'], true), 422, 'Finished deliveries cannot change destination.');
 
         if (!$this->payloadUsesServiceStopActivity($order->payload)) {
             return response()->error('Destination can only be changed for multi-waypoint orders.', 422);

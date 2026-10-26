@@ -88,8 +88,12 @@ export default class OrderFormPayloadComponent extends Component {
     }
 
     @action setEntityQuoteField(entity, field, value) {
-        this.setEntityValue(entity, field, value);
+        this.setEntityValue(entity, field, value?.value ?? value);
         this.requestServiceQuoteRefresh(`entity.${field}.changed`);
+    }
+
+    @action setEntityQuoteInput(entity, field, event) {
+        this.setEntityQuoteField(entity, field, event.target.value);
     }
 
     @action setEntityCurrency(entity, value) {

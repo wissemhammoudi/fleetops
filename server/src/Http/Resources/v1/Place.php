@@ -48,6 +48,7 @@ class Place extends FleetbaseResource
             'owner'                 => $this->whenLoaded('owner', fn () => Resolve::resourceForMorph($this->owner_type, $this->owner_uuid)?->without(['place', 'places'])),
             'tracking_number'       => $this->whenLoaded('trackingNumber', fn () => $this->trackingNumber),
             'type'                  => $this->type ?? 'place',
+            'service_stop_key'      => $this->when($this->service_stop_key !== null, $this->service_stop_key),
             'meta'                  => data_get($this, 'meta', Utils::createObject()),
             'eta'                   => $this->when($this->eta, $this->eta),
             'updated_at'            => $this->updated_at,

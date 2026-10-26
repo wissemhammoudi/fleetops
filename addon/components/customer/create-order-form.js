@@ -15,6 +15,7 @@ import WaypointLabelHelper from '../../helpers/waypoint-label';
 import isModel from '@fleetbase/ember-core/utils/is-model';
 import isNotEmpty from '@fleetbase/ember-core/utils/is-not-empty';
 import config from 'ember-get-config';
+import { orderDocumentAccept, validateOrderDocument } from '@fleetbase/ember-ui/utils/order-document-policy';
 
 const MAP_TARGET_FOCUS_PADDING_BOTTOM_RIGHT = [200, 0];
 const MAP_TARGET_FOCUS_REFOCUS_PANBY = [150, 0];
@@ -61,27 +62,7 @@ export default class CustomerCreateOrderFormComponent extends Component {
     @tracked isCustomFieldsValid = true;
     @tracked paymentsEnabled = false;
     @tracked paymentsOnboardCompleted = false;
-    @tracked acceptedFileTypes = [
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'application/msword',
-        'application/pdf',
-        'application/x-pdf',
-        'image/jpeg',
-        'image/png',
-        'image/gif',
-        'image/webp',
-        'video/mp4',
-        'video/quicktime',
-        'video/x-msvideo',
-        'video/x-flv',
-        'video/x-ms-wmv',
-        'audio/mpeg',
-        'video/x-msvideo',
-        'application/zip',
-        'application/x-tar',
-    ];
+    acceptedFileTypes = orderDocumentAccept;
 
     @computed('payloadCoordinates.length', 'waypoints.[]') get isServicable() {
         return this.payloadCoordinates.length >= 2;
@@ -634,9 +615,10 @@ export default class CustomerCreateOrderFormComponent extends Component {
         // as this method can be called twice from both functions
         if (['queued', 'failed', 'timed_out', 'aborted'].indexOf(file.state) === -1) return;
 
-        // Queue and upload immediatley
-        this.uploadQueue.pushObject(file);
-        yield this.fetch.uploadFile.perform(
+        try {
+            validateOrderDocument(file);
+            this.uploadQueue.pushObject(file);
+            yield this.fetch.uploadFile.perform(
             file,
             {
                 path: 'uploads/fleet-ops/order-files',
@@ -653,11 +635,16 @@ export default class CustomerCreateOrderFormComponent extends Component {
                     file.queue.remove(file);
                 }
             }
-        );
+            );
+        } catch (error) {
+            this.notifications.serverError(error);
+        } finally {
+            this.uploadQueue.removeObject(file);
+        }
     }
 
     @action removeFile(file) {
-        return file.destroyRecord();
+        return this.order.files.removeObject(file);
     }
 
     isValid() {
@@ -669,7 +656,7 @@ export default class CustomerCreateOrderFormComponent extends Component {
         const isDropoffSet = isNotEmpty(this.payload.dropoff);
         // const isPayloadSet = this.entities.length > 0;
 
-        if (isFetchingQuotes) {
+        if (isFetchingQuotes || this.uploadQueue.length) {
             return false;
         }
 

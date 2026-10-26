@@ -1,4 +1,5 @@
 <div class="form-wrapper" ...attributes>
+    <DeliveryOrderOptions @meta={{@resource.meta}} @initializeDefaults={{@resource.isNew}} @onChange={{this.setDeliveryMeta}} />
     {{#if (has-block)}}
         {{yield
             (hash

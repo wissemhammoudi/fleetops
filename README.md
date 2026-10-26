@@ -51,6 +51,7 @@ Fleet-Ops is included with Fleetbase Cloud and self-hosted Fleetbase installatio
 ### Operations
 
 - Create, import, schedule, dispatch, start, cancel, and complete delivery orders.
+- New-order forms support optional TND cash collection, distinct from delivery fees, with exact three-decimal serialization and SQL INT storage-bound validation. Named parcels with compatible packaging are required for modern delivery drafts. Pending document uploads block saving; applying a service rate requires a selected current quote. Route, parcel, COD, and delivery-option edits clear stale rates immediately, and late responses cannot replace newer results. Existing no-rate operations and locked contract-quote extensions remain supported.
 - Manage multi-waypoint routes, payloads, entities, labels, order metadata, notes, comments, files, and proofs.
 - Track live order progress with ETAs, route overlays, driver pings, activity timelines, and configurable status flows.
 - Configure custom order types, activity flows, entity fields, proof requirements, and service-rate rules.
