@@ -8,6 +8,7 @@ use Fleetbase\FleetOps\Models\Proof;
 use Fleetbase\FleetOps\Models\TrackingNumber;
 use Fleetbase\FleetOps\Models\TrackingStatus;
 use Fleetbase\FleetOps\Support\Utils;
+use Fleetbase\FleetOps\Support\CollectionWorkflow;
 use Fleetbase\LaravelMysqlSpatial\Types\Point;
 use Fleetbase\Support\TemplateString;
 use Illuminate\Database\Eloquent\Model;
@@ -58,6 +59,9 @@ trait HasTrackingNumber
      */
     public function createActivity(Activity $activity, $location = [], $proof = null): TrackingStatus
     {
+        if ($this instanceof Order) {
+            CollectionWorkflow::assertCanProgress($this, (string) $activity->get('code'));
+        }
         $status      = $this->resolveActivityTemplateString($activity->get('status', ''));
         $details     = $this->resolveActivityTemplateString($activity->get('details', ''));
         $code        = $activity->get('code');
@@ -92,6 +96,9 @@ trait HasTrackingNumber
      */
     public function insertActivity(Activity $activity, $location = [], $proof = null): string
     {
+        if ($this instanceof Order) {
+            CollectionWorkflow::assertCanProgress($this, (string) $activity->get('code'));
+        }
         $status      = $this->resolveActivityTemplateString($activity->get('status', ''));
         $details     = $this->resolveActivityTemplateString($activity->get('details', ''));
         $code        = $activity->get('code');

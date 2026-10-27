@@ -6,6 +6,7 @@ use Fleetbase\FleetOps\Models\Driver;
 use Fleetbase\FleetOps\Models\Order;
 use Fleetbase\FleetOps\Notifications\OrderPing;
 use Fleetbase\FleetOps\Support\Utils;
+use Fleetbase\FleetOps\Support\CollectionWorkflow;
 use Fleetbase\LaravelMysqlSpatial\Types\Point;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Collection;
@@ -56,6 +57,10 @@ class DispatchAdhocOrders extends Command
         $this->table(['Order', 'Dispatched At'], $orders->map(fn ($order) => [$order->public_id, $order->dispatched_at]));
 
         foreach ($orders as $order) {
+            if (!CollectionWorkflow::canDispatch($order)) {
+                $this->warn('Collection order ' . $order->public_id . ' requires a pickup round; skipping ad-hoc dispatch.');
+                continue;
+            }
             $pickup   = $order->getPickupLocation();
             $distance = $order->getAdhocPingDistance();
 

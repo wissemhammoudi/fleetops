@@ -1,0 +1,46 @@
+<ContentPanel @title={{t "settings.collection.title"}} @open={{true}} @wrapperClass="bordered-classic">
+    <InfoBlock @type="info" @icon="circle-info" class="mb-4">
+        {{t "settings.collection.rollout-notice"}}
+    </InfoBlock>
+    {{#if this.loaded}}
+        <InputGroup @name={{t "settings.collection.timezone"}}>
+            <Input @value={{this.timezone}} class="w-full form-input" placeholder="Africa/Tunis" data-test-collection-timezone />
+        </InputGroup>
+        <InputGroup @name={{t "settings.collection.operating-days"}}>
+            <div class="space-y-2">
+                {{#each this.days as |day|}}
+                    <label class="flex items-center justify-between">
+                        <span>{{day.label}}</span>
+                        <Toggle @isToggled={{day.selected}} @onToggle={{fn this.setOperatingDay day.value}} />
+                    </label>
+                {{/each}}
+            </div>
+        </InputGroup>
+        <InputGroup @name={{t "settings.collection.cutoff"}} @helpText={{t "settings.collection.cutoff-help"}}>
+            <Input @type="time" @value={{this.cutoffTime}} class="w-full form-input" data-test-collection-cutoff />
+        </InputGroup>
+        <InputGroup @name={{t "settings.collection.departure"}}>
+            <Input @type="time" @value={{this.departureTime}} class="w-full form-input" data-test-collection-departure />
+        </InputGroup>
+        <InputGroup @name={{t "settings.collection.closed-dates"}} @helpText={{t "settings.collection.closed-dates-help"}}>
+            <Textarea @value={{this.closedDates}} class="w-full form-input" rows="4" data-test-collection-closures />
+        </InputGroup>
+        <Button
+            @type="primary"
+            @icon="save"
+            @text={{t "settings.collection.save"}}
+            @onClick={{perform this.saveSettings}}
+            @isLoading={{this.saveSettings.isRunning}}
+            @disabled={{this.saveSettings.isRunning}}
+            @permission="fleet-ops update scheduling-settings"
+            data-test-collection-save
+        />
+    {{else}}
+        <Button
+            @text={{t "settings.collection.reload"}}
+            @onClick={{perform this.loadSettings}}
+            @isLoading={{this.loadSettings.isRunning}}
+            @disabled={{this.loadSettings.isRunning}}
+        />
+    {{/if}}
+</ContentPanel>

@@ -1,0 +1,59 @@
+<div class="p-6 space-y-4 overflow-y-auto h-full">
+    <h1 class="text-xl font-semibold">{{t "collection-rounds.title"}}</h1>
+    <p>{{t "collection-rounds.help"}}</p>
+    <Button @text={{t "collection-rounds.refresh"}} @onClick={{perform this.load}} @disabled={{or this.load.isRunning this.update.isRunning this.plan.isRunning}} />
+    <Button @text={{t "collection-rounds.plan"}} @onClick={{perform this.plan}} @disabled={{or this.load.isRunning this.update.isRunning this.plan.isRunning}} @permission="fleet-ops update scheduling-settings" data-test-plan-rounds />
+    {{#each this.warnings as |warning|}}
+        <p role="alert">{{warning.order_uuid}}: {{warning.message}}</p>
+    {{/each}}
+    {{#if this.loaded}}
+        {{#each this.cards as |round|}}
+            <section class="border rounded p-4 space-y-3" data-test-pickup-round>
+                <h2 class="font-semibold">{{round.departure}} ({{round.timezone}}) - {{round.status}}</h2>
+                <p>{{t "collection-rounds.reference"}}: {{round.uuid}}</p>
+                {{#if round.editable}}
+                    <label class="block">
+                        {{t "collection-rounds.driver"}}
+                        <select class="form-select w-full" value={{round.selectedDriver}} {{on "change" (fn this.select round.uuid "driver")}} data-test-round-driver>
+                            <option value="">{{t "collection-rounds.choose-driver"}}</option>
+                            {{#each this.drivers as |driver|}}
+                                <option value={{driver.uuid}} selected={{eq driver.uuid round.selectedDriver}}>{{driver.name}}</option>
+                            {{/each}}
+                        </select>
+                    </label>
+                    <label class="block">
+                        {{t "collection-rounds.depot"}}
+                        <select class="form-select w-full" value={{round.selectedDepot}} {{on "change" (fn this.select round.uuid "depot")}} data-test-round-depot>
+                            <option value="">{{t "collection-rounds.choose-depot"}}</option>
+                            {{#each this.depots as |depot|}}
+                                <option value={{depot.uuid}} selected={{eq depot.uuid round.selectedDepot}}>{{depot.name}} - {{depot.street1}}</option>
+                            {{/each}}
+                        </select>
+                    </label>
+                    <Button @text={{t "collection-rounds.assign"}} @onClick={{perform this.update round "assign"}} @disabled={{or this.update.isRunning this.load.isRunning this.plan.isRunning}} @permission="fleet-ops update scheduling-settings" data-test-round-assign />
+                {{/if}}
+                {{#if round.draft}}
+                    <Button @text={{t "collection-rounds.release"}} @onClick={{fn this.confirm round "release"}} @disabled={{or this.update.isRunning this.load.isRunning this.plan.isRunning}} @permission="fleet-ops update scheduling-settings" data-test-round-release />
+                {{/if}}
+                {{#if round.editable}}
+                    <Button @text={{t "collection-rounds.cancel"}} @onClick={{fn this.confirm round "cancel"}} @disabled={{or this.update.isRunning this.load.isRunning this.plan.isRunning}} @permission="fleet-ops update scheduling-settings" />
+                {{/if}}
+                {{#each round.stops as |stop|}}
+                    <p>{{stop.order_id}} - {{stop.contact.name}} - {{stop.contact.street1}} - {{stop.contact.phone}} - {{stop.status}} {{stop.reason}}</p>
+                    <p>{{stop.notes}}</p>
+                    <p>{{t "collection-rounds.order-parcels"}}:
+                        {{#each stop.order_parcels as |parcel|}}{{parcel.name}} x{{parcel.quantity}}; {{/each}}
+                    </p>
+                {{/each}}
+                {{#if round.depot}}
+                    <p>{{t "collection-rounds.return-depot"}}: {{round.depot.name}} - {{round.depot.street1}} - {{round.depot.phone}}</p>
+                {{/if}}
+                {{#if round.custody}}
+                    <CollectionDepot @round={{round}} @drivers={{this.drivers}} @onChanged={{perform this.load}} />
+                {{/if}}
+            </section>
+        {{else}}
+            <p>{{t "collection-rounds.empty"}}</p>
+        {{/each}}
+    {{/if}}
+</div>

@@ -33,6 +33,7 @@ use Fleetbase\FleetOps\Models\TrackingStatus;
 use Fleetbase\FleetOps\Models\Waypoint;
 use Fleetbase\FleetOps\Notifications\OrderPing;
 use Fleetbase\FleetOps\Support\ResolvesOrderServiceStops;
+use Fleetbase\FleetOps\Support\CollectionWorkflow;
 use Fleetbase\FleetOps\Support\Utils;
 use Fleetbase\Http\Requests\ExportRequest;
 use Fleetbase\Models\File;
@@ -1972,6 +1973,7 @@ class OrderController extends FleetOpsController
         if (!$order) {
             return response()->error('No order found to schedule.');
         }
+        CollectionWorkflow::assertCanDispatch($order);
 
         if ($scheduledAt) {
             $order->scheduled_at = \Carbon\Carbon::parse($scheduledAt);

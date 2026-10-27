@@ -10,6 +10,7 @@ use Fleetbase\FleetOps\Events\OrderDispatched;
 use Fleetbase\FleetOps\Events\OrderDriverAssigned;
 use Fleetbase\FleetOps\Flow\Activity;
 use Fleetbase\FleetOps\Support\DeliveryOptions;
+use Fleetbase\FleetOps\Support\CollectionWorkflow;
 use Fleetbase\FleetOps\Support\PackagingInspection;
 use Fleetbase\FleetOps\Support\RecipientHandoff;
 use Fleetbase\FleetOps\Support\LabelPdf;
@@ -69,6 +70,79 @@ class Order extends Model
     protected ?Order $authorizedOriginalReturnOrder = null;
     protected bool $recordingPackagingInspection = false;
     protected bool $recordingRecipientHandoff = false;
+    protected bool $recordingCollectionReadiness = false;
+
+    public function recordCollectionReadiness(bool $ready, ?string $token = null): void
+    {
+        $workflow = \Fleetbase\FleetOps\Support\CollectionReadiness::change($this, $ready, $token);
+        $meta = $this->meta ?? [];
+        $meta['collection_workflow'] = $workflow;
+        $this->meta = $meta;
+        $this->recordingCollectionReadiness = true;
+    }
+
+    public function isRecordingCollectionReadiness(): bool
+    {
+        return $this->recordingCollectionReadiness;
+    }
+
+    public function recordCollectionRound(string $roundUuid, string $state, bool $clearReadiness = false): void
+    {
+        abort_unless(in_array($state, ['pickup_scheduled', 'pickup_in_progress', 'collected', 'pickup_exception', 'ready_for_pickup', 'awaiting_preparation'], true), 409, 'Invalid collection transition.');
+        $meta = $this->meta;
+        $workflow = $meta['collection_workflow'];
+        $workflow['state'] = $state;
+        $workflow['collection_round_uuid'] = $clearReadiness || $state === 'ready_for_pickup' ? null : $roundUuid;
+        if ($clearReadiness) {
+            foreach (['ready_at', 'planned_collection_at', 'confirmation_token', 'content_fingerprint', 'timezone'] as $field) {
+                $workflow[$field] = null;
+            }
+        }
+        $workflow['history'][] = ['state' => $state, 'round_uuid' => $roundUuid, 'at' => now()->toISOString(), 'actor_uuid' => session('user')];
+        $meta['collection_workflow'] = $workflow;
+        $this->meta = $meta;
+        $this->recordingCollectionReadiness = true;
+    }
+
+    public function recordDepotReceipt(string $roundUuid, bool $received, ?string $date = null, ?string $timezone = null): void
+    {
+        abort_unless(data_get($this->meta, 'collection_workflow.collection_round_uuid') === $roundUuid, 409, 'This order does not belong to this depot round.');
+        $meta = $this->meta;
+        $workflow = $meta['collection_workflow'];
+        $workflow['state'] = $received ? 'received_at_depot' : 'depot_hold';
+        $workflow['depot_received_at'] = $received ? now()->toISOString() : null;
+        $workflow['planned_delivery_date'] = $received ? $date : null;
+        $workflow['delivery_timezone'] = $received ? $timezone : null;
+        $workflow['history'][] = ['state' => $workflow['state'], 'round_uuid' => $roundUuid, 'at' => now()->toISOString(), 'actor_uuid' => session('user')];
+        $meta['collection_workflow'] = $workflow;
+        $this->meta = $meta;
+        $this->recordingCollectionReadiness = true;
+    }
+
+    public function releaseCollectionDelivery(CollectionDeliveryLeg $leg): void
+    {
+        abort_unless($leg->exists && $leg->status === 'released' && $leg->order_uuid === $this->uuid
+            && $leg->company_uuid === $this->company_uuid && $leg->payload_uuid, 409, 'A verified depot delivery handover is required.');
+        $meta = $this->meta;
+        $meta['collection_workflow']['original_payload_uuid'] = $this->payload_uuid;
+        $meta['collection_workflow']['original_route_uuid'] = $this->route_uuid;
+        $meta['collection_workflow']['original_pickups'] = array_column(\Fleetbase\FleetOps\Support\CollectionReadiness::pickupStops($this), 'contact');
+        $meta['collection_workflow']['delivery_run_uuid'] = $leg->uuid;
+        $meta['collection_workflow']['state'] = 'out_for_delivery';
+        $meta['collection_workflow']['history'][] = ['state' => 'out_for_delivery', 'delivery_run_uuid' => $leg->uuid,
+            'at' => now()->toISOString(), 'actor_uuid' => session('user')];
+        $this->meta = $meta;
+        $this->payload_uuid = $leg->payload_uuid;
+        $this->route_uuid = null;
+        $this->unsetRelation('route');
+        $this->unsetRelation('payload');
+        $this->driver_assigned_uuid = $leg->driver_uuid;
+        $this->adhoc = false;
+        $this->recordingCollectionReadiness = true;
+        $acceptance = $leg->manifest['acceptance'];
+        $acceptance['fingerprint'] = PackagingInspection::fingerprint($this);
+        $this->recordPackagingInspection($acceptance);
+    }
 
     public function recordRecipientHandoff(array $result): void
     {
@@ -280,6 +354,35 @@ class Order extends Model
         return $this;
     }
 
+    public function save(array $options = [])
+    {
+        if (!$this->exists || !CollectionWorkflow::applies($this)) {
+            return parent::save($options);
+        }
+
+        return $this->getConnection()->transaction(function () use ($options) {
+            $current = static::where('uuid', $this->uuid)->lockForUpdate()->firstOrFail();
+            abort_unless(data_get($current->meta, 'collection_workflow') === data_get($this->getOriginal('meta'), 'collection_workflow'),
+                409, 'Collection changed. Refresh the order before making changes.');
+
+            return parent::save($options);
+        });
+    }
+
+    public function delete()
+    {
+        if (!CollectionWorkflow::applies($this) || !$this->exists) {
+            return parent::delete();
+        }
+
+        return $this->getConnection()->transaction(function () {
+            $current = static::withTrashed()->where('uuid', $this->uuid)->lockForUpdate()->firstOrFail();
+            abort_if(data_get($current->meta, 'collection_workflow.collection_round_uuid'), 409, 'A planned or collected order cannot be deleted. Contact operations for custody review.');
+
+            return parent::delete();
+        });
+    }
+
     /**
      * Enforce a morph map.
      */
@@ -288,6 +391,7 @@ class Order extends Model
         parent::boot();
 
         static::saving(function (Order $order) {
+            CollectionWorkflow::prepareForSave($order);
             $originalMeta = $order->getOriginal('meta') ?? [];
             if (!$order->recordingRecipientHandoff && data_get($order->meta, 'recipient_handoff') !== data_get($originalMeta, 'recipient_handoff')) {
                 throw ValidationException::withMessages(['meta.recipient_handoff' => 'Recipient handoff can only be recorded through the assigned-driver handoff endpoint.']);
@@ -344,6 +448,7 @@ class Order extends Model
                 : DeliveryOptions::STANDARD_PRIORITY;
         });
         static::saved(function (Order $order) {
+            $order->recordingCollectionReadiness = false;
             $order->recordingPackagingInspection = false;
             $order->recordingRecipientHandoff = false;
         });
@@ -891,7 +996,7 @@ class Order extends Model
      */
     public function getIsReadyForDispatchAttribute()
     {
-        return $this->hasDrvierAssigned || $this->adhoc;
+        return CollectionWorkflow::canDispatch($this) && ($this->hasDrvierAssigned || $this->adhoc);
     }
 
     /**
@@ -1171,7 +1276,10 @@ class Order extends Model
         }
 
         if ($this->payload && $this->payload->waypoints->count() && $this->payload->current_waypoint_uuid) {
-            return $this->payload->waypoints->firstWhere('uuid', $this->payload->current_waypoint_uuid)->location;
+            $current = $this->payload->currentWaypoint;
+            if ($current && $current->location) {
+                return $current->location;
+            }
         }
 
         if ($this->payload && $this->payload->waypoints->count()) {
@@ -1198,7 +1306,10 @@ class Order extends Model
         }
 
         if ($this->payload && $this->payload->waypoints->count() && $this->payload->current_waypoint_uuid) {
-            return $this->payload->waypoints->firstWhere('uuid', $this->payload->current_waypoint_uuid)->location;
+            $current = $this->payload->currentWaypoint;
+            if ($current && $current->location) {
+                return $current->location;
+            }
         }
 
         if ($this->payload && $this->payload->waypoints->count()) {
@@ -1366,6 +1477,9 @@ class Order extends Model
      */
     public function shouldDispatch($precision = 1)
     {
+        if (!CollectionWorkflow::canDispatch($this)) {
+            return false;
+        }
         $min = Carbon::now()->subMinutes($precision);
         $max = Carbon::now()->addMinutes($precision);
 
@@ -1384,6 +1498,7 @@ class Order extends Model
      */
     public function dispatch(bool $save = true): self
     {
+        CollectionWorkflow::assertCanDispatch($this);
         $this->dispatched    = true;
         $this->dispatched_at = now();
 
@@ -1511,6 +1626,7 @@ class Order extends Model
             return $this;
         }
 
+        CollectionWorkflow::assertCanProgress($this, (string) $activity->get('code'));
         PackagingInspection::assertCanProgress($this, (string) $activity->get('code'));
         if ($activity->completesOrder()) {
             RecipientHandoff::assertCanComplete($this);
@@ -1558,6 +1674,7 @@ class Order extends Model
      */
     public function complete(?Proof $proof = null): self
     {
+        CollectionWorkflow::assertCanProgress($this, 'completed');
         RecipientHandoff::assertCanComplete($this);
         PackagingInspection::assertCanProgress($this, 'completed');
         $doesntHaveCompletedActivity = TrackingStatus::where(['tracking_number_uuid' => $this->tracking_number_uuid, 'code' => 'COMPLETED'])->doesntExist();
@@ -1743,6 +1860,8 @@ class Order extends Model
      */
     public function assignDriver($driver, $silent = false)
     {
+        CollectionWorkflow::assertCanDispatch($this);
+        abort_if(CollectionWorkflow::applies($this), 409, 'Use depot delivery handover for assignment. Released goods cannot be reassigned without custody review.');
         if ($driver instanceof Driver && $this->driver_assigned_uuid === $driver->uuid) {
             return $this;
         }

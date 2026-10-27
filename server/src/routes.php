@@ -34,6 +34,10 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
         | End-user API routes, these are routes that the SDK and applications will interface with, and require API credentials.
         */
         $router->group(['prefix' => 'v1', 'middleware' => ['fleetbase.api', Fleetbase\FleetOps\Http\Middleware\TransformLocationMiddleware::class], 'namespace' => 'Api\v1'], function ($router) {
+            $router->get('collection-rounds', 'CollectionRoundController@index');
+            $router->post('collection-rounds/{id}', 'CollectionRoundController@update');
+            $router->get('collection-deliveries', 'CollectionRoundController@deliveries');
+            $router->post('collection-deliveries/{id}', 'CollectionRoundController@acceptDelivery');
             // drivers routes
             $router->group(['prefix' => 'drivers', 'middleware' => []], function () use ($router) {
                 $router->post('register-device', 'DriverController@registerDevice');
@@ -760,6 +764,12 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
                         $router->group(
                             ['prefix' => 'fleet-ops'],
                             function ($router) {
+                                $router->get('collection-rounds', 'CollectionRoundController@index');
+                                $router->post('collection-rounds/plan', 'CollectionRoundController@plan');
+                                $router->get('collection-rounds/{id}/labels', 'CollectionRoundController@labels');
+                                $router->post('collection-rounds/{id}/depot', 'CollectionRoundController@depot');
+                                $router->post('collection-deliveries/{id}', 'CollectionRoundController@delivery');
+                                $router->post('collection-rounds/{id}', 'CollectionRoundController@update');
                                 $router->group(
                                     ['prefix' => 'payments', ['middleware' => []]],
                                     function () use ($router) {
@@ -817,6 +827,8 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
                                         $router->post('admin-map', 'SettingController@saveAdminMapSettings');
                                         $router->get('scheduling-settings', 'SettingController@getSchedulingSettings');
                                         $router->post('scheduling-settings', 'SettingController@saveSchedulingSettings');
+                                        $router->get('collection-schedule', 'SettingController@getCollectionSchedule');
+                                        $router->post('collection-schedule', 'SettingController@saveCollectionSchedule');
                                         $router->get('orchestrator-settings', 'SettingController@getOrchestratorSettings');
                                         $router->post('orchestrator-settings', 'SettingController@saveOrchestratorSettings');
                                         $router->get('orchestrator-card-fields', 'SettingController@getOrchestratorCardFields');

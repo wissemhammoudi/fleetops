@@ -21,6 +21,10 @@ return [
     'connection' => [
         'db' => env('DB_CONNECTION', 'mysql'),
     ],
+    'collection_workflow' => [
+        // Enable only after coordinated readiness, pickup, depot and delivery staging certification.
+        'enabled' => false,
+    ],
 
     /*
     |--------------------------------------------------------------------------

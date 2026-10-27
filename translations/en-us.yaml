@@ -1,6 +1,57 @@
 fleet-ops:
     extension-name: Fleet-Ops
 
+collection-depot:
+    title: Depot parcel receipt
+    help: Attach one unique label to each physical parcel at pickup. Scan each label once the parcel is physically at the assigned depot. Damage or missing parcels hold the entire affected order; no partial delivery dispatch.
+    labels: Show parcel QR labels
+    depot: Confirm receiving depot UUID (compare the assigned depot below)
+    barcode: Scan physical parcel label (USB scanner or enter label UUID)
+    condition: Observed condition
+    good: Good
+    damaged: Damaged - hold entire order
+    reason: Damage, repair or operations resolution notes
+    scan: Record physical parcel receipt
+    reconcile: Reconcile complete order
+    reconcile-help: Confirm the physical count against every expected label. Missing, damaged or partly collected goods hold the entire order. Receipt is not delivery completion.
+    resolve: Resolve order hold
+    resolve-help: Explain the resolution in the notes first. Every expected physical parcel must be received in good condition and every pickup collected; a partial collection cannot be waived.
+    delivery-date: Earliest planned delivery date
+    eligible: Eligible for delivery release today after staging scans and assigned-driver acceptance.
+
+collection-delivery:
+    title: Depot delivery handover
+    help: One operational delivery leg on the original order. Stage every physical parcel at depot; the assigned driver must inspect and accept the exact manifest in Navigator. Goods stay at depot until operations releases departure on an eligible operating day.
+    driver: Delivery driver
+    assign: Prepare delivery handover
+    barcode: Scan label as parcel enters the depot staging area
+    load: Record staged parcel
+    release: Release delivery departure
+    release-help: Confirm every staged parcel is physically handed to the accepted driver now. This releases the depot-origin route on the original order, with no new charge. No same-day standard delivery or unresolved holds.
+    reason: Recall / custody verification notes
+    recall: Recall unreleased handover
+    recall-help: Physically verify every staged parcel remains at depot before recalling. Acceptance is revoked and a fresh assignment requires new scans. Departed goods cannot be reassigned through this action.
+    released: Released to the assigned driver. Execute the depot-origin order in Navigator. Any custody change requires operations review; direct reassignment is blocked.
+
+collection-rounds:
+    title: Pickup rounds
+    help: Customer-ready orders only. Assign a driver and depot, review every stop and vehicle capacity, then release. Collection does not complete delivery or confirm depot receipt.
+    refresh: Refresh rounds
+    plan: Plan ready pickups
+    reference: Round reference
+    order-parcels: Order parcel total across its pickups
+    driver: Pickup driver
+    choose-driver: Select a driver
+    depot: Return depot
+    choose-depot: Select the depot address
+    assign: Save assignment
+    release: Release pickup round
+    release-help: Confirm the saved driver, pickup stops, parcel load and depot are correct. The driver may start at the scheduled departure. Later assignment changes must happen before the driver starts.
+    cancel: Recall unstarted pickups
+    cancel-help: This revokes the driver's unstarted round and removes its stops. Customers must review and confirm readiness again. No customer order is cancelled.
+    return-depot: Final stop - return to depot
+    empty: No open pickup rounds. Only customer-confirmed orders are planned after their collection cutoff.
+
 common:
     last-modified: Last modified
     "yes": "Yes"
@@ -2723,6 +2774,27 @@ route-list:
     more-waypoints: more waypoints
 
 settings:
+    collection:
+        title: Daily parcel collection
+        rollout-notice: "Configure the collection calendar here. This does not activate the new Transport workflow. Activation remains disabled until customer readiness, pickup rounds and depot handover are released. Existing orders and Returns are unchanged."
+        timezone: Timezone
+        operating-days: Operating days
+        cutoff: Ready-for-pickup cutoff
+        cutoff-help: Orders ready at or after this time move to the next operating day.
+        departure: Pickup round departure
+        closed-dates: Closure dates
+        closed-dates-help: "One local date per line, in YYYY-MM-DD format. Standard delivery is planned for the next operating day after confirmed depot receipt."
+        save: Save collection calendar
+        saved: Collection calendar saved.
+        reload: Reload collection calendar
+        load-before-saving: Load the collection calendar successfully before saving changes.
+        monday: Monday
+        tuesday: Tuesday
+        wednesday: Wednesday
+        thursday: Thursday
+        friday: Friday
+        saturday: Saturday
+        sunday: Sunday
     avatar-management: Avatar Management
     custom-fields: Custom Fields
     notifications:

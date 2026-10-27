@@ -1,0 +1,48 @@
+<div class="border-t pt-4 space-y-3">
+    <h3 class="font-semibold">{{t "collection-depot.title"}}</h3>
+    <p>{{t "collection-depot.help"}}</p>
+    <Button @text={{t "collection-depot.labels"}} @onClick={{perform this.loadLabels}} @disabled={{or this.save.isRunning this.loadLabels.isRunning}} data-test-depot-labels />
+    {{#each this.labels as |label|}}
+        <div class="inline-block border p-3 m-2 text-center">
+            <p>{{label.order_id}} - {{label.name}} - {{label.number}} / {{label.quantity}}</p>
+            <img src={{concat "data:image/png;base64," label.image}} alt={{label.barcode}} width="120" height="120" />
+            <p class="font-mono text-xs">{{label.barcode}}</p>
+        </div>
+    {{/each}}
+    {{#each this.units as |unit|}}
+        <p>{{unit.order_id}} - {{unit.name}} - {{unit.number}} / {{unit.quantity}} - {{unit.barcode}} - {{unit.condition}}</p>
+    {{/each}}
+    {{#if this.receiving}}
+        <InputGroup @name={{t "collection-depot.depot"}} @helpText={{@round.depot.uuid}}>
+            <Input @value={{this.depot}} disabled={{this.save.isRunning}} class="form-input w-full" data-test-depot-location />
+        </InputGroup>
+        <InputGroup @name={{t "collection-depot.barcode"}}>
+            <Input @value={{this.barcode}} disabled={{this.save.isRunning}} class="form-input w-full" autocomplete="off" data-test-depot-barcode />
+        </InputGroup>
+        <label class="block">
+            {{t "collection-depot.condition"}}
+            <select class="form-select w-full" disabled={{this.save.isRunning}} {{on "change" this.selectCondition}} data-test-depot-condition>
+                <option value="good">{{t "collection-depot.good"}}</option>
+                <option value="damaged">{{t "collection-depot.damaged"}}</option>
+            </select>
+        </label>
+        <InputGroup @name={{t "collection-depot.reason"}}>
+            <Textarea @value={{this.reason}} disabled={{this.save.isRunning}} class="form-input w-full" data-test-depot-reason />
+        </InputGroup>
+        <Button @text={{t "collection-depot.scan"}} @onClick={{perform this.save "scan"}} @disabled={{this.save.isRunning}} @permission="fleet-ops update scheduling-settings" data-test-depot-scan />
+        {{#each @round.depot_orders as |order|}}
+            <div class="border rounded p-3 space-y-2" data-test-depot-order>
+                <p>{{order.order_id}} - {{order.state}} - {{order.reason}}</p>
+                {{#if order.delivery_date}}<p>{{t "collection-depot.delivery-date"}}: {{order.delivery_date}} ({{order.timezone}})</p>{{/if}}
+                {{#if order.eligible}}<p>{{t "collection-depot.eligible"}}</p>{{/if}}
+                <Button @text={{t "collection-depot.reconcile"}} @onClick={{fn this.confirm "reconcile" order}} @disabled={{this.save.isRunning}} @permission="fleet-ops update scheduling-settings" data-test-depot-reconcile />
+                {{#if (eq order.state "held")}}
+                    <Button @text={{t "collection-depot.resolve"}} @onClick={{fn this.confirm "resolve" order}} @disabled={{this.save.isRunning}} @permission="fleet-ops update scheduling-settings" data-test-depot-resolve />
+                {{/if}}
+                {{#if (or order.delivery (eq order.state "received"))}}
+                    <CollectionDelivery @order={{order}} @drivers={{@drivers}} @onChanged={{@onChanged}} />
+                {{/if}}
+            </div>
+        {{/each}}
+    {{/if}}
+</div>

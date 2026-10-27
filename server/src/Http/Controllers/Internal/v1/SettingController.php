@@ -3,6 +3,7 @@
 namespace Fleetbase\FleetOps\Http\Controllers\Internal\v1;
 
 use Fleetbase\FleetOps\Tracking\TrackingProviderRegistry;
+use Fleetbase\FleetOps\Support\CollectionSchedule;
 use Fleetbase\Http\Controllers\Controller;
 use Fleetbase\Models\Setting;
 use Fleetbase\Support\Auth;
@@ -14,6 +15,27 @@ use Illuminate\Http\Request;
  */
 class SettingController extends Controller
 {
+    public function getCollectionSchedule()
+    {
+        $this->authorizeCollectionSchedule(false);
+
+        return response()->json(CollectionSchedule::forCompany((string) session('company')));
+    }
+
+    public function saveCollectionSchedule(Request $request)
+    {
+        $this->authorizeCollectionSchedule(true);
+        $schedule = CollectionSchedule::saveForCompany((string) session('company'), (string) session('user'), $request->all());
+
+        return response()->json($schedule);
+    }
+
+    private function authorizeCollectionSchedule(bool $write): void
+    {
+        abort_unless(session('company') && session('user') && !session('is_customer') && !session('is_driver'), 403, 'Console access is required.');
+        abort_unless(session('is_admin') || Auth::can('fleet-ops ' . ($write ? 'update' : 'view') . ' scheduling-settings'), 403, 'Scheduling settings permission is required.');
+    }
+
     /**
      * Save entity editing settings.
      *

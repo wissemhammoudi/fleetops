@@ -1483,7 +1483,8 @@ class OrderController extends Controller
         }
 
         // validate
-        if ($subject && $code === $subject->uuid) {
+        if ($subject && ($code === $subject->uuid || ($subject instanceof Entity && is_string($code)
+            && \Fleetbase\FleetOps\Support\CollectionDelivery::matchesParcelLabel($order, $subject, $code)))) {
             // create verification proof
             $proof = $this->createProof([
                 'company_uuid' => session('company'),
