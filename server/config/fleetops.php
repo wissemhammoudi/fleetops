@@ -23,7 +23,7 @@ return [
     ],
     'collection_workflow' => [
         // Enable only after coordinated readiness, pickup, depot and delivery staging certification.
-        'enabled' => false,
+        'enabled' => env('COLLECTION_WORKFLOW_ENABLED', false),
     ],
 
     /*
