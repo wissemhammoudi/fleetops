@@ -317,7 +317,8 @@ class ServiceQuote extends Model
                 ],
             ],
             'mode'                => 'payment',
-            'return_url'          => Utils::consoleUrl($returnUri) . '?service_quote=' . $this->uuid . '&checkout_session_id={CHECKOUT_SESSION_ID}&creating=1',
+            'metadata'            => ['service_quote_uuid' => $this->uuid, 'company_uuid' => $this->company_uuid],
+            'return_url'          => Utils::consoleUrl($returnUri) . (str_contains($returnUri, '?') ? '&' : '?') . 'service_quote=' . $this->uuid . '&checkout_session_id={CHECKOUT_SESSION_ID}&creating=1',
             'payment_intent_data' => [
                 'application_fee_amount' => $facilitatorFee,
                 'transfer_data'          => [

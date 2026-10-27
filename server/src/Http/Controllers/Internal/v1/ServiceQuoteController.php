@@ -401,7 +401,13 @@ class ServiceQuoteController extends FleetOpsController
         $stripe          = $this->stripeClient();
         try {
             $session = $stripe->checkout->sessions->retrieve($request->input('checkout_session_id'));
+            abort_if(data_get($session, 'metadata.service_quote_uuid') !== $serviceQuote->uuid
+                || data_get($session, 'metadata.company_uuid') !== $serviceQuote->company_uuid,
+                422, 'This checkout session does not belong to the selected quote. Start checkout again for this delivery.');
             if (isset($session->status) && $session->status === 'complete') {
+                abort_if(data_get($session, 'payment_status') !== 'paid'
+                    && !(data_get($session, 'payment_status') === 'no_payment_required' && (int) $session->amount_total === 0),
+                    422, 'Checkout has not confirmed payment. Retry after payment completes.');
                 $purchaseRate = $this->firstOrCreatePurchaseRate($serviceQuote);
 
                 // Set checkout data to meta

@@ -146,7 +146,7 @@ class FleetOpsInternalServiceQuoteCheckoutQuoteFake extends ServiceQuote
     {
         parent::__construct();
 
-        $this->setRawAttributes(['uuid' => $uuid], true);
+        $this->setRawAttributes(['uuid' => $uuid, 'company_uuid' => 'company-uuid'], true);
     }
 
     public function flushCache(): void
@@ -406,6 +406,8 @@ test('internal service quote checkout status reports purchases and Stripe sessio
     $session = (object) [
         'id'             => 'cs_complete',
         'status'         => 'complete',
+        'payment_status' => 'paid',
+        'metadata'       => ['service_quote_uuid' => 'service-quote-uuid', 'company_uuid' => 'company-uuid'],
         'payment_intent' => 'pi_complete',
         'amount_total'   => 1250,
     ];
@@ -429,7 +431,8 @@ test('internal service quote checkout status reports purchases and Stripe sessio
         'locked_price'               => 1250,
     ]])->and($controller->serviceQuote->flushes)->toBe(2);
 
-    $openSession              = (object) ['id' => 'cs_open', 'status' => 'open'];
+    $openSession              = (object) ['id' => 'cs_open', 'status' => 'open',
+        'metadata' => ['service_quote_uuid' => 'service-quote-uuid', 'company_uuid' => 'company-uuid']];
     $controller               = new FleetOpsInternalServiceQuoteCheckoutControllerProbe();
     $controller->serviceQuote = new FleetOpsInternalServiceQuoteCheckoutQuoteFake('service-quote-uuid');
     $controller->stripe       = new FleetOpsInternalServiceQuoteCheckoutStripeFake($openSession);

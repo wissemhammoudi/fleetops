@@ -80,6 +80,7 @@ class Entity extends Model
         '_import_id',
         'internal_id',
         'name',
+        'quantity',
         'type',
         'description',
         'currency',
@@ -119,9 +120,17 @@ class Entity extends Model
      * @var array
      */
     protected $casts = [
+        'quantity'      => 'integer',
         'meta'          => Json::class,
         'customer_type' => PolymorphicType::class,
     ];
+
+    public function setQuantityAttribute($value): void
+    {
+        $value = $value ?? 1;
+        \Illuminate\Support\Facades\Validator::make(['quantity' => $value], ['quantity' => 'required|integer|min:1'])->validate();
+        $this->attributes['quantity'] = (int) $value;
+    }
 
     /**
      * Generates QR Code & Barcode on creation.
@@ -438,6 +447,9 @@ class Entity extends Model
 
     public static function insertGetUuid($values = [], ?Payload $payload = null)
     {
+        if (array_key_exists('quantity', $values)) {
+            $values['quantity'] = (new static(['quantity' => $values['quantity']]))->quantity;
+        }
         if (is_array($values) && isset($values['uuid'])) {
             Entity::where('uuid', $values['uuid'])->update([
                 'payload_uuid' => $payload->uuid,
