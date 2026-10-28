@@ -5,6 +5,7 @@ export default buildRoutes(function () {
     this.route('virtual', { path: '/:section/:slug' });
     this.route('operations', { path: '/' }, function () {
         this.route('collection-rounds');
+        this.route('customer-wallets');
         this.route('order-config', function () {});
         this.route('service-rates', function () {
             this.route('index', { path: '/' }, function () {

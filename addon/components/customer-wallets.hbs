@@ -1,0 +1,97 @@
+<div class="p-6 space-y-5 overflow-y-auto h-full">
+    <h1 class="text-xl font-semibold">Customer wallets</h1>
+    {{#if this.currentUser.isAdmin}}
+        <p>COD balances and withdrawals. This does not add prepaid credit or allow manual balance edits.</p>
+        <p role="status" class="font-semibold">New payout requests: {{or this.data.requested_payouts 0}}</p>
+        <Button @text="Refresh" @icon="arrows-rotate" @onClick={{perform this.load}} @disabled={{this.busy}} />
+        {{#if this.error}}<p role="alert">{{this.error}}</p>{{/if}}
+        {{#if this.load.isRunning}}<p role="status">Refreshing...</p>{{/if}}
+        <section class="border rounded p-4 space-y-3">
+            <h2 class="text-lg font-semibold">All customer accounts</h2>
+            <label class="block">Search by name, email or account UUID
+                <Input @value={{this.search}} class="form-input" />
+            </label>
+            <Button @text="Search" @onClick={{this.searchWallets}} @disabled={{this.busy}} />
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead><tr><th>Customer</th><th>Available</th><th>Pending</th><th>Reserved</th><th>Paid out</th><th>Details</th></tr></thead>
+                    <tbody>
+                        {{#each this.walletRows as |row|}}
+                            <tr><td class="py-2">{{row.name}}<br />{{row.email}} ({{row.account_type}})</td><td>{{row.available}}</td><td>{{row.pending}}</td><td>{{row.reserved}}</td><td
+                                >{{row.paidOut}}</td><td><Button @text="View" @onClick={{perform this.openCustomer row.uuid}} @disabled={{this.busy}} /></td></tr>
+                        {{else}}
+                            <tr><td colspan="6">No matching customer accounts.</td></tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+            <Button @text="Previous customers" @onClick={{fn this.page "wallet" -1}} @disabled={{or this.busy this.firstWalletPage}} />
+            <span>Page {{this.walletPage}} / {{or this.data.last_page 1}}</span>
+            <Button @text="Next customers" @onClick={{fn this.page "wallet" 1}} @disabled={{or this.busy this.lastWalletPage}} />
+        </section>
+        {{#if this.selected}}
+            <section class="border rounded p-4 space-y-3">
+                <h2 class="text-lg font-semibold">{{this.selected.customer.name}}</h2>
+                <p>{{this.selected.customer.email}} - {{this.selected.customer.uuid}}</p>
+                <Button @text="Close customer" @onClick={{this.closeCustomer}} />
+                {{#each this.selectedBalances as |balance|}}<p>{{balance.label}}: {{balance.amount}}</p>{{/each}}
+                <h3 class="font-semibold">Latest 100 ledger entries</h3>
+                {{#each this.selectedActivity as |entry|}}<p>{{entry.entry_date}} - {{entry.reference}} - {{entry.entry}} - {{entry.formattedAmount}}</p>{{else}}<p>No ledger activity yet.</p>{{/each}}
+            </section>
+        {{/if}}
+        <section class="border rounded p-4 space-y-3">
+            <h2 class="text-lg font-semibold">Payout queue</h2>
+            <label class="block">Status
+                <select class="form-select" {{on "change" this.changeStatus}}>
+                    <option value="requested" selected={{eq this.status "requested"}}>Requested</option>
+                    <option value="approved" selected={{eq this.status "approved"}}>Approved</option>
+                    <option value="paid" selected={{eq this.status "paid"}}>Paid</option>
+                    <option value="rejected" selected={{eq this.status "rejected"}}>Rejected</option>
+                </select>
+            </label>
+            {{#each this.payoutRows as |payout|}}
+                <div class="border rounded p-3 space-y-2">
+                    <h3 class="font-semibold">{{or payout.customer_name payout.merchant_uuid}} - {{payout.amountLabel}}</h3>
+                    <p>{{payout.method}} - {{payout.status}} - {{payout.created_at}}</p>
+                    <Button @text="Show payment details" @onClick={{perform this.showBank payout}} @disabled={{this.busy}} />
+                    {{#if payout.bank}}<p>RIB / cash method: {{payout.bank}}</p>{{/if}}
+                    {{#if payout.canReject}}
+                        <label class="block">Payment reference
+                            <input class="form-input" value={{payout.referenceInput}} maxlength="120" {{on "input" (fn this.edit payout.uuid "reference")}} />
+                        </label>
+                        <label class="block">Note for customer
+                            <input class="form-input" value={{payout.noteInput}} maxlength="500" {{on "input" (fn this.edit payout.uuid "note")}} />
+                        </label>
+                    {{else}}
+                        <p>{{payout.reference}} {{payout.note}}</p>
+                    {{/if}}
+                    {{#if payout.canApprove}}<Button @text="Approve" @onClick={{fn this.confirmDecision payout "approve"}} @disabled={{or this.busy this.error}} />{{/if}}
+                    {{#if payout.canReject}}<Button @text="Reject" @type="danger" @onClick={{fn this.confirmDecision payout "reject"}} @disabled={{or this.busy this.error}} />{{/if}}
+                    {{#if payout.canPay}}<Button @text="Record as paid" @type="primary" @onClick={{fn this.confirmDecision payout "paid"}} @disabled={{or this.busy this.error}} />{{/if}}
+                </div>
+            {{else}}
+                <p>No payout requests with this status.</p>
+            {{/each}}
+            <Button @text="Previous payouts" @onClick={{fn this.page "payout" -1}} @disabled={{or this.busy this.firstPayoutPage}} />
+            <span>Page {{this.payoutPage}} / {{or this.payoutData.last_page 1}}</span>
+            <Button @text="Next payouts" @onClick={{fn this.page "payout" 1}} @disabled={{or this.busy this.lastPayoutPage}} />
+        </section>
+        <section class="border rounded p-4 space-y-3">
+            <h2 class="text-lg font-semibold">Driver cash awaiting receipt</h2>
+            <p>Enter the cumulative cash total physically received for each order. Partial receipts do not unlock withdrawals.</p>
+            {{#each this.remittanceRows as |row|}}
+                <div class="border rounded p-3 space-y-2">
+                    <p>{{row.order}} - customer {{row.merchant_uuid}} - expected {{row.expectedLabel}} - already received {{row.receivedLabel}}</p>
+                    <label class="block">Total received (TND)
+                        <input class="form-input" inputmode="decimal" value={{row.receivedInput}} {{on "input" (fn this.edit row.order_uuid "received")}} />
+                    </label>
+                    <Button @text="Confirm cash received" @onClick={{fn this.confirmRemittance row}} @disabled={{or this.busy this.error}} />
+                </div>
+            {{else}}
+                <p>No driver cash awaiting receipt.</p>
+            {{/each}}
+        </section>
+    {{else}}
+        <p role="alert">Only company administrators can manage customer wallets.</p>
+    {{/if}}
+</div>
