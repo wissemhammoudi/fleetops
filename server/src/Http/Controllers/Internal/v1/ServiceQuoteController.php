@@ -405,6 +405,9 @@ class ServiceQuoteController extends FleetOpsController
                 || data_get($session, 'metadata.company_uuid') !== $serviceQuote->company_uuid,
                 422, 'This checkout session does not belong to the selected quote. Start checkout again for this delivery.');
             if (isset($session->status) && $session->status === 'complete') {
+                abort_if((int) $session->amount_total !== (int) $serviceQuote->amount
+                    || strtoupper((string) $session->currency) !== strtoupper((string) $serviceQuote->currency),
+                    422, 'Checkout payment does not match the selected delivery quote.');
                 abort_if(data_get($session, 'payment_status') !== 'paid'
                     && !(data_get($session, 'payment_status') === 'no_payment_required' && (int) $session->amount_total === 0),
                     422, 'Checkout has not confirmed payment. Retry after payment completes.');

@@ -29,7 +29,20 @@ class GoogleRoutesTrackingProvider implements TrackingProviderInterface
 
     public function track(TrackingContext $context, TrackingOptions $options): TrackingProviderResult
     {
-        $points      = $context->routePoints();
+        return $this->route($context->routePoints(), $options);
+    }
+
+    public function preview(array $points): TrackingProviderResult
+    {
+        if (count($points) < 2 || !filled($this->apiKey())) {
+            throw new \RuntimeException('Road routing is not configured or route endpoints are missing.');
+        }
+
+        return $this->route($points, new TrackingOptions(trafficEnabled: false), true);
+    }
+
+    protected function route(array $points, TrackingOptions $options, bool $geoJson = false): TrackingProviderResult
+    {
         $origin      = array_shift($points);
         $destination = array_pop($points);
         $body        = [
@@ -41,6 +54,9 @@ class GoogleRoutesTrackingProvider implements TrackingProviderInterface
             'languageCode'             => 'en-US',
             'units'                    => 'METRIC',
         ];
+        if ($geoJson) {
+            $body['polylineEncoding'] = 'GEO_JSON_LINESTRING';
+        }
 
         if (!empty($points)) {
             $body['intermediates'] = array_map(fn ($point) => ['location' => ['latLng' => $this->latLng($point)]], $points);
@@ -49,7 +65,7 @@ class GoogleRoutesTrackingProvider implements TrackingProviderInterface
         $response = Http::timeout(5)
             ->withHeaders([
                 'X-Goog-Api-Key'   => $this->apiKey(),
-                'X-Goog-FieldMask' => 'routes.distanceMeters,routes.duration,routes.staticDuration,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration,routes.legs.staticDuration',
+                'X-Goog-FieldMask' => 'routes.distanceMeters,routes.duration,routes.staticDuration,routes.polyline,routes.legs.distanceMeters,routes.legs.duration,routes.legs.staticDuration',
             ])
             ->post('https://routes.googleapis.com/directions/v2:computeRoutes', $body);
 
@@ -71,6 +87,7 @@ class GoogleRoutesTrackingProvider implements TrackingProviderInterface
             durationSeconds: $duration,
             durationInTrafficSeconds: $options->trafficEnabled ? $trafficDuration : null,
             polyline: data_get($route, 'polyline.encodedPolyline'),
+            coordinates: data_get($route, 'polyline.geoJsonLinestring.coordinates', []),
             legs: $this->legs(data_get($route, 'legs', []), $options),
             warnings: [],
             confidence: $options->trafficEnabled ? 'high' : 'medium',

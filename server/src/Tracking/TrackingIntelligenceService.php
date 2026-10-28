@@ -85,6 +85,9 @@ class TrackingIntelligenceService
                 'duration_in_traffic_s' => $providerResult->durationInTrafficSeconds,
                 'polyline'              => $providerResult->polyline,
                 'coordinates'           => $providerResult->coordinates,
+                'geometry_source'       => data_get($this->capabilitiesFor($providerResult->provider), 'route_geometry') ? 'road' : 'unavailable',
+                'geometry'              => data_get($this->capabilitiesFor($providerResult->provider), 'route_geometry') && count($providerResult->coordinates) >= 2
+                    ? ['type' => 'LineString', 'coordinates' => $providerResult->coordinates] : null,
                 'legs'                  => $this->legs($context, $providerResult, $now, $showsLiveEta),
             ],
             'eta'               => [
