@@ -45,6 +45,8 @@ class Place extends FleetbaseResource
             'country'               => $this->country ?? null,
             'country_name'          => $this->when(Http::isInternalRequest(), $this->country_name),
             'phone'                 => $this->phone ?? null,
+            'phones'                => $this->allPhones(),
+            'primary_phone'         => $this->phone ?? null,
             'owner'                 => $this->whenLoaded('owner', fn () => Resolve::resourceForMorph($this->owner_type, $this->owner_uuid)?->without(['place', 'places'])),
             'tracking_number'       => $this->whenLoaded('trackingNumber', fn () => $this->trackingNumber),
             'type'                  => $this->type ?? 'place',
@@ -54,6 +56,18 @@ class Place extends FleetbaseResource
             'updated_at'            => $this->updated_at,
             'created_at'            => $this->created_at,
         ]);
+    }
+
+    /** Primary phone first, then any extra phones saved in meta.phones. */
+    protected function allPhones(): array
+    {
+        $extra = data_get($this->resource, 'meta.phones', []);
+        $phones = array_merge([$this->phone ?? null], is_array($extra) ? $extra : []);
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($phone) => is_string($phone) ? trim($phone) : '',
+            $phones
+        ))));
     }
 
     /**
