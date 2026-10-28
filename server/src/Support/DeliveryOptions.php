@@ -22,7 +22,7 @@ class DeliveryOptions
             ],
             'service_levels' => [
                 ['value' => 'standard', 'label' => 'Standard', 'available' => true, 'description' => 'Normal delivery service. Get a quote before confirming.'],
-                ['value' => 'express', 'label' => 'Express', 'available' => false, 'description' => 'Priority handling at a higher delivery price. Pricing is being configured; unavailable for new orders.'],
+                ['value' => 'express', 'label' => 'Express', 'available' => true, 'description' => 'Priority handling. Customer portal Express quotes include a 4.000 TND surcharge before any return discount.'],
             ],
             'packaging_types' => [
                 ['value' => 'padded_envelope', 'label' => 'Padded paper/plastic envelope'],
@@ -233,8 +233,8 @@ class DeliveryOptions
     public static function validateNewService($meta): void
     {
         Validator::make(['service_level' => data_get($meta, 'delivery.service_level')], [
-            'service_level' => ['nullable', Rule::in(['standard'])],
-        ], ['service_level.in' => 'Express pricing is not configured. Choose Standard and get a new delivery quote.'])->validate();
+            'service_level' => ['nullable', Rule::in(['standard', 'express'])],
+        ])->validate();
     }
 
     public static function fingerprint(array $input): string
