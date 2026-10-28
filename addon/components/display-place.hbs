@@ -60,7 +60,7 @@
             {{#if this.place.country}}
                 <div>{{this.place.country_name}}</div>
             {{/if}}
-            {{#each this.place.allPhones as |phone|}}
+            {{#each (place-phones this.place) as |phone|}}
                 <a href="tel:{{phone}}" class="text-blue-500 hover:text-blue-400">{{phone}}</a><br />
             {{else}}
                 {{#if this.place.phone}}

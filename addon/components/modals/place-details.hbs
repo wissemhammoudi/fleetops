@@ -62,7 +62,7 @@
 
                     <div class="field-info-container">
                         <div class="field-name">{{t "common.phone"}}</div>
-                <div class="field-value">{{#each @options.place.allPhones as |phone|}}<div>{{phone}}</div>{{else}}{{n-a @options.place.phone}}{{/each}}</div>
+                <div class="field-value">{{#each (place-phones @options.place) as |phone|}}<div>{{phone}}</div>{{else}}{{n-a @options.place.phone}}{{/each}}</div>
                     </div>
 
                     <div class="field-info-container">
