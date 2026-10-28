@@ -50,7 +50,7 @@
 
             <div class="field-info-container">
                 <div class="field-name">{{t "place.fields.phone"}}</div>
-                <div class="field-value uppercase">{{n-a @resource.phone}}</div>
+                <div class="field-value uppercase">{{#each @resource.allPhones as |phone|}}<div>{{phone}}</div>{{else}}{{n-a @resource.phone}}{{/each}}</div>
             </div>
 
             <div class="field-info-container col-span-3">

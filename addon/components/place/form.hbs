@@ -39,6 +39,9 @@
             <InputGroup @name={{t "place.fields.phone"}} @wrapperClass="col-span-2">
                 <PhoneInput @value={{@resource.phone}} @autocomplete="nope" @onInput={{fn (mut @resource.phone)}} disabled={{cannot-write @resource}} class="form-input w-full" />
             </InputGroup>
+            <InputGroup @name="Additional phones" @helpText="Separate numbers with commas. The phone above is the primary." @wrapperClass="col-span-3">
+                <Input @value={{@resource.extraPhonesText}} @type="text" disabled={{cannot-write @resource}} class="form-input w-full" placeholder="+216 20 000 000, +216 50 000 000" />
+            </InputGroup>
         </div>
     </ContentPanel>
 

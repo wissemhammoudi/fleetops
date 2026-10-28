@@ -60,9 +60,13 @@
             {{#if this.place.country}}
                 <div>{{this.place.country_name}}</div>
             {{/if}}
-            {{#if this.place.phone}}
-                <a href="tel:{{this.place.phone}}" class="text-blue-500 hover:text-blue-400">{{this.place.phone}}</a><br />
-            {{/if}}
+            {{#each this.place.allPhones as |phone|}}
+                <a href="tel:{{phone}}" class="text-blue-500 hover:text-blue-400">{{phone}}</a><br />
+            {{else}}
+                {{#if this.place.phone}}
+                    <a href="tel:{{this.place.phone}}" class="text-blue-500 hover:text-blue-400">{{this.place.phone}}</a><br />
+                {{/if}}
+            {{/each}}
         </address>
     {{/if}}
 </div>
