@@ -64,6 +64,10 @@ class PackagingInspection
 
     public static function canProgress(Order $order, string $code): bool
     {
+        if (CollectionWorkflow::applies($order) && in_array($code, CollectionWorkflow::PICKUP_STATUSES, true)) {
+            CollectionWorkflow::assertCanProgress($order, $code);
+            return true;
+        }
         if (in_array($code, ['created', 'pending', 'dispatched', 'started', 'arrived', 'arrived_at_pickup', 'arrived_at_dropoff', 'canceled', 'cancelled', 'order_canceled'], true)) {
             return true;
         }

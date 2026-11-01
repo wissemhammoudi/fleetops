@@ -1976,7 +1976,32 @@ route-list:
   expand: Appuyez pour développer
   collapse: Appuyez pour réduire
   more-waypoints: plus de points de passage
+collection-rounds:
+  follow-up: Suivi manuel des collectes
+  pickup-window: Creneau de collecte demande
+  follow-up-help: Appeler les clients non prets ou en attente de planification. Un appel ne confirme pas que les colis sont prets.
+  parcels: colis physiques
+  orders: commandes
+  stops: arrets de collecte
+  capacity: Capacite en colis du chauffeur
+  suggested-driver: Chauffeur suggere
+  call-customer: Appeler le client
+  phone-missing: Telephone absent ou invalide - verifier le contact
+  previous: Precedent
+  next: Suivant
 settings:
+  collection:
+    pickup-windows: Creneaux de collecte du client
+    pickup-windows-help: "Laisser vide pour conserver le depart quotidien. Les creneaux suivent l'heure limite, se terminent le meme jour et ne se chevauchent pas. Toute date future ouverte est autorisee."
+    window-start: Debut du creneau
+    window-end: Fin du creneau
+    add-window: Ajouter un creneau
+    remove-window: Retirer le creneau
+    capacity-planning: Planification selon la capacite
+    enable-capacity: Activer les suggestions selon la capacite
+    capacity-help: "Utiliser la capacite en colis du vehicule ou une limite manuelle si elle manque. Verifier aussi le poids, le volume et l'itineraire."
+    fallback-capacity: Capacite manuelle en colis
+    max-stops: Nombre maximum d'arrets par tournee
   custom-fields: Champs personnalisés
   notifications:
     fleet-ops-notification-settings: Paramètres de notification Fleet-Ops

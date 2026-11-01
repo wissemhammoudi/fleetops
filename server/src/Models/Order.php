@@ -72,12 +72,13 @@ class Order extends Model
     protected bool $recordingRecipientHandoff = false;
     protected bool $recordingCollectionReadiness = false;
 
-    public function recordCollectionReadiness(bool $ready, ?string $token = null): void
+    public function recordCollectionReadiness(bool $ready, ?string $token = null, ?string $pickupStart = null): void
     {
-        $workflow = \Fleetbase\FleetOps\Support\CollectionReadiness::change($this, $ready, $token);
+        $workflow = \Fleetbase\FleetOps\Support\CollectionReadiness::change($this, $ready, $token, $pickupStart);
         $meta = $this->meta ?? [];
         $meta['collection_workflow'] = $workflow;
         $this->meta = $meta;
+        $this->status = $workflow['state'];
         $this->recordingCollectionReadiness = true;
     }
 
@@ -94,13 +95,14 @@ class Order extends Model
         $workflow['state'] = $state;
         $workflow['collection_round_uuid'] = $clearReadiness || $state === 'ready_for_pickup' ? null : $roundUuid;
         if ($clearReadiness) {
-            foreach (['ready_at', 'planned_collection_at', 'confirmation_token', 'content_fingerprint', 'timezone'] as $field) {
+            foreach (['ready_at', 'planned_collection_at', 'confirmation_token', 'content_fingerprint', 'timezone', 'pickup_window'] as $field) {
                 $workflow[$field] = null;
             }
         }
         $workflow['history'][] = ['state' => $state, 'round_uuid' => $roundUuid, 'at' => now()->toISOString(), 'actor_uuid' => session('user')];
         $meta['collection_workflow'] = $workflow;
         $this->meta = $meta;
+        $this->status = $state;
         $this->recordingCollectionReadiness = true;
     }
 
@@ -116,6 +118,7 @@ class Order extends Model
         $workflow['history'][] = ['state' => $workflow['state'], 'round_uuid' => $roundUuid, 'at' => now()->toISOString(), 'actor_uuid' => session('user')];
         $meta['collection_workflow'] = $workflow;
         $this->meta = $meta;
+        $this->status = $workflow['state'];
         $this->recordingCollectionReadiness = true;
     }
 

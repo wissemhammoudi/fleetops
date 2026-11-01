@@ -19,6 +19,7 @@ class CollectionRounds
             $rounds = [];
             $warnings = [];
             $calendar = CollectionSchedule::forCompany($company);
+            $capacities = $calendar['capacity_planning'] ? CollectionCapacity::candidates($company, $calendar) : [];
             $orders = Order::where('company_uuid', $company)->where('meta->collection_workflow->state', 'ready_for_pickup')
                 ->orderBy('uuid')->lockForUpdate()->get();
             foreach ($orders as $order) {
@@ -29,8 +30,13 @@ class CollectionRounds
                     if (now()->lessThan($cutoff)) {
                         continue;
                     }
-                    self::assertCalendar($company, $planned);
+                    self::assertCalendar($company, $planned, data_get($order->meta, 'collection_workflow.pickup_window.end'));
+                    abort_if(data_get($order->meta, 'collection_workflow.pickup_window.end')
+                        && now()->greaterThanOrEqualTo(Carbon::parse(data_get($order->meta, 'collection_workflow.pickup_window.end'))),
+                        409, 'The selected pickup window has expired. Ask the customer to select a new window.');
                     $stops = CollectionReadiness::pickupStops($order);
+                    abort_if($calendar['capacity_planning'] && collect($stops)->contains(fn ($stop) => !isset($stop['location'])),
+                        409, 'A pickup map location is missing. Staff must verify the address before capacity-aware planning.');
                 } catch (HttpException $exception) {
                     if ($exception->getStatusCode() !== 409) {
                         throw $exception;
@@ -38,7 +44,20 @@ class CollectionRounds
                     $warnings[] = ['order_uuid' => $order->uuid, 'message' => $exception->getMessage()];
                     continue;
                 }
-                $round = CollectionRound::where('company_uuid', $company)->where('scheduled_at', $planned)->lockForUpdate()->first();
+                $capacity = $capacities[0]['parcel_capacity'] ?? null;
+                if ($calendar['capacity_planning'] && (!$capacity || CollectionCapacity::parcels($stops) > $capacity || count($stops) > $calendar['max_pickup_stops'])) {
+                    $warnings[] = ['order_uuid' => $order->uuid, 'message' => $capacity
+                        ? 'This complete order exceeds the available parcel or stop capacity. Staff must review; parcels have not been split.'
+                        : 'No driver has a vehicle parcel capacity or staff fallback limit. Configure capacity before planning.'];
+                    continue;
+                }
+                $existing = CollectionRound::where('company_uuid', $company)->where('scheduled_at', $planned)->lockForUpdate()->get();
+                $round = $calendar['capacity_planning']
+                    ? $existing->first(fn ($candidate) => $candidate->status === 'draft'
+                        && !$candidate->driver_uuid
+                        && CollectionCapacity::parcels([...$candidate->stops, ...$stops]) <= $capacity
+                        && count($candidate->stops) + count($stops) <= $calendar['max_pickup_stops'])
+                    : $existing->first();
                 if ($round && $round->status !== 'draft') {
                     $warnings[] = ['order_uuid' => $order->uuid, 'message' => 'The daily round is already released or closed. Operations must review this missed collection.'];
                     continue;
@@ -49,6 +68,9 @@ class CollectionRounds
                         'stops' => [], 'history' => [], 'revision' => 0]);
                 }
                 $round->stops = [...$round->stops, ...$stops];
+                if ($calendar['capacity_planning']) {
+                    $round->stops = CollectionCapacity::nearby($round->stops);
+                }
                 self::audit($round, 'order_added', ['order_uuid' => $order->uuid]);
                 $order->recordCollectionRound($round->uuid, 'pickup_scheduled');
                 $order->save();
@@ -72,6 +94,7 @@ class CollectionRounds
                 abort_unless(in_array($round->status, ['draft', 'released'], true), 409, 'A started round cannot be reassigned. Escalate custody changes to operations.');
                 $driver = Driver::where('company_uuid', $company)->where('uuid', $input['driver_uuid'])->first();
                 abort_unless($driver, 422, 'Select an active driver from this company.');
+                CollectionCapacity::assertAssignment($round, $driver, CollectionSchedule::forCompany($company));
                 $depot = DB::connection($round->getConnectionName())->table('places')->where('company_uuid', $company)
                     ->where('uuid', $input['depot_uuid'])->whereNull('deleted_at')->select('*')->selectRaw('ST_AsText(location) as location_wkt')->first();
                 abort_unless($depot && trim((string) $depot->street1) !== '', 422, 'Select a depot with a complete street address from this company.');
@@ -79,8 +102,9 @@ class CollectionRounds
                 $round->depot = \Illuminate\Support\Arr::only((array) $depot, ['uuid', 'name', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'phone', 'location_wkt']);
             } elseif ($action === 'release') {
                 abort_unless($round->status === 'draft' && $round->driver_uuid && $round->depot && count($round->stops), 409, 'Assign a driver and depot to a nonempty draft before release.');
-                self::assertCalendar($company, $round->scheduled_at);
+                self::assertCalendar($company, $round->scheduled_at, data_get(self::orders($round)->first()?->meta, 'collection_workflow.pickup_window.end'));
                 abort_unless(Driver::where('uuid', $round->driver_uuid)->where('company_uuid', $company)->exists(), 409, 'The assigned driver is no longer available.');
+                CollectionCapacity::assertAssignment($round, Driver::where('uuid', $round->driver_uuid)->where('company_uuid', $company)->firstOrFail(), CollectionSchedule::forCompany($company));
                 $orders = self::orders($round);
                 foreach ($orders as $order) {
                     self::assertContract($order, $round);
@@ -118,7 +142,7 @@ class CollectionRounds
                 }
                 self::revision($round, $input);
                 abort_unless($round->status === 'released' && now()->greaterThanOrEqualTo($round->scheduled_at), 409, 'The round is not released or its departure time has not arrived.');
-                self::assertCalendar($company, $round->scheduled_at);
+                self::assertCalendar($company, $round->scheduled_at, data_get(self::orders($round)->first()?->meta, 'collection_workflow.pickup_window.end'));
                 foreach (self::orders($round) as $order) {
                     self::assertContract($order, $round);
                     $order->recordCollectionRound($round->uuid, 'pickup_in_progress');
@@ -187,9 +211,13 @@ class CollectionRounds
 
     private static function assertContract(Order $order, CollectionRound $round): void
     {
+        self::assertCalendar($round->company_uuid, $round->scheduled_at, data_get($order->meta, 'collection_workflow.pickup_window.end'));
+        abort_if(data_get($order->meta, 'collection_workflow.pickup_window.end')
+            && now()->greaterThanOrEqualTo(Carbon::parse(data_get($order->meta, 'collection_workflow.pickup_window.end'))),
+            409, 'The pickup window has expired. Recall this unstarted round and ask the customer to select a new window.');
         abort_unless(data_get($order->meta, 'collection_workflow.collection_round_uuid') === $round->uuid
             && in_array(data_get($order->meta, 'collection_workflow.state'), ['pickup_scheduled', 'pickup_in_progress'], true)
-            && in_array($order->status, ['created', 'pending'], true)
+            && in_array($order->status, ['created', 'pending', 'pickup_scheduled', 'pickup_in_progress'], true)
             && data_get($order->meta, 'collection_workflow.content_fingerprint') === CollectionReadiness::fingerprint($order),
             409, 'A pickup contract changed or closed. Stop and contact operations; do not collect against stale instructions.');
     }
@@ -199,11 +227,10 @@ class CollectionRounds
         abort_unless($round->revision === (int) $input['revision'], 409, 'The round changed. Refresh before continuing.');
     }
 
-    private static function assertCalendar(string $company, Carbon $planned): void
+    private static function assertCalendar(string $company, Carbon $planned, ?string $end = null): void
     {
         $calendar = CollectionSchedule::forCompany($company);
-        $localDay = $planned->copy()->setTimezone($calendar['timezone'])->startOfDay();
-        abort_unless(CollectionSchedule::pickupAt($localDay, $calendar)->equalTo($planned), 409,
+        abort_unless(CollectionSchedule::containsPickup($planned, $calendar, $end), 409,
             'The collection calendar changed. Recall the unstarted round and ask the customer to confirm the new pickup date.');
     }
 

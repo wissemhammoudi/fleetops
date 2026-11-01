@@ -20,13 +20,17 @@ class CollectionSchedule
             'cutoff_time' => '12:00',
             'departure_time' => '14:00',
             'closed_dates' => [],
+            'pickup_windows' => [],
+            'capacity_planning' => false,
+            'fallback_parcel_capacity' => null,
+            'max_pickup_stops' => null,
         ];
     }
 
     public static function validate(array $input): array
     {
         $validated = Validator::make(['schedule' => $input], [
-            'schedule' => ['required', 'array:timezone,operating_days,cutoff_time,departure_time,closed_dates'],
+            'schedule' => ['required', 'array:timezone,operating_days,cutoff_time,departure_time,closed_dates,pickup_windows,capacity_planning,fallback_parcel_capacity,max_pickup_stops'],
             'schedule.timezone' => ['required', 'timezone'],
             'schedule.operating_days' => ['required', 'array', 'min:1', 'max:7'],
             'schedule.operating_days.*' => ['required', 'integer', 'between:1,7', 'distinct'],
@@ -34,7 +38,24 @@ class CollectionSchedule
             'schedule.departure_time' => ['required', 'date_format:H:i', 'after:schedule.cutoff_time'],
             'schedule.closed_dates' => ['present', 'array', 'max:366'],
             'schedule.closed_dates.*' => ['required', 'date_format:Y-m-d', 'distinct'],
+            'schedule.pickup_windows' => ['sometimes', 'array', 'max:12'],
+            'schedule.pickup_windows.*' => ['required', 'array:start,end'],
+            'schedule.pickup_windows.*.start' => ['required', 'date_format:H:i', 'distinct', 'after:schedule.cutoff_time'],
+            'schedule.pickup_windows.*.end' => ['required', 'date_format:H:i'],
+            'schedule.capacity_planning' => ['sometimes', 'boolean'],
+            'schedule.fallback_parcel_capacity' => ['nullable', 'integer', 'min:1', 'max:10000'],
+            'schedule.max_pickup_stops' => ['nullable', 'required_if:schedule.capacity_planning,true', 'integer', 'min:1', 'max:1000'],
         ])->validate()['schedule'];
+        $validated = array_merge(self::defaults(), $validated);
+        $validated['pickup_windows'] = $validated['pickup_windows'] ?? [];
+        usort($validated['pickup_windows'], fn ($a, $b) => strcmp($a['start'], $b['start']));
+        $previousEnd = null;
+        foreach ($validated['pickup_windows'] as $window) {
+            if ($window['end'] <= $window['start'] || ($previousEnd && $window['start'] < $previousEnd)) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['pickup_windows' => 'Pickup windows must end after they start and must not overlap.']);
+            }
+            $previousEnd = $window['end'];
+        }
         $validated['operating_days'] = array_map('intval', $validated['operating_days']);
         sort($validated['operating_days']);
         sort($validated['closed_dates']);
@@ -88,6 +109,58 @@ class CollectionSchedule
         $date = CarbonImmutable::instance($receivedAt)->setTimezone($schedule['timezone'])->startOfDay()->addDay();
 
         return self::operatingDate($date, $schedule)->toDateString();
+    }
+
+    public static function pickupSlots(CarbonInterface $earliest, array $schedule, ?string $date = null): array
+    {
+        $first = self::pickupAt($earliest, $schedule)->setTimezone($schedule['timezone'])->startOfDay();
+        $day = $date ? CarbonImmutable::createFromFormat('!Y-m-d', $date, $schedule['timezone']) : $first;
+        abort_unless($day && $day->toDateString() === ($date ?? $first->toDateString()) && $day->greaterThanOrEqualTo($first),
+            422, 'Choose a pickup date on or after the earliest available collection day.');
+        abort_unless(self::operatingDate($day, $schedule)->equalTo($day), 422, 'There are no pickups on this closed date.');
+
+        return array_map(fn ($window) => [
+            'start' => $day->setTimeFromTimeString($window['start'])->utc()->toISOString(),
+            'end' => $day->setTimeFromTimeString($window['end'])->utc()->toISOString(),
+            'label' => $window['start'] . ' - ' . $window['end'],
+        ], $schedule['pickup_windows'] ?? []);
+    }
+
+    public static function containsPickup(CarbonInterface $planned, array $schedule, ?string $end = null): bool
+    {
+        $local = CarbonImmutable::instance($planned)->setTimezone($schedule['timezone']);
+        if (!self::operatingDate($local->startOfDay(), $schedule)->equalTo($local->startOfDay())) {
+            return false;
+        }
+
+        if ($end === null) {
+            return $local->format('H:i:s') === $schedule['departure_time'] . ':00';
+        }
+        foreach ($schedule['pickup_windows'] ?? [] as $window) {
+            if ($local->format('H:i:s') === $window['start'] . ':00'
+                && $local->setTimeFromTimeString($window['end'])->utc()->toISOString() === $end) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function pickupDates(CarbonInterface $earliest, array $schedule, ?string $selected = null): array
+    {
+        $day = self::pickupAt($earliest, $schedule)->setTimezone($schedule['timezone'])->startOfDay();
+        $dates = [];
+        for ($index = 0; $index < 7; $index++) {
+            $day = self::operatingDate($day, $schedule);
+            $dates[] = $day->toDateString();
+            $day = $day->addDay();
+        }
+        if ($selected && !in_array($selected, $dates, true)) {
+            self::pickupSlots($earliest, $schedule, $selected);
+            $dates[] = $selected;
+            sort($dates);
+        }
+        return $dates;
     }
 
     private static function operatingDate(CarbonImmutable $date, array $schedule): CarbonImmutable

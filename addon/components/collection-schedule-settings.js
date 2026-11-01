@@ -14,6 +14,30 @@ export default class CollectionScheduleSettingsComponent extends Component {
     @tracked departureTime = '';
     @tracked closedDates = '';
     @tracked loaded = false;
+    @tracked pickupWindows = [];
+    @tracked capacityPlanning = false;
+    @tracked fallbackCapacity = '';
+    @tracked maxStops = '';
+
+    @action toggleCapacity(event) {
+        this.capacityPlanning = event.target.checked;
+    }
+
+    @action editCapacity(field, event) {
+        this[field] = event.target.value;
+    }
+
+    @action addWindow() {
+        this.pickupWindows = [...this.pickupWindows, { start: '', end: '' }];
+    }
+
+    @action removeWindow(index) {
+        this.pickupWindows = this.pickupWindows.filter((_, position) => position !== index);
+    }
+
+    @action editWindow(index, field, event) {
+        this.pickupWindows = this.pickupWindows.map((window, position) => position === index ? { ...window, [field]: event.target.value } : window);
+    }
 
     constructor() {
         super(...arguments);
@@ -34,6 +58,10 @@ export default class CollectionScheduleSettingsComponent extends Component {
             operating_days: this.operatingDays,
             cutoff_time: this.cutoffTime,
             departure_time: this.departureTime,
+            pickup_windows: this.pickupWindows,
+            capacity_planning: this.capacityPlanning,
+            fallback_parcel_capacity: this.fallbackCapacity === '' ? null : Number(this.fallbackCapacity),
+            max_pickup_stops: this.maxStops === '' ? null : Number(this.maxStops),
             closed_dates: this.closedDates
                 .split(/\r?\n/)
                 .map((date) => date.trim())
@@ -54,6 +82,10 @@ export default class CollectionScheduleSettingsComponent extends Component {
             this.cutoffTime = settings.cutoff_time;
             this.departureTime = settings.departure_time;
             this.closedDates = settings.closed_dates.join('\n');
+            this.pickupWindows = settings.pickup_windows ?? [];
+            this.capacityPlanning = settings.capacity_planning ?? false;
+            this.fallbackCapacity = String(settings.fallback_parcel_capacity ?? '');
+            this.maxStops = String(settings.max_pickup_stops ?? '');
             this.loaded = true;
         } catch (error) {
             this.notifications.serverError(error);

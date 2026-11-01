@@ -35,6 +35,18 @@ collection-delivery:
 
 collection-rounds:
     title: Pickup rounds
+    follow-up: Manual pickup follow-up
+    pickup-window: Requested pickup window
+    follow-up-help: Call customers awaiting readiness or whose ready parcels have not been scheduled. Calling does not mark an order ready.
+    parcels: physical parcels
+    orders: orders
+    stops: pickup stops
+    capacity: Assigned driver parcel capacity
+    suggested-driver: Suggested driver
+    call-customer: Call customer
+    phone-missing: Phone missing or invalid - review contact
+    previous: Previous
+    next: Next
     help: Customer-ready orders only. Assign a driver and depot, review every stop and vehicle capacity, then release. Collection does not complete delivery or confirm depot receipt.
     refresh: Refresh rounds
     plan: Plan ready pickups
@@ -2776,6 +2788,17 @@ route-list:
 settings:
     collection:
         title: Daily parcel collection
+        pickup-windows: Customer pickup time windows
+        pickup-windows-help: "Leave empty for the existing daily departure schedule. Windows must be after the readiness cutoff, end on the same day and not overlap. Customers may select any future operating date."
+        window-start: Window start
+        window-end: Window end
+        add-window: Add pickup window
+        remove-window: Remove window
+        capacity-planning: Capacity-aware pickup planning
+        enable-capacity: Enable capacity-aware round suggestions
+        capacity-help: "Use the vehicle parcel capacity; supply a fallback for missing values. Weight, volume and route suitability still need staff review."
+        fallback-capacity: Fallback parcel capacity
+        max-stops: Maximum pickup stops per round
         rollout-notice: "Configure the collection calendar here. This does not activate the new Transport workflow. Activation remains disabled until customer readiness, pickup rounds and depot handover are released. Existing orders and Returns are unchanged."
         timezone: Timezone
         operating-days: Operating days

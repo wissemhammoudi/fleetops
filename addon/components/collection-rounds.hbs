@@ -7,10 +7,31 @@
         <p role="alert">{{warning.order_uuid}}: {{warning.message}}</p>
     {{/each}}
     {{#if this.loaded}}
+        <section aria-label="Pickup follow-up" class="space-y-2">
+            <h2>{{t "collection-rounds.follow-up"}} ({{this.followupTotal}})</h2>
+            <p>{{t "collection-rounds.follow-up-help"}}</p>
+            {{#each this.followupCards as |order|}}
+                <p>{{order.order_id}} - {{order.state}} - {{order.parcel_count}} {{t "collection-rounds.parcels"}}</p>
+                {{#if order.pickup_window}}<p>{{t "collection-rounds.pickup-window"}}: {{order.pickupDate}} {{order.pickup_window.label}} ({{order.timezone}})</p>{{/if}}
+                {{#if order.error}}<p role="alert">{{order.error}}</p>{{/if}}
+                {{#each order.stops as |stop|}}
+                    <p>{{stop.contact.name}} - {{stop.contact.street1}} - {{stop.contact.phone}}
+                        {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{else}}{{t "collection-rounds.phone-missing"}}{{/if}}
+                    </p>
+                {{/each}}
+            {{/each}}
+            <p>{{this.followupPage}} / {{this.followupLastPage}}</p>
+            <button type="button" disabled={{or this.firstFollowupPage this.load.isRunning}} {{on "click" (fn this.pageFollowup -1)}}>{{t "collection-rounds.previous"}}</button>
+            <button type="button" disabled={{or this.lastFollowupPage this.load.isRunning}} {{on "click" (fn this.pageFollowup 1)}}>{{t "collection-rounds.next"}}</button>
+        </section>
         {{#each this.cards as |round|}}
             <section class="border rounded p-4 space-y-3" data-test-pickup-round>
                 <h2 class="font-semibold">{{round.departure}} ({{round.timezone}}) - {{round.status}}</h2>
                 <p>{{t "collection-rounds.reference"}}: {{round.uuid}}</p>
+                <p>{{round.order_count}} {{t "collection-rounds.orders"}} - {{round.parcel_count}} {{t "collection-rounds.parcels"}} - {{round.pickup_count}} {{t "collection-rounds.stops"}}</p>
+                {{#if round.pickup_window}}<p>{{t "collection-rounds.pickup-window"}}: {{round.pickup_window.label}} ({{round.timezone}})</p>{{/if}}
+                {{#if round.parcel_capacity}}<p>{{t "collection-rounds.capacity"}}: {{round.parcel_capacity}}</p>{{/if}}
+                {{#each round.suggested_drivers as |driver|}}<p>{{t "collection-rounds.suggested-driver"}}: {{driver.name}} ({{driver.parcel_capacity}})</p>{{/each}}
                 {{#if round.editable}}
                     <label class="block">
                         {{t "collection-rounds.driver"}}
@@ -40,6 +61,7 @@
                 {{/if}}
                 {{#each round.stops as |stop|}}
                     <p>{{stop.order_id}} - {{stop.contact.name}} - {{stop.contact.street1}} - {{stop.contact.phone}} - {{stop.status}} {{stop.reason}}</p>
+                    {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{/if}}
                     <p>{{stop.notes}}</p>
                     <p>{{t "collection-rounds.order-parcels"}}:
                         {{#each stop.order_parcels as |parcel|}}{{parcel.name}} x{{parcel.quantity}}; {{/each}}

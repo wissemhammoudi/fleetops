@@ -10,6 +10,11 @@ class CollectionWorkflow
 {
     public const VERSION = 1;
 
+    public const PICKUP_STATUSES = [
+        'awaiting_preparation', 'ready_for_pickup', 'pickup_scheduled', 'pickup_in_progress',
+        'collected', 'pickup_exception', 'depot_hold', 'received_at_depot', 'ready_for_delivery_dispatch',
+    ];
+
     public const STATES = [
         'awaiting_preparation', 'ready_for_pickup', 'pickup_scheduled', 'pickup_in_progress',
         'collected', 'pickup_exception', 'depot_hold', 'received_at_depot', 'ready_for_delivery_dispatch', 'out_for_delivery', 'delivered', 'cancelled',
@@ -39,6 +44,7 @@ class CollectionWorkflow
                 'history' => [['state' => 'awaiting_preparation', 'at' => now()->toISOString(), 'actor_uuid' => session('user')]],
             ]);
             $order->meta = $meta;
+            $order->status = 'awaiting_preparation';
         }
 
         if (self::applies($order)) {
@@ -103,6 +109,18 @@ class CollectionWorkflow
 
     public static function assertCanProgress(Order $order, string $code): void
     {
+        if (self::applies($order) && !$order->isRecordingCollectionReadiness()
+            && in_array($order->getOriginal('status'), self::PICKUP_STATUSES, true)
+            && in_array(strtolower($code), ['created', 'pending'], true)) {
+            throw ValidationException::withMessages(['status' => 'Pickup statuses must be changed through the collection workflow.']);
+        }
+        if (self::applies($order) && in_array(strtolower($code), self::PICKUP_STATUSES, true)) {
+            if (data_get($order->meta, 'collection_workflow.state') !== strtolower($code)
+                || (!$order->isRecordingCollectionReadiness() && !(!$order->exists && $code === 'awaiting_preparation'))) {
+                throw ValidationException::withMessages(['status' => 'Pickup statuses must be changed through the collection workflow.']);
+            }
+            return;
+        }
         if (self::applies($order) && !self::canDispatch($order) && !in_array(strtolower($code), ['created', 'pending', 'canceled', 'cancelled', 'order_canceled'], true)) {
             throw ValidationException::withMessages(['collection_workflow' => 'Use the collection workflow to advance this order; direct delivery activities are blocked.']);
         }

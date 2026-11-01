@@ -11,14 +11,14 @@ class CollectionReadiness
     {
         abort_unless(CollectionWorkflow::applies($order), 409, 'This order does not use scheduled collection.');
         abort_unless(data_get($order->meta, 'collection_workflow.version') === CollectionWorkflow::VERSION, 409, 'This collection workflow version is not supported.');
-        abort_unless(in_array($order->status, ['created', 'pending'], true)
+        abort_unless(in_array($order->status, ['created', 'pending', 'awaiting_preparation', 'ready_for_pickup'], true)
             && !$order->dispatched && !$order->started && !$order->driver_assigned_uuid
             && !data_get($order->meta, 'collection_workflow.collection_round_uuid')
             && in_array(data_get($order->meta, 'collection_workflow.state'), ['awaiting_preparation', 'ready_for_pickup'], true),
             409, 'Collection is already planned, released or closed. Contact operations to change this order.');
     }
 
-    public static function preview(Order $order): array
+    public static function preview(Order $order, ?string $pickupDate = null): array
     {
         self::assertEditable($order);
         $schedule = CollectionSchedule::forCompany((string) $order->company_uuid);
@@ -32,11 +32,19 @@ class CollectionReadiness
         $planned = CollectionSchedule::pickupAt($earliest, $schedule)->toISOString();
         $fingerprint = self::fingerprint($order);
         $snapshot = self::snapshot($order);
+        $slots = ($schedule['pickup_windows'] ?? []) ? CollectionSchedule::pickupSlots($earliest, $schedule, $pickupDate) : [];
+        if ($slots) {
+            $planned = $slots[0]['start'];
+        }
 
         return [
             'state' => data_get($order->meta, 'collection_workflow.state'),
             'planned_collection_at' => $planned,
             'timezone' => $schedule['timezone'],
+            'pickup_date' => Carbon::parse($planned)->setTimezone($schedule['timezone'])->toDateString(),
+            'pickup_slots' => $slots,
+            'available_pickup_dates' => $slots ? CollectionSchedule::pickupDates($earliest, $schedule, $pickupDate) : [],
+            'pickup_unavailable_reason' => $slots ? null : 'Pickup time windows are not configured. Contact support to arrange collection.',
             'pickup_stops' => array_column(self::pickupStops($order), 'contact'),
             'parcel_count' => array_sum(array_map(fn ($entity) => $entity->quantity ?? 1, $snapshot['entities'])),
             'parcels' => array_map(fn ($entity) => ['name' => $entity->name, 'quantity' => $entity->quantity ?? 1], $snapshot['entities']),
@@ -45,7 +53,7 @@ class CollectionReadiness
         ];
     }
 
-    public static function change(Order $order, bool $ready, ?string $token): array
+    public static function change(Order $order, bool $ready, ?string $token, ?string $pickupStart = null): array
     {
         self::assertEditable($order);
         $workflow = data_get($order->meta, 'collection_workflow');
@@ -53,22 +61,30 @@ class CollectionReadiness
         if ($workflow['state'] === $target) {
             if ($ready) {
                 abort_unless(hash_equals((string) ($workflow['confirmation_token'] ?? ''), (string) $token)
-                    && ($workflow['content_fingerprint'] ?? '') === self::fingerprint($order),
+                    && ($workflow['content_fingerprint'] ?? '') === self::fingerprint($order)
+                    && ($pickupStart === null || ($workflow['pickup_window']['start'] ?? null) === $pickupStart),
                     409, 'The delivery changed. Withdraw readiness and review the current order before confirming again.');
             }
             return $workflow;
         }
         if ($ready) {
-            $preview = self::preview($order);
+            $schedule = CollectionSchedule::forCompany((string) $order->company_uuid);
+            $pickupDate = $pickupStart ? Carbon::parse($pickupStart)->setTimezone($schedule['timezone'])->toDateString() : null;
+            $preview = self::preview($order, $pickupDate);
+            abort_unless($preview['pickup_slots'], 422, $preview['pickup_unavailable_reason']);
             abort_unless($token && hash_equals($preview['confirmation_token'], $token), 409, 'The order, collection calendar or cutoff changed. Review the updated pickup date and confirm again.');
+            $window = collect($preview['pickup_slots'])->firstWhere('start', $pickupStart);
+            abort_unless(!$preview['pickup_slots'] || $window, 422, 'Select an available pickup time window before confirming readiness.');
+            abort_if(!$preview['pickup_slots'] && $pickupStart !== null, 422, 'Pickup windows are not configured for this company.');
             $workflow['ready_at'] = now()->toISOString();
-            $workflow['planned_collection_at'] = $preview['planned_collection_at'];
+            $workflow['planned_collection_at'] = $window['start'] ?? $preview['planned_collection_at'];
+            $workflow['pickup_window'] = $window;
             $workflow['timezone'] = $preview['timezone'];
             $workflow['confirmation_token'] = $token;
             $workflow['content_fingerprint'] = self::fingerprint($order);
         } else {
             abort_unless($token && hash_equals((string) ($workflow['confirmation_token'] ?? ''), $token), 409, 'Readiness changed. Refresh the order before withdrawing.');
-            foreach (['ready_at', 'planned_collection_at', 'confirmation_token', 'content_fingerprint', 'timezone'] as $field) {
+            foreach (['ready_at', 'planned_collection_at', 'confirmation_token', 'content_fingerprint', 'timezone', 'pickup_window'] as $field) {
                 $workflow[$field] = null;
             }
         }
@@ -98,7 +114,7 @@ class CollectionReadiness
         $stops = [];
         $parcels = array_map(fn ($entity) => ['name' => $entity->name, 'quantity' => $entity->quantity ?? 1], $snapshot['entities']);
         $append = function (string $key, string $place) use (&$stops, $places, $order, $parcels): void {
-            $stops[] = [
+            $row = [
                 'uuid' => $order->uuid . ':' . $key,
                 'order_uuid' => $order->uuid,
                 'order_id' => $order->public_id ?? $order->uuid,
@@ -107,6 +123,12 @@ class CollectionReadiness
                 'order_parcels' => $parcels,
                 'notes' => $order->notes,
             ];
+            $wkt = $order->getConnection()->table('places')->where('uuid', $place)->selectRaw('ST_AsText(location) as point')->value('point');
+            if ($wkt) {
+                $point = \Fleetbase\LaravelMysqlSpatial\Types\Point::fromWKT($wkt);
+                $row['location'] = ['latitude' => $point->getLat(), 'longitude' => $point->getLng()];
+            }
+            $stops[] = $row;
         };
         if ($snapshot['payload']->pickup_uuid) {
             $append('pickup', $snapshot['payload']->pickup_uuid);

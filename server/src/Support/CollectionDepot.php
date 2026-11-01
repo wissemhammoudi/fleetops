@@ -133,7 +133,7 @@ class CollectionDepot
         if (!$received) {
             return false;
         }
-        if (!in_array($order->status, ['created', 'pending'], true)
+        if (!in_array($order->status, ['created', 'pending', 'received_at_depot'], true)
             || data_get($order->meta, 'collection_workflow.content_fingerprint') !== CollectionReadiness::fingerprint($order)) {
             return false;
         }

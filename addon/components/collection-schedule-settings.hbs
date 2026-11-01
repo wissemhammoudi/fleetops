@@ -22,6 +22,23 @@
         <InputGroup @name={{t "settings.collection.departure"}}>
             <Input @type="time" @value={{this.departureTime}} class="w-full form-input" data-test-collection-departure />
         </InputGroup>
+        <fieldset class="space-y-2">
+            <legend>{{t "settings.collection.pickup-windows"}}</legend>
+            <p>{{t "settings.collection.pickup-windows-help"}}</p>
+            {{#each this.pickupWindows as |window index|}}
+                <label>{{t "settings.collection.window-start"}} <input type="time" value={{window.start}} {{on "input" (fn this.editWindow index "start")}} /></label>
+                <label>{{t "settings.collection.window-end"}} <input type="time" value={{window.end}} {{on "input" (fn this.editWindow index "end")}} /></label>
+                <button type="button" {{on "click" (fn this.removeWindow index)}}>{{t "settings.collection.remove-window"}}</button>
+            {{/each}}
+            <button type="button" {{on "click" this.addWindow}}>{{t "settings.collection.add-window"}}</button>
+        </fieldset>
+        <fieldset class="space-y-2">
+            <legend>{{t "settings.collection.capacity-planning"}}</legend>
+            <label><input type="checkbox" checked={{this.capacityPlanning}} {{on "change" this.toggleCapacity}} />{{t "settings.collection.enable-capacity"}}</label>
+            <p>{{t "settings.collection.capacity-help"}}</p>
+            <label>{{t "settings.collection.fallback-capacity"}} <input type="number" min="1" value={{this.fallbackCapacity}} {{on "input" (fn this.editCapacity "fallbackCapacity")}} /></label>
+            <label>{{t "settings.collection.max-stops"}} <input type="number" min="1" value={{this.maxStops}} {{on "input" (fn this.editCapacity "maxStops")}} /></label>
+        </fieldset>
         <InputGroup @name={{t "settings.collection.closed-dates"}} @helpText={{t "settings.collection.closed-dates-help"}}>
             <Textarea @value={{this.closedDates}} class="w-full form-input" rows="4" data-test-collection-closures />
         </InputGroup>

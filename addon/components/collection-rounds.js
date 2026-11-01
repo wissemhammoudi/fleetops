@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import { dropTask } from 'ember-concurrency';
+import pickupCallLink from '../utils/pickup-call-link';
 
 export default class CollectionRoundsComponent extends Component {
     @service fetch;
@@ -15,6 +16,26 @@ export default class CollectionRoundsComponent extends Component {
     @tracked selections = {};
     @tracked loaded = false;
     @tracked warnings = [];
+    @tracked followup = [];
+    @tracked followupPage = 1;
+    @tracked followupLastPage = 1;
+    @tracked followupTotal = 0;
+
+    get followupCards() {
+        return this.followup.map(order => ({
+            ...order,
+            pickupDate: order.pickup_window ? new Date(order.pickup_window.start).toLocaleDateString(undefined, { timeZone: order.timezone }) : null,
+            stops: order.stops.map(stop => ({ ...stop, callUrl: pickupCallLink(stop.contact?.phone) })),
+        }));
+    }
+
+    get firstFollowupPage() { return this.followupPage <= 1; }
+    get lastFollowupPage() { return this.followupPage >= this.followupLastPage; }
+
+    @action pageFollowup(offset) {
+        this.followupPage += offset;
+        return this.load.perform();
+    }
 
     constructor() {
         super(...arguments);
@@ -24,6 +45,7 @@ export default class CollectionRoundsComponent extends Component {
     get cards() {
         return this.rounds.map((round) => ({
             ...round,
+            stops: round.stops.map(stop => ({ ...stop, callUrl: pickupCallLink(stop.contact?.phone) })),
             departure: new Date(round.scheduled_at).toLocaleString(undefined, { timeZone: round.timezone }),
             editable: ['draft', 'released'].includes(round.status),
             draft: round.status === 'draft',
@@ -38,12 +60,16 @@ export default class CollectionRoundsComponent extends Component {
 
     @dropTask *load() {
         try {
-            const data = yield this.fetch.get('fleet-ops/collection-rounds');
+            const data = yield this.fetch.get('fleet-ops/collection-rounds', { followup_page: this.followupPage });
             this.rounds = data.rounds;
             this.drivers = data.drivers;
             this.depots = data.depots;
             this.selections = {};
             this.loaded = true;
+            this.followup = data.follow_up ?? [];
+            this.followupPage = data.follow_up_page ?? 1;
+            this.followupLastPage = data.follow_up_last_page ?? 1;
+            this.followupTotal = data.follow_up_total ?? 0;
         } catch (error) {
             this.loaded = false;
             this.notifications.serverError(error);
