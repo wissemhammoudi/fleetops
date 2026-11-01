@@ -2,6 +2,7 @@
 
 namespace Fleetbase\FleetOps\Http\Controllers\Internal\v1;
 
+use Fleetbase\Attributes\SkipAuthorizationCheck;
 use Fleetbase\Exceptions\FleetbaseRequestValidationException;
 use Fleetbase\FleetOps\Events\EntityActivityChanged;
 use Fleetbase\FleetOps\Events\EntityCompleted;
@@ -54,6 +55,20 @@ use Maatwebsite\Excel\Facades\Excel;
 class OrderController extends FleetOpsController
 {
     use ResolvesOrderServiceStops;
+    /**
+     * Permissions for methods AuthorizationGuard cannot map to a schema action (see FleetOpsController).
+     *
+     * @var array<string, string|string[]>
+     */
+    protected array $methodPermissions = [
+        'editOrderRoute'   => 'update-route-for order',
+        'importFromFiles'  => 'import order',
+        'bulkCancel'       => 'cancel order',
+        'bulkDispatch'     => 'dispatch order',
+        'bulkAssignDriver' => 'assign-driver-for order',
+        'dispatchOrder'    => 'dispatch order',
+        'scheduleOrder'    => 'schedule order',
+    ];
 
     /**
      * The resource to query.
@@ -150,8 +165,15 @@ class OrderController extends FleetOpsController
                         $input['type'] = 'transport';
                     }
 
+                    // a configured lifecycle always starts at its initial activity; otherwise
                     // if no status is set its default to `created`
-                    if (!isset($input['status'])) {
+                    if ($resolvedOrderConfig && $resolvedOrderConfig->hasConfiguredLifecycle()) {
+                        $input['status'] = $resolvedOrderConfig->getInitialStatusCode();
+                        if (!$resolvedOrderConfig->allowsDispatch()) {
+                            $input['dispatched'] = false;
+                            $input['adhoc']      = false;
+                        }
+                    } elseif (!isset($input['status'])) {
                         $input['status'] = 'created';
                     }
 
@@ -172,11 +194,13 @@ class OrderController extends FleetOpsController
                     $entities            = Utils::get($input, 'payload.entities');
                     $uploads             = Utils::get($input, 'files', []);
                     $customFieldValues   = Utils::get($input, 'custom_field_values', []);
+                    $orderConfig         = $order->config();
+                    $hasLifecycle        = $orderConfig && $orderConfig->hasConfiguredLifecycle();
 
                     // save order route & payload with request input
                     $order
                         ->setRoute($route)
-                        ->setStatus('created', false)
+                        ->setStatus($hasLifecycle ? $orderConfig->getInitialStatusCode() : 'created', false)
                         ->insertPayload($payload)
                         ->insertWaypoints($waypoints)
                         ->insertEntities($entities);
@@ -199,8 +223,12 @@ class OrderController extends FleetOpsController
                         );
                     }
 
-                    // Check dispatch flag with backward compatibility (default true)
+                    // Check dispatch flag with backward compatibility (default true).
+                    // Configs with a lifecycle that disables dispatch are never dispatched.
                     $shouldDispatch = isset($input['dispatched']) ? (bool) $input['dispatched'] : true;
+                    if ($hasLifecycle && !$orderConfig->allowsDispatch()) {
+                        $shouldDispatch = false;
+                    }
 
                     // dispatch if flagged true, otherwise ensure order stays in created state
                     if ($shouldDispatch) {
@@ -269,6 +297,7 @@ class OrderController extends FleetOpsController
      *
      * @return Response
      */
+    #[SkipAuthorizationCheck]
     public function editOrderRoute(string $id, Request $request)
     {
         $pickup            = $request->input('pickup');
@@ -339,6 +368,7 @@ class OrderController extends FleetOpsController
      *
      * @return \Illuminate\Http\Response
      */
+    #[SkipAuthorizationCheck]
     public function importFromFiles(Request $request)
     {
         $info    = Utils::lookupIp();
@@ -411,6 +441,7 @@ class OrderController extends FleetOpsController
      *
      * @return \Illuminate\Http\Response
      */
+    #[SkipAuthorizationCheck]
     public function bulkCancel(Request $request)
     {
         $request->validate([
@@ -456,6 +487,7 @@ class OrderController extends FleetOpsController
      *
      * @return \Illuminate\Http\Response
      */
+    #[SkipAuthorizationCheck]
     public function bulkDispatch(BulkDispatchRequest $request)
     {
         /** @var Order */
@@ -466,7 +498,7 @@ class OrderController extends FleetOpsController
         $successful = [];
 
         foreach ($orders as $order) {
-            if ($order->status !== 'created') {
+            if ($order->status !== 'created' || $order->config()?->allowsDispatch() === false) {
                 $failed[] = $order->uuid;
                 continue;
             }
@@ -504,6 +536,7 @@ class OrderController extends FleetOpsController
      *
      * @return \Illuminate\Http\Response
      */
+    #[SkipAuthorizationCheck]
     public function bulkAssignDriver(Request $request)
     {
         // Validate Inputs
@@ -580,6 +613,7 @@ class OrderController extends FleetOpsController
      *
      * @return \Illuminate\Http\Response
      */
+    #[SkipAuthorizationCheck]
     public function dispatchOrder(Request $request)
     {
         /**
@@ -594,6 +628,10 @@ class OrderController extends FleetOpsController
         // dispatching activities.
         if (!$order->ensureOrderConfig()) {
             return $this->errorResponse('No order config found for dispatch.');
+        }
+
+        if (!$order->config()->allowsDispatch()) {
+            return $this->errorResponse('Orders of this type are not dispatched.');
         }
 
         if (!$order->hasDriverAssigned && !$order->adhoc) {
@@ -894,6 +932,19 @@ class OrderController extends FleetOpsController
         $bypassProof = $request->boolean('bypass_proof');
         $activity    = $request->array('activity');
         $activity    = new Activity($activity, $order->getConfigFlow());
+
+        // Configs with strict transitions only accept a configured child of the current
+        // activity, and the server-side activity definition replaces the client payload.
+        $orderConfig = $order->config();
+        if ($orderConfig && $orderConfig->hasStrictTransitions()) {
+            $targetCode = $activity->get('code');
+            $configured = $targetCode ? $orderConfig->getActivityByCode($targetCode) : null;
+            if (!$configured || !$orderConfig->canTransition($order->status, $targetCode)) {
+                return response()->error('This activity is not a permitted next step for the order.', 422);
+            }
+
+            $activity = $configured;
+        }
 
         $requiresProof = Utils::isActivity($activity)
             && ($activity->get('require_pod') || ($activity->completesOrder() && $order->pod_required));
@@ -1963,6 +2014,7 @@ class OrderController extends FleetOpsController
      *
      * @return \Illuminate\Http\Response
      */
+    #[SkipAuthorizationCheck]
     public function scheduleOrder(Request $request)
     {
         $orderId     = $request->input('order');

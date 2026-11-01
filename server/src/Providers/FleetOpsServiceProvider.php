@@ -78,6 +78,7 @@ class FleetOpsServiceProvider extends CoreServiceProvider
         \Fleetbase\FleetOps\Console\Commands\ProcessOperationalAlerts::class,
         \Fleetbase\FleetOps\Console\Commands\SyncTelematics::class,
         \Fleetbase\FleetOps\Console\Commands\DrainTelematicInbox::class,
+        \Fleetbase\FleetOps\Console\Commands\PruneTelematicsData::class,
     ];
 
     /**
@@ -155,6 +156,8 @@ class FleetOpsServiceProvider extends CoreServiceProvider
             // leave the default 24-hour overlap lease blocking telemetry recovery.
             $schedule->command('fleetops:sync-telematics')->everyMinute()->withoutOverlapping(2)->storeOutputInDb();
             $schedule->command('fleetops:drain-telematic-inbox')->everyMinute()->withoutOverlapping(2);
+            // Bounded batches per company and table; a capped run simply continues on the next tick.
+            $schedule->command('fleetops:prune-telematics-data')->everyFifteenMinutes()->withoutOverlapping(14)->storeOutputInDb();
         });
         $this->registerNotifications();
         $this->registerAiCapabilities();
