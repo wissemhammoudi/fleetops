@@ -1,0 +1,116 @@
+<section class="p-4 space-y-4 overflow-y-auto" aria-label="Website inbox" {{did-insert this.load}}>
+    <div class="flex flex-wrap justify-between items-center gap-3">
+        <div>
+            <h1 class="text-xl font-semibold dark:text-gray-100">Website inbox</h1>
+            <p class="text-sm text-gray-500">Contact us messages and driver applications. Customer support tickets remain in Management → Issues → Correspondence.</p>
+        </div>
+        <Button @text="Refresh inbox" @disabled={{or this.loading this.busy}} @onClick={{this.load}} />
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <label>Submission type
+            <select aria-label="Submission type" class="form-select w-full" value={{this.type}} disabled={{this.busy}} {{on "change" (fn this.field "type")}}>
+                <option value="">All permitted types</option>
+                {{#each this.types as |type|}}<option value={{type.value}} selected={{eq this.type type.value}}>{{type.label}}</option>{{/each}}
+            </select>
+        </label>
+        <label>Status
+            <input
+                aria-label="Status filter"
+                class="form-input w-full"
+                placeholder="All statuses"
+                value={{this.statusFilter}}
+                disabled={{this.busy}}
+                {{on "input" (fn this.field "statusFilter")}}
+            />
+        </label>
+        <label>Search name, email or reference
+            <input aria-label="Search submissions" class="form-input w-full" value={{this.search}} disabled={{this.busy}} {{on "input" (fn this.field "search")}} />
+        </label>
+    </div>
+    <Button @text="Apply filters" @disabled={{or this.loading this.busy}} @onClick={{this.filter}} />
+    {{#if this.error}}<p role="alert" class="text-red-500">{{this.error}}</p>{{/if}}
+    {{#if this.loading}}<p role="status">Loading inbox…</p>{{/if}}
+    {{#unless this.loading}}
+        <div class="grid grid-cols-1 gap-3">
+            {{#each this.rows as |row|}}
+                <article class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-2">
+                    <h2 class="font-semibold dark:text-gray-100">{{row.reference}} · {{row.name}}</h2>
+                    <p>{{row.typeLabel}} · {{humanize row.status}}</p>
+                    <p>{{row.email}} · {{row.phone}}</p>
+                    <Button @text="Open conversation" @disabled={{or this.busy (not row.canView)}} @onClick={{fn this.open row}} />
+                </article>
+            {{else}}
+                {{#unless this.error}}<p>No submissions match these filters.</p>{{/unless}}
+            {{/each}}
+        </div>
+        <div class="flex gap-2 items-center">
+            <Button @text="Previous page" @disabled={{or this.firstPage this.busy}} @onClick={{fn this.changePage -1}} />
+            <span>Page {{this.page}} / {{or this.data.last_page 1}}</span>
+            <Button @text="Next page" @disabled={{or this.lastPage this.busy}} @onClick={{fn this.changePage 1}} />
+        </div>
+    {{/unless}}
+    {{#if this.detail}}
+        <article class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4" aria-label="Submission conversation">
+            <div class="flex flex-wrap justify-between gap-2">
+                <h2 class="text-lg font-semibold dark:text-gray-100">{{this.detail.submission.reference}} · {{this.detail.submission.name}}</h2>
+                <Button @text="Close conversation" @disabled={{this.busy}} @onClick={{this.close}} />
+                <Button @text="Refresh conversation" @disabled={{this.busy}} @onClick={{fn this.open this.detail.submission}} />
+            </div>
+            <p>Email replies go only to {{this.detail.submission.email}}. Incoming replies appear here after Mailgun forwards them; refresh to load new messages.</p>
+            <dl class="space-y-2">
+                {{#each this.fields as |field|}}
+                    <div><dt class="font-semibold capitalize">{{field.label}}</dt><dd class="whitespace-pre-wrap break-words">{{field.value}}</dd></div>
+                {{/each}}
+            </dl>
+            {{#if this.permissions.update}}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label>Review status
+                        <select aria-label="Review status" class="form-select w-full" value={{this.status}} disabled={{this.busy}} {{on "change" (fn this.field "status")}}>
+                            {{#each this.detail.statuses as |status|}}<option value={{status}} selected={{eq this.status status}}>{{humanize status}}</option>{{/each}}
+                        </select>
+                    </label>
+                    <label>Assigned staff member
+                        <select aria-label="Assigned staff member" class="form-select w-full" value={{this.assignee}} disabled={{this.busy}} {{on "change" (fn this.field "assignee")}}>
+                            <option value="" selected={{not this.assignee}}>Unassigned</option>
+                            {{#each this.detail.assignees as |staff|}}<option value={{staff.uuid}} selected={{eq this.assignee staff.uuid}}>{{staff.name}}</option>{{/each}}
+                        </select>
+                    </label>
+                </div>
+                <p>Accepting a driver application records a review decision only. It never creates a driver account.</p>
+                <Button @text="Save review" @isLoading={{this.busy}} @onClick={{this.update}} />
+            {{/if}}
+            <h3 class="font-semibold dark:text-gray-100">Conversation history</h3>
+            {{#each this.detail.messages as |message|}}
+                <div class="border-l-2 border-gray-300 p-3 space-y-1">
+                    <p class="font-semibold">{{humanize message.direction}} · {{humanize message.status}}</p>
+                    <p class="text-xs">{{message.created_at}} · {{or message.actor_name message.actor_uuid "External sender"}}</p>
+                    <p class="whitespace-pre-wrap break-words">{{message.body}}</p>
+                    {{#if message.omitted_attachments}}<p role="note">This email included
+                            {{message.omitted_attachments}}
+                            attachment(s). Attachments are not imported; consult the support mailbox.</p>{{/if}}
+                    {{#if (or (eq message.status "sending") (eq message.status "delivery_unknown"))}}<p role="alert">Delivery is unconfirmed. Check the mailbox before sending another
+                            message; automatic retries are disabled to prevent duplicates.</p>{{/if}}
+                </div>
+            {{else}}<p>No email replies yet. The original form is shown above.</p>{{/each}}
+            <div class="flex flex-wrap gap-2 items-center">
+                <Button @text="Older messages" @disabled={{or this.oldestHistory this.busy}} @onClick={{fn this.history 1}} />
+                <span>History page {{this.detail.messages_page}} / {{this.detail.messages_last_page}}</span>
+                <Button @text="Newer messages" @disabled={{or this.newestHistory this.busy}} @onClick={{fn this.history -1}} />
+            </div>
+            {{#if this.permissions.reply}}
+                <label>Email reply
+                    <textarea
+                        aria-label="Email reply"
+                        class="form-input w-full"
+                        rows="6"
+                        maxlength="20000"
+                        value={{this.body}}
+                        disabled={{this.busy}}
+                        {{on "input" this.editBody}}
+                    ></textarea>
+                </label>
+                <Button @text="Send email reply" @type="primary" @isLoading={{this.busy}} @onClick={{this.reply}} />
+            {{/if}}
+        </article>
+    {{/if}}
+</section>

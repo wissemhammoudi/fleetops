@@ -30,6 +30,14 @@ class FleetOps
      */
     public array $resources = [
         [
+            'name' => 'contact-enquiry',
+            'actions' => ['reply'],
+        ],
+        [
+            'name' => 'driver-application',
+            'actions' => ['reply'],
+        ],
+        [
             'name'    => 'order',
             'actions' => ['schedule', 'dispatch', 'cancel', 'optimize', 'export', 'import', 'assign-driver-for', 'assign-vehicle-for', 'update-route-for'],
         ],
@@ -491,6 +499,16 @@ class FleetOps
      * Roles provided by this schema.
      */
     public array $roles = [
+        [
+            'name' => 'Customer Support',
+            'description' => 'Handles customer issues, website enquiries and driver applications. Does not create driver accounts or manage payments.',
+            'permissions' => [
+                'see extension',
+                'see issue', 'list issue', 'view issue', 'update issue',
+                'see contact-enquiry', 'list contact-enquiry', 'view contact-enquiry', 'update contact-enquiry', 'reply contact-enquiry',
+                'see driver-application', 'list driver-application', 'view driver-application', 'update driver-application', 'reply driver-application',
+            ],
+        ],
         [
             'name'        => 'Operations Manager',
             'description' => 'Role responsible for overseeing all operations, including dispatch, fleet management, and order coordination.',

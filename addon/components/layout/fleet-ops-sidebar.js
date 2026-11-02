@@ -115,6 +115,17 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
 
     get operationsItems() {
         return this.withRegistryItems('operations', [
+            ...(!this.abilities.cannot('fleet-ops list contact-enquiry') || !this.abilities.cannot('fleet-ops list driver-application')
+                ? [
+                      {
+                          label: 'Website inbox',
+                          description: 'Contact enquiries and driver applications',
+                          icon: 'inbox',
+                          route: this.fullRoute('operations.website-inbox'),
+                          keywords: ['support', 'contact', 'driver applications'],
+                      },
+                  ]
+                : []),
             ...(this.currentUser.isAdmin
                 ? [
                       {
