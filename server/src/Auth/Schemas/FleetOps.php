@@ -30,6 +30,10 @@ class FleetOps
      */
     public array $resources = [
         [
+            'name' => 'email-campaign',
+            'actions' => ['submit', 'approve', 'send', 'cancel', 'import', 'test'],
+        ],
+        [
             'name' => 'contact-enquiry',
             'actions' => ['reply'],
         ],
@@ -507,6 +511,16 @@ class FleetOps
                 'see issue', 'list issue', 'view issue', 'update issue',
                 'see contact-enquiry', 'list contact-enquiry', 'view contact-enquiry', 'update contact-enquiry', 'reply contact-enquiry',
                 'see driver-application', 'list driver-application', 'view driver-application', 'update driver-application', 'reply driver-application',
+                'see email-campaign', 'list email-campaign', 'view email-campaign', 'create email-campaign', 'update email-campaign', 'submit email-campaign', 'test email-campaign',
+            ],
+        ],
+        [
+            'name' => 'Email Campaign Manager',
+            'description' => 'Reviews another staff member\'s email campaigns, manages consented audiences and approves sending. Does not manage payments.',
+            'permissions' => [
+                'see extension',
+                'see email-campaign', 'list email-campaign', 'view email-campaign', 'create email-campaign', 'update email-campaign',
+                'submit email-campaign', 'approve email-campaign', 'send email-campaign', 'cancel email-campaign', 'import email-campaign', 'test email-campaign',
             ],
         ],
         [

@@ -20,11 +20,53 @@ export default class WebsiteInboxComponent extends Component {
     @tracked body = '';
     @tracked status = '';
     @tracked assignee = '';
+    @tracked replyLanguage = 'fr';
+    @tracked previewReply = false;
     requestId = null;
     loadVersion = 0;
 
     get permissions() {
         return this.data?.permissions?.[this.detail?.submission.type] ?? {};
+    }
+
+    get replyCopy() {
+        const name = this.detail?.submission.name ?? '';
+        return {
+            fr: {
+                greeting: `Bonjour ${name},`,
+                signature: 'Cordialement,\nL\u2019\u00e9quipe Relation Client\nColab Express',
+                title: 'Notre \u00e9quipe vous r\u00e9pond',
+                reference: 'Votre r\u00e9f\u00e9rence',
+                footer: 'Pour poursuivre cet \u00e9change, r\u00e9pondez directement \u00e0 cet email.',
+            },
+            en: {
+                greeting: `Hello ${name},`,
+                signature: 'Kind regards,\nCustomer Support Team\nColab Express',
+                title: 'A message from our team',
+                reference: 'Your reference',
+                footer: 'To continue this conversation, reply directly to this email.',
+            },
+            ar: {
+                greeting: `\u0645\u0631\u062d\u0628\u0627\u064b ${name}\u060c`,
+                signature:
+                    '\u0645\u0639 \u0623\u0637\u064a\u0628 \u0627\u0644\u062a\u062d\u064a\u0627\u062a\u060c\n\u0641\u0631\u064a\u0642 \u062e\u062f\u0645\u0629 \u0627\u0644\u062d\u0631\u0641\u0627\u0621\nColab Express',
+                title: '\u0631\u0633\u0627\u0644\u0629 \u0645\u0646 \u0641\u0631\u064a\u0642\u0646\u0627',
+                reference: '\u0645\u0631\u062c\u0639\u0643',
+                footer: '\u0644\u0645\u0648\u0627\u0635\u0644\u0629 \u0647\u0630\u0647 \u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0629\u060c \u064a\u0631\u062c\u0649 \u0627\u0644\u0631\u062f \u0645\u0628\u0627\u0634\u0631\u0629 \u0639\u0644\u0649 \u0647\u0630\u0627 \u0627\u0644\u0628\u0631\u064a\u062f.',
+            },
+        }[this.replyLanguage];
+    }
+
+    get replyDirection() {
+        return this.replyLanguage === 'ar' ? 'rtl' : 'ltr';
+    }
+
+    get characterCount() {
+        return this.body.length;
+    }
+
+    get cannotSend() {
+        return this.busy || this.body.trim().length < 2 || this.characterCount > 20000;
     }
 
     get types() {
@@ -71,6 +113,27 @@ export default class WebsiteInboxComponent extends Component {
     @action editBody(event) {
         this.body = event.target.value;
         this.requestId = null;
+    }
+
+    @action setReplyLanguage(event) {
+        this.replyLanguage = event.target.value;
+        this.requestId = null;
+    }
+
+    @action insertSnippet(kind) {
+        if (this.busy) return;
+        const text = this.replyCopy[kind];
+        const body = kind === 'greeting' ? `${text}\n\n${this.body}` : `${this.body}${this.body ? '\n\n' : ''}${text}`;
+        if (body.length > 20000) {
+            this.notifications.warning('This addition would exceed the 20,000-character reply limit.');
+            return;
+        }
+        this.body = body;
+        this.requestId = null;
+    }
+
+    @action togglePreview() {
+        this.previewReply = !this.previewReply;
     }
 
     @action async load() {
@@ -131,6 +194,10 @@ export default class WebsiteInboxComponent extends Component {
         try {
             const result = await this.fetch.get(`website-inbox/${encodeURIComponent(row.uuid)}`, { messages_page: messagesPage }, API);
             if (!result.submission || !Array.isArray(result.messages)) throw new Error('The conversation response was invalid.');
+            if (this.detail?.submission.uuid !== result.submission.uuid) {
+                this.replyLanguage = ['fr', 'en', 'ar'].includes(result.submission.locale) ? result.submission.locale : 'fr';
+                this.previewReply = false;
+            }
             this.detail = result;
             this.status = result.submission.status;
             this.assignee = result.submission.assigned_to_uuid ?? '';
@@ -146,6 +213,7 @@ export default class WebsiteInboxComponent extends Component {
         this.detail = null;
         this.body = '';
         this.requestId = null;
+        this.previewReply = false;
     }
 
     @action async update() {
@@ -174,8 +242,8 @@ export default class WebsiteInboxComponent extends Component {
 
     @action async reply() {
         if (this.busy || !this.detail) return;
-        if (this.body.trim().length < 2) {
-            this.notifications.warning('Enter a reply of at least two characters.');
+        if (this.body.trim().length < 2 || this.characterCount > 20000) {
+            this.notifications.warning('Enter a reply between 2 and 20,000 characters.');
             return;
         }
         this.busy = true;
@@ -187,11 +255,13 @@ export default class WebsiteInboxComponent extends Component {
                 {
                     body: this.body,
                     request_id: this.requestId,
+                    locale: this.replyLanguage,
                 },
                 API
             );
             this.body = '';
             this.requestId = null;
+            this.previewReply = false;
             this.notifications.success('Reply accepted by the mail transport. Final delivery is not guaranteed.');
         } catch (error) {
             this.error = 'Reply delivery was not confirmed. Review the conversation and mailbox before sending again to avoid duplicates.';

@@ -56,7 +56,7 @@
                 <Button @text="Close conversation" @disabled={{this.busy}} @onClick={{this.close}} />
                 <Button @text="Refresh conversation" @disabled={{this.busy}} @onClick={{fn this.open this.detail.submission}} />
             </div>
-            <p>Email replies go only to {{this.detail.submission.email}}. Incoming replies appear here after Mailgun forwards them; refresh to load new messages.</p>
+            <p>Email replies go only to {{this.detail.submission.email}}. Incoming replies appear here after the configured mail receiver forwards them; refresh to load new messages.</p>
             <dl class="space-y-2">
                 {{#each this.fields as |field|}}
                     <div><dt class="font-semibold capitalize">{{field.label}}</dt><dd class="whitespace-pre-wrap break-words">{{field.value}}</dd></div>
@@ -98,18 +98,69 @@
                 <Button @text="Newer messages" @disabled={{or this.newestHistory this.busy}} @onClick={{fn this.history -1}} />
             </div>
             {{#if this.permissions.reply}}
-                <label>Email reply
-                    <textarea
-                        aria-label="Email reply"
-                        class="form-input w-full"
-                        rows="6"
-                        maxlength="20000"
-                        value={{this.body}}
-                        disabled={{this.busy}}
-                        {{on "input" this.editBody}}
-                    ></textarea>
-                </label>
-                <Button @text="Send email reply" @type="primary" @isLoading={{this.busy}} @onClick={{this.reply}} />
+                <section aria-label="Reply composer" class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div class="p-4 bg-gray-50 dark:bg-gray-800 space-y-3">
+                        <div>
+                            <h3 class="font-semibold dark:text-gray-100">Reply to {{this.detail.submission.name}}</h3>
+                            <p class="text-sm break-words">To: {{this.detail.submission.email}}</p>
+                            <p class="text-sm break-words">Subject: Colab Express - {{this.detail.submission.reference}}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2 items-end">
+                            <label class="text-sm">Reply language
+                                <select aria-label="Reply language" class="form-select block" disabled={{this.busy}} {{on "change" this.setReplyLanguage}}>
+                                    <option value="fr" selected={{eq this.replyLanguage "fr"}}>Français</option>
+                                    <option value="en" selected={{eq this.replyLanguage "en"}}>English</option>
+                                    <option value="ar" selected={{eq this.replyLanguage "ar"}}>العربية</option>
+                                </select>
+                            </label>
+                            <Button @text="Insert greeting" @disabled={{this.busy}} @onClick={{fn this.insertSnippet "greeting"}} />
+                            <Button @text="Insert signature" @disabled={{this.busy}} @onClick={{fn this.insertSnippet "signature"}} />
+                            <Button @text={{if this.previewReply "Back to writing" "Preview email"}} @disabled={{this.busy}} @onClick={{this.togglePreview}} />
+                        </div>
+                        <p class="text-xs text-gray-500">Language changes the email layout and reusable phrases. It does not translate or replace your draft.</p>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        {{#if this.previewReply}}
+                            <div
+                                aria-label="Email preview"
+                                class="rounded-lg border border-gray-200 overflow-hidden bg-white text-gray-900"
+                                lang={{this.replyLanguage}}
+                                dir={{this.replyDirection}}
+                            >
+                                <div class="p-5 bg-gray-900 text-white">
+                                    <p class="text-lg font-bold">Colab Express</p>
+                                    <p class="text-sm">{{this.replyCopy.title}}</p>
+                                </div>
+                                <div class="p-5 space-y-4">
+                                    <p class="text-sm text-gray-500">{{this.replyCopy.reference}}: {{this.detail.submission.reference}}</p>
+                                    <p class="whitespace-pre-wrap break-words" dir="auto">{{if this.body this.body "Your reply will appear here."}}</p>
+                                </div>
+                                <p class="p-5 bg-gray-50 text-sm text-gray-500">{{this.replyCopy.footer}}</p>
+                            </div>
+                            <p class="text-xs text-gray-500">Content preview. Fonts and spacing may vary between email clients.</p>
+                        {{else}}
+                            <label class="block font-medium" for="website-inbox-reply">Your message</label>
+                            <textarea
+                                id="website-inbox-reply"
+                                aria-label="Email reply"
+                                aria-describedby="website-inbox-reply-help"
+                                class="form-input w-full leading-relaxed"
+                                rows="12"
+                                maxlength="20000"
+                                placeholder="Write a helpful, personal reply..."
+                                dir="auto"
+                                value={{this.body}}
+                                disabled={{this.busy}}
+                                {{on "input" this.editBody}}
+                            ></textarea>
+                        {{/if}}
+                        <div class="flex flex-wrap justify-between items-center gap-3">
+                            <p id="website-inbox-reply-help" class="text-xs text-gray-500">{{this.characterCount}} / 20,000 characters · Plain text, with a branded email layout.</p>
+                            <Button @text="Send email reply" @type="primary" @disabled={{this.cannotSend}} @isLoading={{this.busy}} @onClick={{this.reply}} />
+                        </div>
+                        <p class="text-xs text-gray-500">Replies go only to the address above. Configure Postal or Mailgun receiving for customers' replies to return to this conversation.</p>
+                    </div>
+                </section>
             {{/if}}
         </article>
     {{/if}}
