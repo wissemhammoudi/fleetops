@@ -104,7 +104,15 @@ class CollectionReadiness
 
     public static function fingerprint(Order $order): string
     {
-        return hash('sha256', json_encode(self::snapshot($order), JSON_THROW_ON_ERROR));
+        $snapshot = self::snapshot($order);
+        foreach ($snapshot['places'] as $place) {
+            // Query-builder rows contain MySQL geometry bytes, not UTF-8 text.
+            if (isset($place->location)) {
+                $place->location = bin2hex($place->location);
+            }
+        }
+
+        return hash('sha256', json_encode($snapshot, JSON_THROW_ON_ERROR));
     }
 
     public static function pickupStops(Order $order): array
