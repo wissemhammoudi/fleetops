@@ -1,18 +1,130 @@
-<div class="flex flex-col h-full overflow-hidden">
-    <div class="flex gap-2 p-3 border-b dark:border-gray-700" aria-label={{t "planning.workspace"}}>
-        {{#if this.collectionPlanning.canRead}}
-            <Button @text={{t "planning.pickups"}} @type={{if (eq this.activeSection "pickups") "primary" "default"}} @onClick={{fn this.select "pickups"}} data-test-planning-pickups />
-            <Button @text={{t "planning.depot"}} @type={{if (eq this.activeSection "depot") "primary" "default"}} @onClick={{fn this.select "depot"}} data-test-planning-depot />
-        {{/if}}
-        {{#if this.canPlanOrders}}
-            <Button @text={{t "planning.other-orders"}} @type={{if (eq this.activeSection "orders") "primary" "default"}} @onClick={{fn this.select "orders"}} data-test-planning-orders />
+<div class="flex flex-col h-full overflow-y-auto" data-test-unified-planning {{did-update this.companyChanged this.currentUser.companyId}}>
+    <div class="p-4 space-y-3 border-b dark:border-gray-700">
+        <h2 class="text-lg font-semibold">{{t "planning.workspace"}}</h2>
+        <p>{{t "planning.unified-help"}}</p>
+        {{#if this.error}}<p role="alert">{{this.error}}</p>{{/if}}
+        <Button
+            @text={{t "collection-rounds.refresh"}}
+            @onClick={{perform this.load}}
+            @disabled={{or this.load.isRunning this.createPickups.isRunning this.saveDepot.isRunning}}
+            data-test-planning-refresh
+        />
+        {{#if this.data}}
+            <section aria-label={{t "planning.default-depot"}} class="space-y-2">
+                {{#if this.defaultDepot}}
+                    <p data-test-default-depot><strong>{{t "planning.default-depot"}}:</strong> {{this.defaultDepot.name}} - {{this.defaultDepot.street1}}</p>
+                {{else}}
+                    <p role="alert">{{t "planning.depot-required"}}</p>
+                {{/if}}
+                {{#if this.data.permissions.configure}}
+                    <label>
+                        {{t "planning.default-depot"}}
+                        <select class="form-select" {{on "change" this.selectDepot}} data-test-default-depot-select>
+                            <option value="">{{t "collection-rounds.choose-depot"}}</option>
+                            {{#each this.places as |place|}}<option value={{place.uuid}} selected={{eq place.uuid this.depot}}>{{place.name}} - {{place.street1}}</option>{{/each}}
+                        </select>
+                    </label>
+                    <Button
+                        @text={{t "planning.save-depot"}}
+                        @onClick={{perform this.saveDepot}}
+                        @disabled={{or (not this.depot) this.saveDepot.isRunning this.load.isRunning}}
+                        data-test-default-depot-save
+                    />
+                    <p>{{t "planning.manage-places-help"}}</p>
+                {{/if}}
+            </section>
+            <div class="flex flex-wrap gap-3 items-end">
+                <label>{{t "planning.stage"}}
+                    <select class="form-select" {{on "change" this.filter}} data-test-planning-stage>
+                        {{#each this.stages as |stage|}}<option value={{stage.value}} selected={{eq stage.value this.stage}}>{{stage.label}}</option>{{/each}}
+                    </select>
+                </label>
+                <label>{{t "planning.search"}}
+                    <input class="form-input" type="search" value={{this.search}} {{on "input" this.setSearch}} data-test-planning-search />
+                </label>
+                <Button @text={{t "planning.search"}} @onClick={{this.find}} @disabled={{this.load.isRunning}} />
+                {{#if this.data.permissions.plan_pickup}}
+                    <label>{{t "planning.pickup-date"}}
+                        <select class="form-select" {{on "change" this.selectDate}} data-test-planning-date>
+                            <option value="">{{t "planning.choose-date"}}</option>
+                            {{#each this.collectionPlanning.pickupDates as |date|}}<option value={{date}} selected={{eq date this.pickupDate}}>{{date}}</option>{{/each}}
+                        </select>
+                    </label>
+                    <Button
+                        @text={{t "planning.create-draft"}}
+                        @onClick={{this.reviewPickups}}
+                        @disabled={{or (not this.selected.size) (not this.pickupDate) (not this.defaultDepot) this.load.isRunning this.createPickups.isRunning}}
+                        data-test-planning-create
+                    />
+                {{/if}}
+            </div>
+            {{#if this.data.permissions.collection}}
+                {{#each this.collectionPlanning.warnings as |warning|}}<p role="alert">{{warning.order_uuid}}: {{warning.message}}</p>{{/each}}
+            {{/if}}
         {{/if}}
     </div>
-    <div class="flex-1 min-h-0 overflow-hidden">
-        {{#if (eq this.activeSection "orders")}}
-            <OrchestratorWorkbench />
-        {{else}}
-            <CollectionRounds @view={{this.activeSection}} />
+    {{#if this.data}}
+        <div class="p-4 overflow-x-auto">
+            <table class="w-full text-left" data-test-planning-table>
+                <thead><tr>
+                        <th>{{t "planning.select"}}</th><th>{{t "planning.order"}}</th><th>{{t "planning.route-type"}}</th>
+                        <th>{{t "planning.stage"}}</th><th>{{t "planning.pickup-place"}}</th><th>{{t "planning.recipient"}}</th><th>{{t "planning.actions"}}</th>
+                    </tr></thead>
+                <tbody>
+                    {{#each this.rows as |order|}}
+                        <tr class="border-b dark:border-gray-700" data-test-unified-order={{order.uuid}}>
+                            <td><input
+                                    type="checkbox"
+                                    checked={{order.selected}}
+                                    disabled={{or (not order.selectable) this.load.isRunning this.createPickups.isRunning}}
+                                    aria-label={{order.order_id}}
+                                    {{on "change" (fn this.toggle order)}}
+                                /></td>
+                            <td>{{order.order_id}}</td>
+                            <td>{{t (if (eq order.route_type "collection") "planning.collection-route" "planning.direct-route")}}</td>
+                            <td>{{order.stateLabel}}</td>
+                            <td>{{order.pickup.name}} {{order.pickup.street1}}</td>
+                            <td>{{order.dropoff.name}} {{order.dropoff.street1}}</td>
+                            <td>
+                                {{#if order.canOpenRound}}
+                                    <Button @text={{t "planning.round-details"}} @onClick={{fn this.openRound order}} data-test-order-round />
+                                {{/if}}
+                            </td>
+                        </tr>
+                    {{else}}<tr><td colspan="7">{{t "planning.no-orders"}}</td></tr>{{/each}}
+                </tbody>
+            </table>
+            <div class="flex gap-2 items-center my-3">
+                <Button @text={{t "collection-rounds.previous"}} @disabled={{or (eq this.page 1) this.load.isRunning}} @onClick={{fn this.pageBy -1}} />
+                <span>{{this.page}} / {{this.data.last_page}} ({{this.data.total}})</span>
+                <Button @text={{t "collection-rounds.next"}} @disabled={{or (eq this.page this.data.last_page) this.load.isRunning}} @onClick={{fn this.pageBy 1}} />
+            </div>
+            {{#if this.data.permissions.direct}}
+                <Button @text={{t "planning.direct-tools"}} @onClick={{this.toggleDirectPlanner}} data-test-planning-direct />
+                <p>{{t "planning.direct-help"}}</p>
+            {{/if}}
+        </div>
+        {{#if (and (not this.showDirectPlanner) (or this.data.permissions.optimize_pickup this.data.permissions.optimize_delivery))}}
+            <CollectionRoutePlanner
+                @selection={{this.selected}}
+                @depotUuid={{this.data.configuration.default_depot_uuid}}
+                @places={{this.places}}
+                @drivers={{this.data.route_drivers}}
+                @permissions={{this.data.permissions}}
+                @savedRoutes={{this.savedRoutes}}
+                @onPreviewChange={{this.previewChanged}}
+                @onSaved={{perform this.load}}
+            />
         {{/if}}
-    </div>
+        {{#if this.showDirectPlanner}}<div class="flex-none h-screen"><OrchestratorWorkbench /></div>{{/if}}
+        {{#if this.roundId}}
+            <CollectionRounds
+                @view="unified"
+                @roundId={{this.roundId}}
+                @defaultDepotUuid={{this.data.configuration.default_depot_uuid}}
+                @routePlaces={{this.places}}
+                @onClose={{this.closeRound}}
+            />
+        {{/if}}
+    {{/if}}
 </div>

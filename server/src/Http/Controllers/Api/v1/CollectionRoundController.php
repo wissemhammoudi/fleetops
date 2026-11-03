@@ -52,7 +52,15 @@ class CollectionRoundController extends Controller
 
         return response()->json(['deliveries' => CollectionDeliveryLeg::where('company_uuid', $driver->company_uuid)
             ->where('driver_uuid', $driver->uuid)->whereIn('status', ['staging', 'accepted', 'held'])
-            ->orderBy('created_at')->limit(100)->get()->map(function ($leg) {
+            ->orderBy('created_at')->limit(100)->get()->sort(function ($left, $right) {
+                return [
+                    data_get($left->manifest, 'routing.departure_at', ''), data_get($left->manifest, 'routing.plan_uuid', ''),
+                    (int) data_get($left->manifest, 'routing.order_sequence', 0), $left->uuid,
+                ] <=> [
+                    data_get($right->manifest, 'routing.departure_at', ''), data_get($right->manifest, 'routing.plan_uuid', ''),
+                    (int) data_get($right->manifest, 'routing.order_sequence', 0), $right->uuid,
+                ];
+            })->values()->map(function ($leg) {
                 $data = $leg->toArray();
                 unset($data['manifest']['requests']);
 

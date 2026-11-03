@@ -5,6 +5,7 @@ namespace Fleetbase\FleetOps\Support;
 use Fleetbase\FleetOps\Models\CollectionRound;
 use Fleetbase\FleetOps\Models\Driver;
 use Fleetbase\FleetOps\Models\Order;
+use Fleetbase\FleetOps\Models\Vehicle;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -64,10 +65,11 @@ class CollectionRounds
                 $existing = CollectionRound::where('company_uuid', $company)->where('scheduled_at', $planned)->lockForUpdate()->get();
                 $round = $calendar['capacity_planning']
                     ? $existing->first(fn ($candidate) => $candidate->status === 'draft'
+                        && !$candidate->routing
                         && !$candidate->driver_uuid
                         && CollectionCapacity::parcels([...$candidate->stops, ...$stops]) <= $capacity
                         && count($candidate->stops) + count($stops) <= $calendar['max_pickup_stops'])
-                    : $existing->first();
+                    : $existing->first(fn ($candidate) => !$candidate->routing);
                 if ($round && $round->status !== 'draft') {
                     $warnings[] = ['order_uuid' => $order->uuid, 'message' => 'The daily round is already released or closed. Operations must review this missed collection.'];
                     continue;
@@ -106,14 +108,29 @@ class CollectionRounds
             $round = self::find($company, $id);
             self::revision($round, $input);
             $action = $input['action'];
+            abort_if(data_get($round->routing, 'plan_uuid') && in_array($action, ['assign', 'reschedule'], true),
+                409, 'Recall this optimized draft and orchestrate again to change its driver, route or date.');
             if ($action === 'assign') {
                 abort_unless(in_array($round->status, ['draft', 'released'], true), 409, 'A started round cannot be reassigned. Escalate custody changes to operations.');
-                $driver = Driver::where('company_uuid', $company)->where('uuid', $input['driver_uuid'])->first();
+                $driver = Driver::where('company_uuid', $company)->where('uuid', $input['driver_uuid'])->lockForUpdate()->first();
                 abort_unless($driver, 422, 'Select an active driver from this company.');
                 CollectionCapacity::assertAssignment($round, $driver, CollectionSchedule::forCompany($company));
                 $depot = DB::connection($round->getConnectionName())->table('places')->where('company_uuid', $company)
                     ->where('uuid', $input['depot_uuid'])->whereNull('deleted_at')->select('*')->selectRaw('ST_AsText(location) as location_wkt')->first();
                 abort_unless($depot && trim((string) $depot->street1) !== '', 422, 'Select a depot with a complete street address from this company.');
+                if (isset($input['start_place_uuid']) || $round->routing) {
+                    abort_unless($round->status === 'draft', 409, 'Route origins can only change on draft pickups. Recall released work before replanning.');
+                    abort_if($round->routing && !isset($input['start_place_uuid'])
+                        && ($round->routing['driver_uuid'] !== $driver->uuid || $round->routing['vehicle_uuid'] !== $driver->vehicle_uuid
+                            || $round->routing['destination']['uuid'] !== $input['depot_uuid']),
+                        409, 'Review and explicitly select the vehicle starting place when changing the driver, vehicle or depot.');
+                    self::assertRoutingVehicle($driver);
+                    $destination = PlanningPlaces::snapshot($company, $input['depot_uuid']);
+                    $origin = PlanningPlaces::snapshot($company, $input['start_place_uuid'] ?? $round->routing['origin']['uuid']);
+                    $round->routing = ['origin' => $origin, 'destination' => $destination,
+                        'driver_uuid' => $driver->uuid, 'vehicle_uuid' => $driver->vehicle_uuid,
+                        'recorded_at' => now()->toISOString(), 'actor_uuid' => session('user')];
+                }
                 $round->driver_uuid = $driver->uuid;
                 $round->depot = \Illuminate\Support\Arr::only((array) $depot, ['uuid', 'name', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'phone', 'location_wkt']);
             } elseif ($action === 'reschedule') {
@@ -146,8 +163,24 @@ class CollectionRounds
             } elseif ($action === 'release') {
                 abort_unless($round->status === 'draft' && $round->driver_uuid && $round->depot && count($round->stops), 409, 'Assign a driver and depot to a nonempty draft before release.');
                 self::assertCalendar($company, $round->scheduled_at, data_get(self::orders($round)->first()?->meta, 'collection_workflow.pickup_window.end'));
-                abort_unless(Driver::where('uuid', $round->driver_uuid)->where('company_uuid', $company)->exists(), 409, 'The assigned driver is no longer available.');
-                CollectionCapacity::assertAssignment($round, Driver::where('uuid', $round->driver_uuid)->where('company_uuid', $company)->firstOrFail(), CollectionSchedule::forCompany($company));
+                $driver = Driver::where('uuid', $round->driver_uuid)->where('company_uuid', $company)->lockForUpdate()->first();
+                abort_unless($driver, 409, 'The assigned driver is no longer available.');
+                CollectionCapacity::assertAssignment($round, $driver, CollectionSchedule::forCompany($company));
+                if ($round->routing) {
+                    abort_unless($round->routing['driver_uuid'] === $driver->uuid
+                        && $round->routing['vehicle_uuid'] === $driver->vehicle_uuid
+                        && $round->routing['destination']['uuid'] === $round->depot['uuid'],
+                        409, 'The driver, vehicle or depot changed. Review the route origin before releasing this pickup.');
+                    self::assertRoutingVehicle($driver);
+                    PlanningPlaces::assertCurrent($company, $round->routing['origin']);
+                    PlanningPlaces::assertCurrent($company, $round->routing['destination']);
+                    if (data_get($round->routing, 'plan_uuid')) {
+                        abort_unless(now()->lessThan($round->routing['ends_at']), 409, 'The reviewed pickup route is stale. Recall and orchestrate again.');
+                        $capacity = CollectionCapacity::driverLimit($driver, CollectionSchedule::forCompany($company));
+                        abort_unless($capacity && CollectionCapacity::parcels($round->stops) <= $capacity,
+                            409, 'Vehicle capacity changed. Recall and orchestrate again.');
+                    }
+                }
                 $orders = self::orders($round);
                 foreach ($orders as $order) {
                     self::assertContract($order, $round);
@@ -168,11 +201,19 @@ class CollectionRounds
                 $round->driver_uuid = null;
                 $round->depot = null;
                 $round->custody = null;
+                $round->routing = null;
             }
-            self::audit($round, $action, ['driver_uuid' => $round->driver_uuid, 'depot' => $round->depot, 'scheduled_at' => $round->scheduled_at->toISOString()]);
+            self::audit($round, $action, ['driver_uuid' => $round->driver_uuid, 'depot' => $round->depot,
+                'routing' => $round->routing, 'scheduled_at' => $round->scheduled_at->toISOString()]);
 
             return $round;
         });
+    }
+
+    private static function assertRoutingVehicle(Driver $driver): void
+    {
+        abort_unless($driver->vehicle_uuid && Vehicle::where('uuid', $driver->vehicle_uuid)->where('company_uuid', $driver->company_uuid)->lockForUpdate()->first(['uuid']),
+            422, 'Assign an active vehicle from this company to the driver before recording or releasing a route origin.');
     }
 
     private static function departure(string $date, array $calendar): \Carbon\CarbonInterface

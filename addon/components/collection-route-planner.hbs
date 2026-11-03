@@ -1,0 +1,76 @@
+<section
+    class="p-4 space-y-3 border rounded dark:border-gray-700"
+    data-test-route-optimizer
+    {{did-update this.invalidate @selection @depotUuid}}
+    {{did-update this.resetCompany this.currentUser.companyId}}
+>
+    <h3 class="font-semibold">{{t "planning.optimizer.title"}}</h3>
+    <p>{{t "planning.optimizer.help"}}</p>
+    <fieldset disabled={{this.busy}} class="space-y-3">
+        <label>{{t "planning.route-type"}}
+            <select class="form-select" {{on "change" (fn this.setField "kind")}} data-test-route-kind>
+                {{#if @permissions.optimize_pickup}}<option value="pickup" selected={{eq this.kind "pickup"}}>{{t "planning.pickups"}}</option>{{/if}}
+                {{#if @permissions.optimize_delivery}}<option value="delivery" selected={{eq this.kind "delivery"}}>{{t "planning.depot"}}</option>{{/if}}
+            </select>
+        </label>
+        <label>{{t "planning.optimizer.date"}} <input class="form-input" type="date" value={{this.date}} {{on "change" (fn this.setField "date")}} data-test-route-date /></label>
+        {{#if (eq this.kind "delivery")}}
+            <label>{{t "planning.optimizer.start"}} <input class="form-input" type="time" value={{this.startTime}} {{on "change" (fn this.setField "startTime")}} /></label>
+        {{else}}
+            <p>{{t "planning.optimizer.pickup-departure"}}</p>
+        {{/if}}
+        <label>{{t "planning.optimizer.end"}} <input class="form-input" type="time" value={{this.endTime}} {{on "change" (fn this.setField "endTime")}} /></label>
+        {{#each this.driverRows as |driver|}}
+            <div class="flex flex-wrap gap-3">
+                <label><input type="checkbox" checked={{driver.checked}} {{on "change" (fn this.toggleDriver driver)}} data-test-route-driver={{driver.uuid}} /> {{driver.name}}</label>
+                {{#if (and driver.checked (eq this.kind "pickup"))}}
+                    <label>{{t "planning.vehicle-start"}}
+                        <select class="form-select" {{on "change" (fn this.setOrigin driver)}} data-test-route-origin={{driver.uuid}}>
+                            {{#each @places as |place|}}<option value={{place.uuid}} selected={{eq driver.origin place.uuid}}>{{place.name}} - {{place.street1}}</option>{{/each}}
+                        </select>
+                    </label>
+                {{/if}}
+            </div>
+        {{/each}}
+        <Button @text={{t "planning.optimizer.orchestrate"}} @onClick={{perform this.orchestrate}} @disabled={{or (not this.permitted) this.busy (not @depotUuid)}} data-test-route-run />
+    </fieldset>
+    {{#if this.error}}<p role="alert">{{this.error}}</p>{{/if}}
+    {{#if this.proposal}}
+        <p>{{t "planning.optimizer.expires"}}: {{this.proposal.expires_at}}</p>
+        {{#each this.proposal.unassigned as |warning|}}<p role="alert" data-test-route-warning>{{warning.order_uuid}}: {{warning.reason}}</p>{{/each}}
+    {{/if}}
+    {{#if this.routes.length}}
+        {{#unless this.proposal}}<h4>{{t "planning.optimizer.saved-routes"}}</h4>{{/unless}}
+        <div class="fleetbase-leaflet-map-container next-map-container h-96" data-test-route-map>
+            <LeafletMap @lat={{this.mapCenter.lat}} @lng={{this.mapCenter.lng}} @zoom={{11}} class="w-full h-full" as |layers|>
+                <layers.tile @url={{this.mapSettings.leafletTileUrl}} />
+                {{#each this.routes as |route|}}
+                    {{#if route.coordinates.length}}<layers.polyline @locations={{route.coordinates}} @color={{route.color}} />{{/if}}
+                    <layers.marker @lat={{route.origin.location.lat}} @lng={{route.origin.location.lng}} as |marker|>
+                        <marker.tooltip>{{route.driver_name}}: {{route.origin.name}}</marker.tooltip>
+                    </layers.marker>
+                    {{#each route.stops as |stop|}}
+                        <layers.marker @lat={{stop.location.lat}} @lng={{stop.location.lng}} as |marker|>
+                            <marker.tooltip>{{stop.sequence}}. {{stop.order_id}} - {{stop.label}} - {{stop.arrival_at}}</marker.tooltip>
+                        </layers.marker>
+                    {{/each}}
+                    <layers.marker @lat={{route.destination.location.lat}} @lng={{route.destination.location.lng}} as |marker|>
+                        <marker.tooltip>{{route.destination.name}}</marker.tooltip>
+                    </layers.marker>
+                {{/each}}
+            </LeafletMap>
+        </div>
+        {{#each this.routes as |route|}}
+            <article class="border rounded p-3" data-test-route-review>
+                <h4>{{route.driver_name}}: {{route.kilometers}} km / {{route.minutes}} min</h4>
+                <p>{{route.origin.name}} &rarr; {{route.destination.name}}</p>
+                {{#unless route.geometry}}<p>{{t "planning.optimizer.no-geometry"}}</p>{{/unless}}
+                <ol>{{#each route.stops as |stop|}}<li>{{stop.sequence}}. {{stop.order_id}} - {{stop.label}} - {{stop.arrival_at}}</li>{{/each}}</ol>
+            </article>
+        {{/each}}
+        <p>{{t "planning.optimizer.draft-only"}}</p>
+        {{#if this.proposal}}
+            <Button @text={{t "planning.optimizer.save"}} @onClick={{this.reviewSave}} @disabled={{this.busy}} data-test-route-save />
+        {{/if}}
+    {{/if}}
+</section>

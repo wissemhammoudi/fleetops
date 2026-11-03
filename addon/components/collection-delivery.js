@@ -20,7 +20,11 @@ export default class CollectionDeliveryComponent extends Component {
     }
 
     get assignable() {
-        return !this.leg || ['staging', 'recalled', 'held'].includes(this.leg.status);
+        return !this.leg || (['staging', 'recalled', 'held'].includes(this.leg.status) && (!this.routing || this.leg.status === 'recalled'));
+    }
+
+    get routing() {
+        return this.leg?.manifest?.routing;
     }
 
     get released() {
@@ -36,7 +40,7 @@ export default class CollectionDeliveryComponent extends Component {
     }
 
     get movable() {
-        return this.staging && !(this.leg.manifest?.units ?? []).some((unit) => unit.staged_at);
+        return this.staging && !this.routing && !(this.leg.manifest?.units ?? []).some((unit) => unit.staged_at);
     }
 
     @action selectDate(event) {

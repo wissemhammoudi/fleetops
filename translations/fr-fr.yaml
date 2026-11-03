@@ -1,4 +1,69 @@
 planning:
+    optimizer:
+        title: Orchestrer les commandes sélectionnées
+        saved-routes: Trajets optimisés enregistrés (pas de positions en direct)
+        delivery-run: Trajet partagé de livraison depuis le dépôt vérifié
+        handover-help: Chaque commande de ce trajet doit être chargée et acceptée par le chauffeur affecté avant le départ. Le départ reste une action séparée par commande d'origine. Pour modifier le chauffeur, la date ou l'ordre des arrêts, rappelez toutes les remises non démarrées et orchestrez à nouveau. Une commande déjà partie exige une revue de transfert de garde par les opérations.
+        help: Sélectionnez les collectes prêtes ou les commandes entièrement reçues au dépôt, puis les chauffeurs et un créneau de travail. Les tournées reviennent au dépôt. Les commandes multi-collectes, multi-destinataires et les retours nécessitent une planification manuelle sans fractionner les commandes.
+        required: Sélectionnez des commandes, une date et au moins un chauffeur.
+        date: Date du trajet (fuseau de la société)
+        start: Départ des livraisons
+        end: Retour au dépôt au plus tard
+        pickup-departure: Les collectes partent à l'heure de départ configurée pour la société.
+        orchestrate: Orchestrer et prévisualiser
+        expires: Expiration de la proposition
+        save: Enregistrer les trajets vérifiés en brouillon
+        confirm: Enregistrer ces trajets et affectations exacts ? Aucun départ ni envoi ne sera déclenché. Les commandes non affectées resteront inchangées.
+        saved: Brouillons enregistrés. Vérifiez le départ des collectes ou le chargement et l'acceptation chauffeur avant le départ.
+        draft-only: Brouillon uniquement. Le départ des collectes reste séparé. Les livraisons exigent toujours le chargement de chaque colis et l'acceptation de chaque manifeste par le chauffeur affecté.
+        no-geometry: Le moteur n'a pas fourni le tracé routier. Les repères montrent l'ordre des arrêts vérifiés, pas le tracé de la route.
+    unified-help: Un seul parcours de commande, de la collecte au dépôt puis au destinataire. Les commandes directes et historiques restent visibles sans modifier leur circuit.
+    default-depot: Dépôt par défaut
+    depot-required: Choisissez un dépôt avec une adresse et une position vérifiées avant de planifier les collectes.
+    save-depot: Enregistrer le dépôt par défaut
+    depot-saved: Dépôt par défaut enregistré. Les affectations existantes restent inchangées.
+    manage-places-help: Ajoutez ou modifiez le dépôt et les adresses de stationnement dans Ressources > Lieux, puis actualisez ici. Une adresse et des coordonnées valides sont obligatoires.
+    vehicle-start: Point de départ du véhicule
+    vehicle-start-help: Choisissez le dépôt ou le lieu enregistré où le véhicule est stationné. Ceci enregistre un départ, pas un trajet optimisé.
+    choose-start: Choisir un point de départ vérifié
+    stage: Étape
+    search: Rechercher une commande
+    select: Sélectionner pour collecte
+    order: Commande
+    route-type: Type de trajet
+    pickup-place: Collecte chez le marchand
+    recipient: Destinataire
+    actions: Actions
+    collection-route: Collecte via dépôt
+    direct-route: Directe / historique
+    direct-tools: Ouvrir / fermer les outils directs et historiques
+    direct-help: Les commandes directes et historiques utilisent les outils de trajet existants dans cet espace. Un brouillon ne déclenche aucun départ et ne contourne pas la réception au dépôt.
+    no-orders: Aucune commande ne correspond à ce filtre.
+    invalid-response: Réponse de planification invalide. Actualisez avant de continuer.
+    pickup-required: Sélectionnez des commandes prêtes, un jour ouvré et un dépôt par défaut vérifié.
+    company-changed: La société active a changé. Actualisez et vérifiez à nouveau le plan.
+    stages:
+        all: Toutes les commandes
+        waiting: En attente de préparation
+        pickup: Collecte et ramassage
+        depot: Au dépôt / prête à livrer
+        delivery: En cours de livraison
+        attention: À vérifier
+        complete: Livrées / annulées
+        other: Commandes directes / historiques
+    states:
+        awaiting_preparation: En attente de préparation client
+        ready_for_pickup: Prête à collecter
+        pickup_scheduled: Collecte planifiée
+        pickup_in_progress: Collecte en cours
+        collected: Collectée / en attente du dépôt
+        pickup_exception: Incident de collecte
+        depot_hold: Bloquée au dépôt
+        received_at_depot: Reçue au dépôt
+        ready_for_delivery_dispatch: Prête à planifier en livraison
+        out_for_delivery: En cours de livraison
+        delivered: Livrée
+        cancelled: Annulée
     workspace: Espace de planification
     pickups: Collectes
     depot: Dépôt et livraison

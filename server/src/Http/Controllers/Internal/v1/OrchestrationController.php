@@ -562,6 +562,8 @@ class OrchestrationController extends Controller
                         }
                     })->lockForUpdate()->exists();
                 abort_if($busy || $reserved, 409, 'Vehicle or driver already has active or reserved work.');
+                \Fleetbase\FleetOps\Support\CollectionRoutePlans::assertNoOptimizedReservation($companyUuid, $driver?->uuid, $vehicle->uuid,
+                    $validated['scheduled_date'] ?? now()->toDateString());
                 usort($vehicleAssignments, fn ($a, $b) => ($a['sequence'] ?? 0) <=> ($b['sequence'] ?? 0));
                 $sequences = array_filter(array_column($vehicleAssignments, 'sequence'), fn ($s) => $s !== null);
                 abort_if(count($sequences) !== count(array_unique($sequences)), 422, 'Stop sequences must be unique per vehicle.');

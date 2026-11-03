@@ -11,7 +11,7 @@ class CollectionRound extends Model
     public $incrementing = false;
     protected $keyType = 'string';
     protected $guarded = [];
-    protected $casts = ['scheduled_at' => 'datetime', 'depot' => 'array', 'stops' => 'array', 'history' => 'array', 'custody' => 'array', 'revision' => 'integer'];
+    protected $casts = ['scheduled_at' => 'datetime', 'depot' => 'array', 'stops' => 'array', 'history' => 'array', 'custody' => 'array', 'routing' => 'array', 'revision' => 'integer'];
 
     public function getConnectionName()
     {

@@ -126,6 +126,7 @@ class CollectionRoundController extends Controller
             'revision' => ['required', 'integer', 'min:1'],
             'driver_uuid' => ['required_if:action,assign', 'uuid'],
             'depot_uuid' => ['required_if:action,assign', 'uuid'],
+            'start_place_uuid' => ['sometimes', 'required', 'uuid'],
             'pickup_date' => ['required_if:action,reschedule', 'date_format:Y-m-d'],
         ]);
 

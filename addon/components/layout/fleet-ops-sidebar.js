@@ -117,17 +117,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
 
     get operationsItems() {
         return this.withRegistryItems('operations', [
-            ...(!this.abilities.cannot('fleet-ops list email-campaign')
-                ? [
-                      {
-                          label: 'Email campaigns',
-                          description: 'Consented audiences, approvals and scheduled email',
-                          icon: 'envelope',
-                          route: this.fullRoute('operations.email-campaigns'),
-                          keywords: ['email', 'campaigns', 'newsletter', 'schedule'],
-                      },
-                  ]
-                : []),
             this.createItem('menu.orders', 'map-location-dot', 'operations.orders', 'fleet-ops list order', 'fleet-ops see order', [
                 'dashboard',
                 'orders',

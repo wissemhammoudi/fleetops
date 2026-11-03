@@ -38,6 +38,8 @@ class CollectionCapacity
 
     public static function assertAssignment(CollectionRound $round, Driver $driver, array $schedule): void
     {
+        CollectionRoutePlans::assertNoOptimizedReservation($round->company_uuid, $driver->uuid, $driver->vehicle_uuid,
+            $round->scheduled_at->copy()->setTimezone($round->timezone)->toDateString(), $round->uuid);
         $conflict = CollectionRound::where('company_uuid', $round->company_uuid)->where('driver_uuid', $driver->uuid)
             ->where('uuid', '!=', $round->uuid)->where('scheduled_at', $round->scheduled_at)
             ->whereIn('status', ['draft', 'released', 'in_progress', 'awaiting_depot'])->exists();

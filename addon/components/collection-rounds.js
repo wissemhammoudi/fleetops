@@ -55,11 +55,13 @@ export default class CollectionRoundsComponent extends Component {
                 stops: round.stops.map((stop) => ({ ...stop, callUrl: pickupCallLink(stop.contact?.phone) })),
                 departure: new Date(round.scheduled_at).toLocaleString(undefined, { timeZone: round.timezone }),
                 editable: ['draft', 'released'].includes(round.status),
-                assignable: round.status === 'draft' && this.permissions.assign,
+                assignable: round.status === 'draft' && this.permissions.assign && !round.routing?.plan_uuid,
                 draft: round.status === 'draft',
                 driverName: this.collectionPlanning.drivers.find((driver) => driver.uuid === round.driver_uuid)?.name,
                 selectedDriver: this.selections[round.uuid]?.driver ?? round.driver_uuid ?? '',
-                selectedDepot: this.selections[round.uuid]?.depot ?? round.depot?.uuid ?? '',
+                selectedDepot: this.selections[round.uuid]?.depot ?? round.depot?.uuid ?? this.args.defaultDepotUuid ?? '',
+                selectedOrigin:
+                    this.selections[round.uuid]?.origin ?? round.routing?.origin?.uuid ?? this.selections[round.uuid]?.depot ?? round.depot?.uuid ?? this.args.defaultDepotUuid ?? '',
                 selectedDate: this.selections[round.uuid]?.date ?? '',
             }));
     }
@@ -142,7 +144,16 @@ export default class CollectionRoundsComponent extends Component {
 
     @dropTask *update(round, action) {
         try {
-            const input = action === 'assign' ? { driver_uuid: round.selectedDriver, depot_uuid: round.selectedDepot } : action === 'reschedule' ? { pickup_date: round.selectedDate } : {};
+            const input =
+                action === 'assign'
+                    ? {
+                          driver_uuid: round.selectedDriver,
+                          depot_uuid: round.selectedDepot,
+                          ...(this.args.routePlaces ? { start_place_uuid: round.selectedOrigin } : {}),
+                      }
+                    : action === 'reschedule'
+                      ? { pickup_date: round.selectedDate }
+                      : {};
             yield this.collectionPlanning.operate(round, action, input);
             this.selections = {};
         } catch (error) {

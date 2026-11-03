@@ -2,6 +2,71 @@ fleet-ops:
     extension-name: Fleet-Ops
 
 planning:
+    optimizer:
+        title: Orchestrate selected orders
+        saved-routes: Saved optimized routes (not a live position feed)
+        delivery-run: Reviewed shared depot delivery route
+        handover-help: Every order on this route must be loaded and accepted by the assigned driver before departure. Release remains a separate action per original order. To change the driver, date or stop sequence, recall all unstarted handovers on this route and orchestrate again. A released order requires operations custody review.
+        help: Select ready pickups or fully received depot orders from the list, then choose drivers and a working window. Routes return to the depot. Multi-pickup, multi-recipient and return orders require manual whole-order planning.
+        required: Select orders, a date and at least one driver before orchestrating.
+        date: Route date (company timezone)
+        start: Delivery departure
+        end: Latest depot return
+        pickup-departure: Pickups depart at the configured company collection departure time.
+        orchestrate: Orchestrate and preview
+        expires: Proposal expires
+        save: Save reviewed route drafts
+        confirm: Save these exact routes and driver assignments? This does not release pickups or dispatch deliveries. Unassigned orders will remain unchanged.
+        saved: Route drafts saved. Review pickup release or depot loading and driver acceptance before departure.
+        draft-only: Draft only. Pickup release remains separate. Depot deliveries still require every parcel loaded and the assigned driver to accept each manifest.
+        no-geometry: Road geometry was not supplied by the solver. Markers show the reviewed stop sequence, not a road trace.
+    unified-help: One order journey, from merchant pickup through depot receipt to recipient delivery. Direct and legacy orders remain visible without changing their workflow.
+    default-depot: Default depot
+    depot-required: Choose a default depot with a verified address and map position before planning pickups.
+    save-depot: Save default depot
+    depot-saved: Default depot saved. Existing round assignments are unchanged.
+    manage-places-help: Add or update the depot and vehicle parking addresses in Resources > Places, then refresh here. Only places with a street address and valid coordinates can be selected.
+    vehicle-start: Vehicle starting place
+    vehicle-start-help: Choose the depot or the saved place where this vehicle is parked. This records a starting point, not an optimized route.
+    choose-start: Choose a verified starting place
+    stage: Stage
+    search: Find order
+    select: Select for pickup
+    order: Order
+    route-type: Route type
+    pickup-place: Merchant pickup
+    recipient: Recipient
+    actions: Actions
+    collection-route: Pickup via depot
+    direct-route: Direct / legacy
+    direct-tools: Open / close direct and legacy route tools
+    direct-help: Direct and legacy orders use the existing route workbench in this workspace. Saving a draft does not dispatch or bypass depot custody.
+    no-orders: No orders match this filter.
+    invalid-response: The planning response was invalid. Refresh before continuing.
+    pickup-required: Select ready orders, an operating date and a verified default depot.
+    company-changed: The active company changed. Refresh and review the plan again.
+    stages:
+        all: All orders
+        waiting: Waiting for preparation
+        pickup: Pickup and collection
+        depot: At depot / ready for delivery
+        delivery: Out for delivery
+        attention: Needs attention
+        complete: Delivered / cancelled
+        other: Direct / legacy orders
+    states:
+        awaiting_preparation: Waiting for customer readiness
+        ready_for_pickup: Ready for pickup
+        pickup_scheduled: Pickup planned
+        pickup_in_progress: Pickup in progress
+        collected: Collected / awaiting depot
+        pickup_exception: Pickup exception
+        depot_hold: Held at depot
+        received_at_depot: Received at depot
+        ready_for_delivery_dispatch: Ready for delivery planning
+        out_for_delivery: Out for delivery
+        delivered: Delivered
+        cancelled: Cancelled
     workspace: Planning workspace
     pickups: Pickups
     depot: Depot & delivery

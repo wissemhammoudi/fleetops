@@ -117,6 +117,20 @@ class Order extends Model
         $this->recordingCollectionReadiness = true;
     }
 
+    public function recordDeliveryRoute(?array $route): void
+    {
+        $meta = $this->meta;
+        if ($route === null) {
+            unset($meta['collection_workflow']['delivery_route']);
+        } else {
+            $meta['collection_workflow']['delivery_route'] = $route;
+        }
+        $meta['collection_workflow']['history'][] = ['event' => 'delivery_route_reviewed',
+            'route' => $route, 'at' => now()->toISOString(), 'actor_uuid' => session('user')];
+        $this->meta = $meta;
+        $this->recordingCollectionReadiness = true;
+    }
+
     public function recordDepotReceipt(string $roundUuid, bool $received, ?string $date = null, ?string $timezone = null): void
     {
         abort_unless(data_get($this->meta, 'collection_workflow.collection_round_uuid') === $roundUuid, 409, 'This order does not belong to this depot round.');

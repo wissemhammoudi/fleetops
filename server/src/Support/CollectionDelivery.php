@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 
 class CollectionDelivery
 {
-    public static function change(string $company, string $orderId, array $input, ?string $driverUuid = null): CollectionDeliveryLeg
+    public static function change(string $company, string $orderId, array $input, ?string $driverUuid = null, array $routeOrders = []): CollectionDeliveryLeg
     {
         $input = Validator::make($input, [
             'action' => ['required', 'in:assign,load,accept,release,recall,reschedule'],
@@ -34,7 +34,7 @@ class CollectionDelivery
         abort_unless($driverUuid ? $input['action'] === 'accept' : $input['action'] !== 'accept', 403, 'Driver acceptance and operations actions use separate authenticated endpoints.');
         $connection = DB::connection(config('fleetbase.connection.db', 'mysql'));
 
-        return $connection->transaction(function () use ($company, $orderId, $input, $driverUuid, $connection) {
+        return $connection->transaction(function () use ($company, $orderId, $input, $driverUuid, $routeOrders, $connection) {
             abort_unless($connection->table('companies')->where('uuid', $company)->lockForUpdate()->first(['uuid']), 404, 'Company not found.');
             $order = Order::where('company_uuid', $company)->where('uuid', $orderId)->lockForUpdate()->firstOrFail();
             $leg = CollectionDeliveryLeg::where('company_uuid', $company)->where('order_uuid', $order->uuid)->lockForUpdate()->first();
@@ -51,12 +51,19 @@ class CollectionDelivery
             abort_unless(($leg?->revision ?? 0) === (int) $input['revision'], 409, 'Delivery handover changed. Refresh before continuing.');
             $previousManifest = $leg ? \Illuminate\Support\Arr::except($leg->manifest, ['requests']) : null;
             $previousDriver = $leg?->driver_uuid;
+            abort_if(data_get($leg?->manifest, 'routing.plan_uuid') && $leg->status !== 'recalled'
+                && in_array($input['action'], ['assign', 'reschedule'], true),
+                409, 'Recall this optimized handover before changing its route, driver or date.');
             abort_unless(CollectionWorkflow::applies($order) && !$order->dispatched && !$order->started && !$order->driver_assigned_uuid, 409, 'Delivery is already released or this order does not use depot collection.');
             $round = CollectionRound::where('company_uuid', $company)->where('uuid', data_get($order->meta, 'collection_workflow.collection_round_uuid'))->lockForUpdate()->firstOrFail();
             if ($input['action'] === 'recall') {
                 abort_unless($leg && $leg->status !== 'released', 409, 'Released goods cannot be recalled without a custody transfer.');
                 abort_unless(trim($input['reason'] ?? '') !== '', 422, 'Explain the recall and confirm all staged goods remain at depot.');
                 $leg->status = 'recalled';
+                if (data_get($leg->manifest, 'routing.plan_uuid')) {
+                    $order->recordDeliveryRoute(null);
+                    $order->save();
+                }
             } else {
                 self::assertReceipt($order, $round);
                 if ($input['action'] === 'reschedule') {
@@ -80,6 +87,10 @@ class CollectionDelivery
                     $manifest['requests'] = data_get($leg->manifest, 'requests', []);
                     $leg->manifest = $manifest;
                 } elseif ($input['action'] === 'assign') {
+                    $assigned = Driver::where('company_uuid', $company)->where('uuid', $input['driver_uuid'])->first();
+                    abort_unless($assigned, 422, 'Select an active driver from this company.');
+                    CollectionRoutePlans::assertNoOptimizedReservation($company, $assigned->uuid, $assigned->vehicle_uuid,
+                        data_get($order->meta, 'collection_workflow.planned_delivery_date'), null, array_unique([$order->uuid, ...$routeOrders]));
                     abort_unless(!$leg || in_array($leg->status, ['staging', 'recalled', 'held'], true), 409, 'Recall an accepted handover before changing its driver. Goods must remain at depot.');
                     abort_unless(Driver::where('company_uuid', $company)->where('uuid', $input['driver_uuid'])->exists(), 422, 'Select an active driver from this company.');
                     $manifest = self::manifest($order, $round);
@@ -91,8 +102,7 @@ class CollectionDelivery
                     $leg->status = 'staging';
                 } else {
                     abort_unless($leg && in_array($leg->status, ['staging', 'accepted'], true), 409, 'Assign or refresh the depot handover first.');
-                    $current = self::manifest($order, $round);
-                    abort_unless($current['receipt_token'] === data_get($leg->manifest, 'receipt_token'), 409, 'Depot custody changed. Recall and prepare a fresh handover.');
+                    self::assertManifestCurrent($order, $round, $leg);
                     $manifest = $leg->manifest;
                     if ($input['action'] === 'load') {
                         abort_unless($leg->status === 'staging', 409, 'Driver already accepted this manifest. Recall it before changing staged goods.');
@@ -127,6 +137,7 @@ class CollectionDelivery
                                 $order->save();
                             }
                         } elseif ($input['action'] === 'release') {
+                            CollectionRoutePlans::assertDeliveryRelease($company, $leg);
                             abort_unless($allStaged, 409, 'Every parcel must be staged before departure.');
                             abort_unless($leg->status === 'accepted' && data_get($manifest, 'acceptance.status') === 'accepted'
                                 && data_get($manifest, 'acceptance.driver_uuid') === $leg->driver_uuid, 409, 'The assigned driver must accept this exact parcel manifest.');
@@ -197,6 +208,14 @@ class CollectionDelivery
         return ['order_id' => $order->public_id, 'depot' => $round->depot, 'dropoffs' => $stops,
             'original_payload_uuid' => $order->payload_uuid, 'delivery_date' => data_get($order->meta, 'collection_workflow.planned_delivery_date'),
             'units' => $units, 'receipt_token' => hash('sha256', json_encode([$units, data_get($round->custody, 'receipts.' . $order->uuid), CollectionReadiness::fingerprint($order), $round->depot], JSON_THROW_ON_ERROR))];
+    }
+
+    public static function assertManifestCurrent(Order $order, CollectionRound $round, CollectionDeliveryLeg $leg): void
+    {
+        self::assertReceipt($order, $round);
+        $current = self::manifest($order, $round);
+        abort_unless($current['receipt_token'] === data_get($leg->manifest, 'receipt_token'),
+            409, 'Depot custody changed. Recall and prepare a fresh handover.');
     }
 
     public static function matchesParcelLabel(Order $order, Entity $entity, string $code): bool

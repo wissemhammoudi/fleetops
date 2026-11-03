@@ -491,6 +491,7 @@ class VroomOrchestrationEngine implements OrchestrationEngineInterface
         if ($endpointMode !== 'binary') {
             $solveUrl .= '/solve';
         }
+
         if ($apiKey) {
             $solveUrl .= '?api_key=' . urlencode($apiKey);
         }
@@ -508,6 +509,18 @@ class VroomOrchestrationEngine implements OrchestrationEngineInterface
         }
 
         return $response->json();
+    }
+
+    public function solveCollectionRoutes(string $company, array $payload): array
+    {
+        $this->companyUuid = $company;
+        $host = $this->resolveVroomSetting('api_host', config('vroom.base_uri', env('VROOM_HOST')));
+        abort_unless(is_string($host) && trim($host) !== '', 503, 'Configure an approved VROOM host before optimizing collection routes.');
+        $result = $this->callVroom($payload);
+        abort_unless(($result['code'] ?? null) === 0 && is_array($result['routes'] ?? null) && is_array($result['unassigned'] ?? null),
+            502, 'The routing engine returned an invalid solution. No assignments were saved.');
+
+        return $result;
     }
 
     protected function resolveVroomBaseUri(): string

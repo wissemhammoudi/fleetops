@@ -5,6 +5,15 @@
         <p>{{this.leg.status}} - {{this.leg.driver_uuid}}</p>
         <p>{{t "collection-depot.delivery-date"}}: {{this.leg.manifest.delivery_date}}</p>
         <p>{{this.leg.manifest.depot.name}} - {{this.leg.manifest.depot.street1}}</p>
+        {{#if this.routing}}
+            <section class="border rounded p-3" data-test-delivery-route>
+                <h5>{{t "planning.optimizer.delivery-run"}}</h5>
+                <p>{{this.routing.plan_uuid}} - {{this.routing.order_sequence}} / {{this.routing.order_uuids.length}}</p>
+                <p>{{this.routing.origin.name}} &rarr; {{this.routing.destination.name}}</p>
+                <ol>{{#each this.routing.stops as |stop|}}<li>{{stop.sequence}}. {{stop.order_id}} - {{stop.label}} - {{stop.arrival_at}}</li>{{/each}}</ol>
+                <p>{{t "planning.optimizer.handover-help"}}</p>
+            </section>
+        {{/if}}
         {{#each this.leg.manifest.dropoffs as |stop|}}<p>{{stop.name}} - {{stop.street1}} - {{stop.phone}}</p>{{/each}}
         {{#each this.leg.manifest.units as |unit|}}<p>{{unit.barcode}} - {{unit.name}} - {{unit.staged_at}}</p>{{/each}}
     {{/if}}
