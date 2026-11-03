@@ -10,6 +10,7 @@ import isJson from '@fleetbase/ember-core/utils/is-json';
 import createFullCalendarEventFromOrder from '../../../utils/create-full-calendar-event-from-order';
 import createFullCalendarEventFromScheduleItem from '../../../utils/create-full-calendar-event-from-schedule-item';
 import toCalendarDate from '../../../utils/to-calendar-date';
+import { calendarDate, collectionEvents, isCollectionOrder } from '../../../utils/collection-planning';
 
 /**
  * OperationsSchedulerIndexController
@@ -60,6 +61,31 @@ export default class OperationsSchedulerIndexController extends Controller {
     @service currentUser;
     @service intl;
     @service fetch;
+    @service abilities;
+    @service collectionPlanning;
+    @tracked collectionView = null;
+    @tracked selectedCollectionRound = null;
+
+    get canListOrders() {
+        return !this.abilities.cannot('fleet-ops list order');
+    }
+
+    @action showCollections(view) {
+        this.collectionView = view;
+        this.selectedCollectionRound = null;
+    }
+
+    @action closeCollection() {
+        this.selectedCollectionRound = null;
+    }
+
+    @action async refreshCollections() {
+        try {
+            await this.collectionPlanning.load();
+        } catch (error) {
+            this.notifications.serverError(error);
+        }
+    }
 
     // UI State
     @tracked calendar = null;
@@ -83,14 +109,15 @@ export default class OperationsSchedulerIndexController extends Controller {
     // Reactive Computed Getters
     // -------------------------------------------------------------------------
 
-    @computed('_orderRevision', 'store')
+    @computed('_orderRevision', 'canListOrders', 'store')
     get allActiveOrders() {
         // Return all orders with an active status — no date window filtering.
         // The calendar renders only what falls in the visible range; unscheduled
         // orders appear in the sidebar panel. Past orders are kept for historical
         // context and future orders are always visible regardless of current view.
         const statuses = ['created', 'dispatched', 'active'];
-        return this.store.peekAll('order').filter((order) => statuses.includes(order.status));
+        if (!this.canListOrders) return [];
+        return this.store.peekAll('order').filter((order) => statuses.includes(order.status) && !isCollectionOrder(order));
     }
 
     @computed('allActiveOrders.@each.scheduled_at', 'searchQuery', 'searchQuery.length', 'activeFilters.[]')
@@ -115,9 +142,15 @@ export default class OperationsSchedulerIndexController extends Controller {
         return this.allActiveOrders.filter((o) => !isNone(o.scheduled_at) && isValidDate(new Date(o.scheduled_at))).map((o) => createFullCalendarEventFromOrder(o, tz));
     }
 
-    @computed('drivers.[]', 'allActiveOrders.@each.{scheduled_at,driver_assigned_uuid}')
+    @computed('allActiveOrders.@each.{driver_assigned_uuid,scheduled_at}', 'collectionPlanning.{canRead,drivers.[]}', 'drivers.[]')
     get calendarResources() {
-        return this.drivers.map((driver) => {
+        const drivers = new Map(this.drivers.map((driver) => [driver.id, driver]));
+        if (this.collectionPlanning.canRead) {
+            for (const driver of this.collectionPlanning.drivers) {
+                if (!drivers.has(driver.uuid)) drivers.set(driver.uuid, { ...driver, id: driver.uuid });
+            }
+        }
+        const resources = [...drivers.values()].map((driver) => {
             const assignedCount = this.allActiveOrders.filter((o) => o.driver_assigned_uuid === driver.id && !isNone(o.scheduled_at)).length;
             const maxCapacity = driver.max_daily_orders ?? 10;
             const pct = Math.round((assignedCount / maxCapacity) * 100);
@@ -130,6 +163,8 @@ export default class OperationsSchedulerIndexController extends Controller {
                 },
             };
         });
+        if (this.collectionPlanning.canRead) resources.push({ id: 'collection-unassigned', title: this.intl.t('planning.unassigned'), extendedProps: {} });
+        return resources;
     }
 
     @computed('drivers.@each.currentShift', 'currentUser.company.timezone', 'companyTimezone')
@@ -151,9 +186,10 @@ export default class OperationsSchedulerIndexController extends Controller {
         return events;
     }
 
-    @computed('calendarEvents.[]', 'backgroundEvents.[]')
+    @computed('backgroundEvents.[]', 'calendarEvents.[]', 'collectionPlanning.{rounds.[],canRead,permissions}', 'companyTimezone', 'intl.primaryLocale')
     get allCalendarEvents() {
-        return [...this.calendarEvents, ...this.backgroundEvents];
+        const collections = this.collectionPlanning.canRead ? collectionEvents(this.collectionPlanning.rounds, this.collectionPlanning.permissions, this.companyTimezone, this.intl) : [];
+        return [...this.calendarEvents, ...this.backgroundEvents, ...collections];
     }
 
     /**
@@ -259,6 +295,12 @@ export default class OperationsSchedulerIndexController extends Controller {
      */
     @action renderEventContent({ event }) {
         if (event.display === 'background') return null;
+        if (event.extendedProps?.collection) {
+            // Return DOM text rather than interpolating request identifiers into HTML.
+            const element = document.createElement('span');
+            element.textContent = `${event.title} - ${event.extendedProps.status}`;
+            return { domNodes: [element] };
+        }
         const { order, status } = event.extendedProps ?? {};
         const tracking = event.title ?? order?.tracking ?? order?.public_id ?? '';
         const driverName = order?.driver_assigned?.name ?? order?.get?.('driver_assigned.name') ?? '';
@@ -469,6 +511,73 @@ export default class OperationsSchedulerIndexController extends Controller {
         const { event, revert } = info;
         const { start, end, extendedProps } = event;
         const tz = this.companyTimezone;
+        if (extendedProps?.collection) {
+            revert();
+            const round = this.collectionPlanning.rounds.find((row) => row.uuid === extendedProps.roundUuid);
+            if (round && extendedProps.kind === 'delivery') {
+                const order = round.depot_orders?.find((row) => row.order_uuid === extendedProps.orderUuid);
+                if (
+                    !order?.delivery ||
+                    order.delivery.status !== 'staging' ||
+                    !this.collectionPlanning.permissions['assign-delivery'] ||
+                    order.delivery.manifest.units.some((unit) => unit.staged_at)
+                ) {
+                    this.notifications.warning(this.intl.t('planning.locked'));
+                    return;
+                }
+                if (event.resourceIds?.[0] && event.resourceIds[0] !== (order.delivery.driver_uuid ?? 'collection-unassigned')) {
+                    this.notifications.warning(this.intl.t('planning.keep-driver'));
+                    return;
+                }
+                const date = calendarDate(start);
+                this.modalsManager.confirm({
+                    title: this.intl.t('planning.move-draft'),
+                    body: `${this.intl.t('planning.new-date', { date })} ${this.intl.t('planning.delivery-date-help')}`,
+                    confirm: async () => {
+                        try {
+                            await this.collectionPlanning.change(`fleet-ops/collection-deliveries/${encodeURIComponent(order.order_uuid)}`, {
+                                action: 'reschedule',
+                                delivery_date: date,
+                                revision: order.delivery.revision,
+                                request_id: crypto.randomUUID(),
+                            });
+                        } catch (error) {
+                            this.notifications.serverError(error);
+                        }
+                    },
+                });
+                return;
+            }
+            if (!round || extendedProps.kind !== 'pickup' || round.status !== 'draft' || !this.collectionPlanning.permissions.plan) {
+                this.notifications.warning(this.intl.t('planning.locked'));
+                return;
+            }
+            const driver = event.resourceIds?.[0];
+            if (driver === 'collection-unassigned' && round.driver_uuid) {
+                this.notifications.warning(this.intl.t('planning.keep-driver'));
+                return;
+            }
+            const reassigned = driver && driver !== 'collection-unassigned' && driver !== round.driver_uuid;
+            if (reassigned && !this.collectionPlanning.permissions.assign) {
+                this.notifications.warning(this.intl.t('common.unauthorized-access'));
+                return;
+            }
+            const input = { pickup_date: calendarDate(toCalendarDate(this._reinterpretDateInTimezone(start, tz), this.collectionPlanning.schedule.timezone)) };
+            if (reassigned) input.driver_uuid = driver;
+            const driverName = this.collectionPlanning.drivers.find((row) => row.uuid === driver)?.name ?? driver;
+            this.modalsManager.confirm({
+                title: this.intl.t('planning.move-draft'),
+                body: `${this.intl.t('planning.new-date', { date: input.pickup_date })} ${reassigned ? this.intl.t('planning.new-driver', { driver: driverName }) : ''} ${this.intl.t('planning.move-help')}`,
+                confirm: async () => {
+                    try {
+                        await this.collectionPlanning.operate(round, 'reschedule', input);
+                    } catch (error) {
+                        this.notifications.serverError(error);
+                    }
+                },
+            });
+            return;
+        }
         if (extendedProps?.scheduleItem) {
             // Shift block drag — update the ScheduleItem record directly.
             const scheduleItem = extendedProps.scheduleItem;
@@ -511,6 +620,11 @@ export default class OperationsSchedulerIndexController extends Controller {
      */
     @action viewOrderAsEvent(info) {
         const { event } = info;
+        if (event.extendedProps?.collection) {
+            this.collectionView = event.extendedProps.kind === 'delivery' ? 'depot' : 'pickups';
+            this.selectedCollectionRound = event.extendedProps.roundUuid;
+            return;
+        }
         if (event.extendedProps?.scheduleItem) return this._viewShiftEvent(event);
         const order = this.store.peekRecord('order', event.id);
         if (order) this.viewEvent(order);

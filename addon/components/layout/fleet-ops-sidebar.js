@@ -117,12 +117,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
 
     get operationsItems() {
         return this.withRegistryItems('operations', [
-            this.createItem('collection-rounds.title', 'truck', 'operations.collection-rounds', 'fleet-ops view pickup-round', 'fleet-ops see pickup-round', [
-                'pickup',
-                'depot',
-                'handover',
-                'dispatcher',
-            ]),
             ...(!this.abilities.cannot('fleet-ops list email-campaign')
                 ? [
                       {
@@ -142,8 +136,7 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                 'create order',
                 'live map',
             ]),
-            this.createItem('menu.orchestrator', 'circle-nodes', 'operations.orchestrator', 'fleet-ops list order', 'fleet-ops see order', ['optimize', 'allocate', 'dispatch']),
-            this.createItem('menu.scheduler', 'calendar-day', 'operations.scheduler', 'fleet-ops list order', 'fleet-ops see order', ['schedule', 'calendar']),
+            ...this.planningItems,
             this.createItem('menu.order-config', 'diagram-project', 'operations.order-config', 'fleet-ops list order-config', 'fleet-ops see order-config', [
                 'configuration',
                 'fields',
@@ -151,6 +144,26 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
             ]),
             this.createItem('menu.service-rates', 'file-invoice-dollar', 'operations.service-rates', 'fleet-ops list service-rate', 'fleet-ops see service-rate', ['rates', 'pricing']),
         ]);
+    }
+
+    get planningItems() {
+        if (this.abilities.cannot('fleet-ops list order') && this.abilities.cannot('fleet-ops view pickup-round')) return [];
+        return [
+            {
+                label: this.intl.t('menu.orchestrator'),
+                icon: 'circle-nodes',
+                priority: 1,
+                route: this.fullRoute('operations.orchestrator'),
+                keywords: ['pickup', 'depot', 'handover', 'optimize', 'dispatch'],
+            },
+            {
+                label: this.intl.t('menu.scheduler'),
+                icon: 'calendar-day',
+                priority: 2,
+                route: this.fullRoute('operations.scheduler'),
+                keywords: ['pickup', 'delivery', 'schedule', 'calendar'],
+            },
+        ];
     }
 
     get resourcesItems() {

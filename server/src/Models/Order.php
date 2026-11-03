@@ -106,6 +106,17 @@ class Order extends Model
         $this->recordingCollectionReadiness = true;
     }
 
+    public function recordCollectionPlanDate(string $kind, string $date, string $timezone): void
+    {
+        abort_unless(in_array($kind, ['pickup', 'delivery'], true), 409, 'Invalid collection planning stage.');
+        $meta = $this->meta;
+        $meta['collection_workflow'][$kind === 'pickup' ? 'planned_collection_at' : 'planned_delivery_date'] = $date;
+        $meta['collection_workflow'][$kind === 'pickup' ? 'timezone' : 'delivery_timezone'] = $timezone;
+        $meta['collection_workflow']['history'][] = ['event' => $kind . '_rescheduled', 'date' => $date, 'at' => now()->toISOString(), 'actor_uuid' => session('user')];
+        $this->meta = $meta;
+        $this->recordingCollectionReadiness = true;
+    }
+
     public function recordDepotReceipt(string $roundUuid, bool $received, ?string $date = null, ?string $timezone = null): void
     {
         abort_unless(data_get($this->meta, 'collection_workflow.collection_round_uuid') === $roundUuid, 409, 'This order does not belong to this depot round.');

@@ -11,6 +11,12 @@
     {{#if this.released}}
         <p>{{t "collection-delivery.released"}}</p>
     {{else}}
+        {{#if (and this.movable @permissions.assign-delivery)}}
+            <InputGroup @name={{t "collection-depot.delivery-date"}}>
+                <input type="date" class="form-input" value={{this.deliveryDate}} {{on "change" this.selectDate}} aria-label={{t "collection-depot.delivery-date"}} />
+            </InputGroup>
+            <Button @text={{t "planning.move-draft"}} @onClick={{fn this.confirm "reschedule"}} @disabled={{or this.save.isRunning (not this.deliveryDate)}} />
+        {{/if}}
         {{#if (and this.assignable @permissions.assign-delivery)}}
             <label class="block">
                 {{t "collection-delivery.driver"}}

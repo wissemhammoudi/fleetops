@@ -22,7 +22,7 @@ class CollectionRoundController extends Controller
     public function index()
     {
         $company = CollectionConsoleAccess::authorize('read');
-        $paging = request()->validate(['followup_page' => ['sometimes', 'integer', 'min:1']]);
+        $paging = request()->validate(['followup_page' => ['sometimes', 'integer', 'min:1'], 'round_page' => ['sometimes', 'integer', 'min:1']]);
         $page = (int) ($paging['followup_page'] ?? 1);
         $schedule = CollectionSchedule::forCompany($company);
         $drivers = Driver::where('company_uuid', $company)->get()->map(fn ($driver) => ['uuid' => $driver->uuid, 'name' => $driver->name,
@@ -45,10 +45,13 @@ class CollectionRoundController extends Controller
             }
         });
 
+        $rounds = CollectionRound::where('company_uuid', $company)->where('status', '!=', 'closed')->whereJsonLength('stops', '>', 0)
+            ->orderBy('scheduled_at')->orderBy('uuid')->paginate(100, ['*'], 'round_page', $paging['round_page'] ?? 1);
         return response()->json(['permissions' => CollectionConsoleAccess::permissions(),
+            'schedule' => $schedule, 'pickup_dates' => CollectionSchedule::pickupDates(now(), $schedule),
             'follow_up' => $rows, 'follow_up_page' => $followup->currentPage(), 'follow_up_last_page' => $followup->lastPage(), 'follow_up_total' => $followup->total(),
-            'rounds' => CollectionRound::where('company_uuid', $company)->where('status', '!=', 'closed')->whereJsonLength('stops', '>', 0)
-            ->orderBy('scheduled_at')->limit(100)->get()->map(function ($round) use ($drivers, $schedule) {
+            'rounds_page' => $rounds->currentPage(), 'rounds_last_page' => $rounds->lastPage(), 'rounds_total' => $rounds->total(),
+            'rounds' => $rounds->getCollection()->map(function ($round) use ($drivers, $schedule) {
                 $data = $round->toArray();
                 $data['parcel_count'] = CollectionCapacity::parcels($round->stops);
                 $data['pickup_count'] = count($round->stops);
@@ -85,7 +88,12 @@ class CollectionRoundController extends Controller
 
     public function plan()
     {
-        return response()->json(CollectionRounds::plan(CollectionConsoleAccess::authorize('plan')));
+        $input = request()->validate([
+            'pickup_date' => ['nullable', 'date_format:Y-m-d'],
+            'order_uuids' => ['sometimes', 'array', 'min:1', 'max:100'],
+            'order_uuids.*' => ['required', 'string', 'distinct', 'max:100'],
+        ]);
+        return response()->json(CollectionRounds::plan(CollectionConsoleAccess::authorize('plan'), $input));
     }
 
     public function depot(Request $request, string $id)
@@ -96,8 +104,9 @@ class CollectionRoundController extends Controller
 
     public function delivery(Request $request, string $id)
     {
-        $input = $request->validate(['action' => ['required', 'in:assign,load,release,recall']]);
-        return response()->json(['delivery' => CollectionDelivery::change(CollectionConsoleAccess::authorize($input['action'] . '-delivery'), $id, $request->all())]);
+        $input = $request->validate(['action' => ['required', 'in:assign,load,release,recall,reschedule']]);
+        $action = $input['action'] === 'reschedule' ? 'assign-delivery' : $input['action'] . '-delivery';
+        return response()->json(['delivery' => CollectionDelivery::change(CollectionConsoleAccess::authorize($action), $id, $request->all())]);
     }
 
     public function labels(string $id)
@@ -113,12 +122,18 @@ class CollectionRoundController extends Controller
     {
         CollectionConsoleAccess::authorize('read');
         $input = $request->validate([
-            'action' => ['required', 'in:assign,release,cancel'],
+            'action' => ['required', 'in:assign,release,cancel,reschedule'],
             'revision' => ['required', 'integer', 'min:1'],
             'driver_uuid' => ['required_if:action,assign', 'uuid'],
             'depot_uuid' => ['required_if:action,assign', 'uuid'],
+            'pickup_date' => ['required_if:action,reschedule', 'date_format:Y-m-d'],
         ]);
 
-        return response()->json(['round' => CollectionRounds::operate(CollectionConsoleAccess::authorize($input['action']), $id, $input)]);
+        $company = CollectionConsoleAccess::authorize($input['action'] === 'reschedule' ? 'plan' : $input['action']);
+        if ($input['action'] === 'reschedule' && !empty($input['driver_uuid'])) {
+            CollectionConsoleAccess::authorize('assign');
+        }
+
+        return response()->json(['round' => CollectionRounds::operate($company, $id, $input)]);
     }
 }

@@ -20,7 +20,7 @@ class CollectionDelivery
     public static function change(string $company, string $orderId, array $input, ?string $driverUuid = null): CollectionDeliveryLeg
     {
         $input = Validator::make($input, [
-            'action' => ['required', 'in:assign,load,accept,release,recall'],
+            'action' => ['required', 'in:assign,load,accept,release,recall,reschedule'],
             'revision' => ['required', 'integer', 'min:0'],
             'request_id' => ['required', 'string', 'min:8', 'max:100', 'regex:/^[A-Za-z0-9_-]+$/'],
             'driver_uuid' => ['required_if:action,assign', 'string'],
@@ -29,6 +29,7 @@ class CollectionDelivery
             'checks.*' => ['boolean'],
             'manifest_verified' => ['required_if:action,accept', 'boolean'],
             'reason' => ['nullable', 'string', 'max:1000'],
+            'delivery_date' => ['required_if:action,reschedule', 'date_format:Y-m-d'],
         ])->validate();
         abort_unless($driverUuid ? $input['action'] === 'accept' : $input['action'] !== 'accept', 403, 'Driver acceptance and operations actions use separate authenticated endpoints.');
         $connection = DB::connection(config('fleetbase.connection.db', 'mysql'));
@@ -58,7 +59,27 @@ class CollectionDelivery
                 $leg->status = 'recalled';
             } else {
                 self::assertReceipt($order, $round);
-                if ($input['action'] === 'assign') {
+                if ($input['action'] === 'reschedule') {
+                    abort_unless($leg && $leg->status === 'staging' && !collect($leg->manifest['units'])->contains(fn ($unit) => !empty($unit['staged_at'])),
+                        409, 'Only unstaged draft deliveries can move. Recall staged or accepted handovers before replanning.');
+                    $calendar = CollectionSchedule::forCompany($company);
+                    $date = $input['delivery_date'];
+                    $earliest = CollectionSchedule::deliveryDate(\Illuminate\Support\Carbon::parse(data_get($round->custody, 'receipts.' . $order->uuid . '.at')), $calendar);
+                    $local = \Carbon\CarbonImmutable::parse($date, $calendar['timezone']);
+                    abort_unless($date >= $earliest && $date >= now()->setTimezone($calendar['timezone'])->toDateString()
+                        && in_array($local->dayOfWeekIso, $calendar['operating_days'], true) && !in_array($date, $calendar['closed_dates'], true),
+                        422, 'Choose an operating date on or after depot eligibility and today.');
+                    $order->recordCollectionPlanDate('delivery', $date, $calendar['timezone']);
+                    $order->save();
+                    $custody = $round->custody;
+                    $custody['receipts'][$order->uuid]['delivery_date'] = $date;
+                    $round->custody = $custody;
+                    $round->revision++;
+                    $round->save();
+                    $manifest = self::manifest($order, $round);
+                    $manifest['requests'] = data_get($leg->manifest, 'requests', []);
+                    $leg->manifest = $manifest;
+                } elseif ($input['action'] === 'assign') {
                     abort_unless(!$leg || in_array($leg->status, ['staging', 'recalled', 'held'], true), 409, 'Recall an accepted handover before changing its driver. Goods must remain at depot.');
                     abort_unless(Driver::where('company_uuid', $company)->where('uuid', $input['driver_uuid'])->exists(), 422, 'Select an active driver from this company.');
                     $manifest = self::manifest($order, $round);
@@ -124,7 +145,7 @@ class CollectionDelivery
             $leg->manifest = $manifest;
             $audit = ['action' => $input['action'], 'driver_uuid' => $leg->driver_uuid,
                 'barcode' => $input['barcode'] ?? null, 'at' => now()->toISOString(), 'actor_uuid' => session('user'), 'reason' => trim($input['reason'] ?? '')];
-            if (in_array($input['action'], ['assign', 'recall'], true)) {
+            if (in_array($input['action'], ['assign', 'recall', 'reschedule'], true)) {
                 $audit['previous_manifest'] = $previousManifest;
                 $audit['previous_driver_uuid'] = $previousDriver;
             } elseif ($input['action'] === 'accept') {

@@ -16,28 +16,35 @@ export default class OperationsSchedulerIndexRoute extends Route {
     @service store;
     @service abilities;
     @service hostRouter;
+    @service collectionPlanning;
 
     beforeModel() {
-        if (this.abilities.cannot('fleet-ops list order')) {
+        if (this.abilities.cannot('fleet-ops list order') && !this.collectionPlanning.canRead) {
             return this.hostRouter.transitionTo('console.fleet-ops.index');
         }
     }
 
     async model() {
+        if (this.collectionPlanning.canRead) await this.collectionPlanning.load();
+        const canListOrders = !this.abilities.cannot('fleet-ops list order');
         // Load active orders (created, dispatched, active) alongside drivers.
         // The broader status scope ensures dispatchers see each driver's full
         // day — not just pre-dispatch orders — enabling accurate conflict
         // detection and capacity visualisation.
         const [orders, drivers] = await Promise.all([
-            this.store.query('order', {
-                status: ['created', 'dispatched', 'active'],
-                with: ['payload', 'driverAssigned.vehicle'],
-                limit: 500,
-            }),
-            this.store.query('driver', {
-                with: ['currentShift'],
-                limit: 200,
-            }),
+            canListOrders
+                ? this.store.query('order', {
+                      status: ['created', 'dispatched', 'active'],
+                      with: ['payload', 'driverAssigned.vehicle'],
+                      limit: 500,
+                  })
+                : [],
+            !this.abilities.cannot('fleet-ops list driver')
+                ? this.store.query('driver', {
+                      with: ['currentShift'],
+                      limit: 200,
+                  })
+                : this.collectionPlanning.drivers.map((driver) => ({ ...driver, id: driver.uuid })),
         ]);
 
         return { orders, drivers };
@@ -49,7 +56,8 @@ export default class OperationsSchedulerIndexRoute extends Route {
         // Set drivers on the controller so the resource timeline can render them.
         // Orders are read reactively from the Ember Data store via computed getters,
         // so we do not need to set them explicitly here.
-        controller.set('drivers', model.drivers.toArray());
+        controller.set('drivers', model.drivers.toArray ? model.drivers.toArray() : model.drivers);
+        controller.collectionView = this.collectionPlanning.canRead ? 'pickups' : null;
 
         // Initialise viewDate to the current UTC instant.
         // @event-calendar/core applies timezoneOffsetMins internally so the
@@ -57,7 +65,7 @@ export default class OperationsSchedulerIndexRoute extends Route {
         controller.set('viewDate', new Date());
 
         // Open SocketCluster subscriptions for real-time calendar updates.
-        controller.subscribeToRealTimeUpdates();
+        if (!this.abilities.cannot('fleet-ops list order')) controller.subscribeToRealTimeUpdates();
     }
 
     resetController(controller) {

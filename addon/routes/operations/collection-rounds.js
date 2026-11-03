@@ -12,5 +12,6 @@ export default class OperationsCollectionRoundsRoute extends Route {
             this.notifications.warning(this.intl.t('common.unauthorized-access'));
             return this.hostRouter.transitionTo('console.fleet-ops');
         }
+        return this.hostRouter.transitionTo('console.fleet-ops.operations.orchestrator');
     }
 }

@@ -1,108 +1,120 @@
-<div class="p-6 space-y-4 overflow-y-auto h-full">
-    <h1 class="text-xl font-semibold">{{t "collection-rounds.title"}}</h1>
-    <p>{{t "collection-rounds.help"}}</p>
-    <Button @text={{t "collection-rounds.refresh"}} @onClick={{perform this.load}} @disabled={{or this.load.isRunning this.update.isRunning this.plan.isRunning}} />
-    {{#if this.permissions.plan}}
-        <Button @text={{t "collection-rounds.plan"}} @onClick={{perform this.plan}} @disabled={{or this.load.isRunning this.update.isRunning this.plan.isRunning}} data-test-plan-rounds />
-    {{/if}}
-    {{#each this.warnings as |warning|}}
-        <p role="alert">{{warning.order_uuid}}: {{warning.message}}</p>
-    {{/each}}
-    {{#if this.loaded}}
-        <section aria-label="Pickup follow-up" class="space-y-2">
-            <h2>{{t "collection-rounds.follow-up"}} ({{this.followupTotal}})</h2>
-            <p>{{t "collection-rounds.follow-up-help"}}</p>
-            {{#each this.followupCards as |order|}}
-                <p>{{order.order_id}} - {{order.state}} - {{order.parcel_count}} {{t "collection-rounds.parcels"}}</p>
-                {{#if order.pickup_window}}<p>{{t "collection-rounds.pickup-window"}}: {{order.pickupDate}} {{order.pickup_window.label}} ({{order.timezone}})</p>{{/if}}
-                {{#if order.error}}<p role="alert">{{order.error}}</p>{{/if}}
-                {{#each order.stops as |stop|}}
-                    <p>{{stop.contact.name}}
-                        -
-                        {{stop.contact.street1}}
-                        -
-                        {{stop.contact.phone}}
-                        {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{else}}{{t "collection-rounds.phone-missing"}}{{/if}}
-                    </p>
-                {{/each}}
-            {{/each}}
-            <p>{{this.followupPage}} / {{this.followupLastPage}}</p>
-            <button type="button" disabled={{or this.firstFollowupPage this.load.isRunning}} {{on "click" (fn this.pageFollowup -1)}}>{{t "collection-rounds.previous"}}</button>
-            <button type="button" disabled={{or this.lastFollowupPage this.load.isRunning}} {{on "click" (fn this.pageFollowup 1)}}>{{t "collection-rounds.next"}}</button>
-        </section>
-        {{#each this.cards as |round|}}
-            <section class="border rounded p-4 space-y-3" data-test-pickup-round>
-                <h2 class="font-semibold">{{round.departure}} ({{round.timezone}}) - {{round.status}}</h2>
-                <p>{{t "collection-rounds.reference"}}: {{round.uuid}}</p>
-                <p>{{round.order_count}}
-                    {{t "collection-rounds.orders"}}
-                    -
-                    {{round.parcel_count}}
-                    {{t "collection-rounds.parcels"}}
-                    -
-                    {{round.pickup_count}}
-                    {{t "collection-rounds.stops"}}</p>
-                {{#if round.pickup_window}}<p>{{t "collection-rounds.pickup-window"}}: {{round.pickup_window.label}} ({{round.timezone}})</p>{{/if}}
-                {{#if round.parcel_capacity}}<p>{{t "collection-rounds.capacity"}}: {{round.parcel_capacity}}</p>{{/if}}
-                {{#each round.suggested_drivers as |driver|}}<p>{{t "collection-rounds.suggested-driver"}}: {{driver.name}} ({{driver.parcel_capacity}})</p>{{/each}}
-                {{#if round.assignable}}
-                    <label class="block">
-                        {{t "collection-rounds.driver"}}
-                        <select class="form-select w-full" value={{round.selectedDriver}} {{on "change" (fn this.select round.uuid "driver")}} data-test-round-driver>
-                            <option value="">{{t "collection-rounds.choose-driver"}}</option>
-                            {{#each this.drivers as |driver|}}
-                                <option value={{driver.uuid}} selected={{eq driver.uuid round.selectedDriver}}>{{driver.name}}</option>
+<div class="p-4 space-y-4 overflow-y-auto h-full" data-test-collection-planning {{did-update this.resetPanel @view @roundId}}>
+    {{#unless @roundId}}
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">{{t (if this.depotView "planning.depot" "planning.pickups")}}</h2>
+            <Button @text={{t "collection-rounds.refresh"}} @onClick={{perform this.load}} @disabled={{or this.load.isRunning this.collectionPlanning.busy}} />
+        </div>
+        <p class="text-sm text-gray-500">{{t (if this.depotView "planning.depot-help" "planning.pickups-help")}}</p>
+    {{/unless}}
+    {{#if this.collectionPlanning.error}}<p role="alert" class="text-red-500">{{this.collectionPlanning.error}}</p>{{/if}}
+    {{#each this.collectionPlanning.warnings as |warning|}}<p role="alert">{{warning.order_uuid}}: {{warning.message}}</p>{{/each}}
+    {{#if this.collectionPlanning.loaded}}
+        {{#unless @roundId}}
+            {{#unless this.depotView}}
+                <ContentPanel @title={{t "collection-rounds.follow-up"}} @open={{true}}>
+                    {{#each this.followupCards as |order|}}
+                        <div class="border-b border-gray-200 dark:border-gray-700 py-3" data-test-planning-order>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" checked={{order.selected}} disabled={{or (not order.ready) (not this.permissions.plan) this.collectionPlanning.busy}} {{on "change" (fn this.toggle order)}} />
+                                <span>{{order.order_id}} - {{t (if order.ready "planning.ready" "planning.waiting")}} - {{order.parcel_count}} {{t "collection-rounds.parcels"}}</span>
+                            </label>
+                            {{#each order.stops as |stop|}}
+                                <p class="text-sm">{{stop.contact.name}} - {{stop.contact.street1}} - {{stop.contact.phone}}
+                                    {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{/if}}
+                                </p>
                             {{/each}}
-                        </select>
-                    </label>
-                    <label class="block">
-                        {{t "collection-rounds.depot"}}
-                        <select class="form-select w-full" value={{round.selectedDepot}} {{on "change" (fn this.select round.uuid "depot")}} data-test-round-depot>
-                            <option value="">{{t "collection-rounds.choose-depot"}}</option>
-                            {{#each this.depots as |depot|}}
-                                <option value={{depot.uuid}} selected={{eq depot.uuid round.selectedDepot}}>{{depot.name}} - {{depot.street1}}</option>
-                            {{/each}}
-                        </select>
-                    </label>
-                    <Button
-                        @text={{t "collection-rounds.assign"}}
-                        @onClick={{perform this.update round "assign"}}
-                        @disabled={{or this.update.isRunning this.load.isRunning this.plan.isRunning}}
-                        data-test-round-assign
-                    />
-                {{/if}}
-                {{#if (and round.draft this.permissions.release)}}
-                    <Button
-                        @text={{t "collection-rounds.release"}}
-                        @onClick={{fn this.confirm round "release"}}
-                        @disabled={{or this.update.isRunning this.load.isRunning this.plan.isRunning}}
-                        data-test-round-release
-                    />
-                {{/if}}
-                {{#if (and round.editable this.permissions.cancel)}}
-                    <Button
-                        @text={{t "collection-rounds.cancel"}}
-                        @onClick={{fn this.confirm round "cancel"}}
-                        @disabled={{or this.update.isRunning this.load.isRunning this.plan.isRunning}}
-                    />
-                {{/if}}
-                {{#each round.stops as |stop|}}
-                    <p>{{stop.order_id}} - {{stop.contact.name}} - {{stop.contact.street1}} - {{stop.contact.phone}} - {{stop.status}} {{stop.reason}}</p>
-                    {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{/if}}
-                    <p>{{stop.notes}}</p>
-                    <p>{{t "collection-rounds.order-parcels"}}:
-                        {{#each stop.order_parcels as |parcel|}}{{parcel.name}} x{{parcel.quantity}}; {{/each}}
-                    </p>
-                {{/each}}
-                {{#if round.depot}}
-                    <p>{{t "collection-rounds.return-depot"}}: {{round.depot.name}} - {{round.depot.street1}} - {{round.depot.phone}}</p>
-                {{/if}}
-                {{#if round.custody}}
-                    <CollectionDepot @round={{round}} @drivers={{this.drivers}} @permissions={{this.permissions}} @onChanged={{perform this.load}} />
-                {{/if}}
-            </section>
-        {{else}}
-            <p>{{t "collection-rounds.empty"}}</p>
-        {{/each}}
+                            {{#if order.error}}<p role="alert">{{order.error}}</p>{{/if}}
+                        </div>
+                    {{else}}<p>{{t "planning.no-waiting"}}</p>{{/each}}
+                    <div class="flex items-center gap-2 my-3">
+                        <Button @text={{t "collection-rounds.previous"}} @disabled={{or (eq this.collectionPlanning.followupPage 1) this.load.isRunning}} @onClick={{fn this.pageFollowup -1}} />
+                        <span>{{this.collectionPlanning.followupPage}} / {{this.collectionPlanning.followupLastPage}}</span>
+                        <Button @text={{t "collection-rounds.next"}} @disabled={{or (eq this.collectionPlanning.followupPage this.collectionPlanning.followupLastPage) this.load.isRunning}} @onClick={{fn this.pageFollowup 1}} />
+                    </div>
+                    {{#if this.permissions.plan}}
+                        <div class="flex flex-wrap gap-3 items-end">
+                            <InputGroup @name={{t "planning.pickup-date"}}>
+                                <select class="form-select" aria-label={{t "planning.pickup-date"}} {{on "change" this.setDate}}>
+                                    <option value="">{{t "planning.choose-date"}}</option>
+                                    {{#each this.collectionPlanning.pickupDates as |date|}}<option value={{date}} selected={{eq date this.pickupDate}}>{{date}}</option>{{/each}}
+                                </select>
+                            </InputGroup>
+                            <Button @text={{t "planning.create-draft"}} @type="primary" @onClick={{this.reviewPlan}} @disabled={{or (not this.selectedOrders.size) (not this.pickupDate) this.collectionPlanning.busy}} />
+                        </div>
+                    {{/if}}
+                </ContentPanel>
+            {{/unless}}
+            <div class="space-y-2">
+                {{#each this.cards as |round|}}
+                    <button type="button" class="block text-left w-full border rounded p-4 dark:border-gray-700" {{on "click" (fn this.open round)}} data-test-pickup-round>
+                        <strong>{{round.departure}} ({{round.timezone}})</strong>
+                        <Badge @status={{round.status}} />
+                        <p>{{round.order_count}} {{t "collection-rounds.orders"}} - {{round.parcel_count}} {{t "collection-rounds.parcels"}} - {{round.pickup_count}} {{t "collection-rounds.stops"}}</p>
+                        <p>{{round.driverName}} - {{round.depot.name}} - {{round.uuid}}</p>
+                    </button>
+                {{else}}<p>{{t "collection-rounds.empty"}}</p>{{/each}}
+            </div>
+        {{/unless}}
+        {{#if this.selected}}
+            <Layout::Resource::Panel @resource={{this.selected}} @pojoResource={{true}} @headerTitle={{t "planning.round-details"}} @onPressCancel={{this.close}} @width="800px">
+                <div class="p-4 space-y-4" data-test-planning-panel>
+                    <h2>{{this.selected.departure}} ({{this.selected.timezone}})</h2>
+                    <Badge @status={{this.selected.status}} />
+                    <div class="flex gap-2">
+                        <Button @text={{t "planning.pickups"}} @onClick={{fn this.tab "review"}} />
+                        <Button @text={{t "planning.depot"}} @onClick={{fn this.tab "depot"}} />
+                        <Button @text={{t "collection-rounds.refresh"}} @onClick={{perform this.load}} />
+                    </div>
+                    {{#if this.showDepotDetails}}
+                        {{#if this.selected.custody}}
+                            <CollectionDepot @round={{this.selected}} @drivers={{this.collectionPlanning.drivers}} @permissions={{this.permissions}} @onChanged={{perform this.load}} />
+                        {{else}}<p>{{t "planning.no-custody"}}</p>{{/if}}
+                    {{else}}
+                        {{#if this.selected.parcel_capacity}}<p>{{t "collection-rounds.capacity"}}: {{this.selected.parcel_capacity}}</p>{{/if}}
+                        {{#each this.selected.suggested_drivers as |driver|}}
+                            <p>{{t "collection-rounds.suggested-driver"}}: {{driver.name}} ({{driver.parcel_capacity}} {{t "collection-rounds.parcels"}})</p>
+                        {{/each}}
+                        {{#if this.selected.assignable}}
+                            <InputGroup @name={{t "collection-rounds.driver"}}>
+                                <select class="form-select w-full" aria-label={{t "collection-rounds.driver"}} {{on "change" (fn this.select this.selected.uuid "driver")}} data-test-round-driver>
+                                    <option value="">{{t "collection-rounds.choose-driver"}}</option>
+                                    {{#each this.collectionPlanning.drivers as |driver|}}<option value={{driver.uuid}} selected={{eq driver.uuid this.selected.selectedDriver}}>{{driver.name}} {{driver.parcel_capacity}}</option>{{/each}}
+                                </select>
+                            </InputGroup>
+                            <InputGroup @name={{t "collection-rounds.depot"}}>
+                                <select class="form-select w-full" aria-label={{t "collection-rounds.depot"}} {{on "change" (fn this.select this.selected.uuid "depot")}} data-test-round-depot>
+                                    <option value="">{{t "collection-rounds.choose-depot"}}</option>
+                                    {{#each this.collectionPlanning.depots as |depot|}}<option value={{depot.uuid}} selected={{eq depot.uuid this.selected.selectedDepot}}>{{depot.name}} - {{depot.street1}}</option>{{/each}}
+                                </select>
+                            </InputGroup>
+                            <Button @text={{t "collection-rounds.assign"}} @onClick={{perform this.update this.selected "assign"}} @disabled={{or this.collectionPlanning.busy (not this.selected.selectedDriver) (not this.selected.selectedDepot)}} data-test-round-assign />
+                        {{/if}}
+                        {{#if (and this.selected.draft this.permissions.plan)}}
+                            <InputGroup @name={{t "planning.pickup-date"}}>
+                                <select class="form-select" {{on "change" (fn this.select this.selected.uuid "date")}}>
+                                    <option value="">{{t "planning.choose-date"}}</option>
+                                    {{#each this.collectionPlanning.pickupDates as |date|}}<option value={{date}} selected={{eq date this.selected.selectedDate}}>{{date}}</option>{{/each}}
+                                </select>
+                            </InputGroup>
+                            <Button @text={{t "planning.move-draft"}} @onClick={{fn this.confirm this.selected "reschedule"}} @disabled={{or this.collectionPlanning.busy (not this.selected.selectedDate)}} />
+                        {{/if}}
+                        {{#if (and this.selected.draft this.permissions.release)}}
+                            <Button @text={{t "collection-rounds.release"}} @onClick={{fn this.confirm this.selected "release"}} @disabled={{or this.collectionPlanning.busy (not this.selected.driver_uuid) (not this.selected.depot)}} data-test-round-release />
+                        {{/if}}
+                        {{#if (and this.selected.editable this.permissions.cancel)}}
+                            <Button @text={{t "collection-rounds.cancel"}} @onClick={{fn this.confirm this.selected "cancel"}} @disabled={{this.collectionPlanning.busy}} />
+                        {{/if}}
+                        {{#each this.selected.stops as |stop|}}
+                            <div class="border-t py-2">
+                                <p>{{stop.order_id}} - {{stop.contact.name}} - {{stop.contact.street1}} - {{stop.status}} {{stop.reason}}</p>
+                                {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{/if}}
+                                <p>{{stop.notes}}</p>
+                                {{#each stop.order_parcels as |parcel|}}<p>{{parcel.name}} x{{parcel.quantity}}</p>{{/each}}
+                            </div>
+                        {{/each}}
+                    {{/if}}
+                </div>
+            </Layout::Resource::Panel>
+        {{/if}}
     {{/if}}
 </div>

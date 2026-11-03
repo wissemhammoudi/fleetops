@@ -14,10 +14,10 @@ export default {
             description: 'Dispatch, fleet management, driver tracking, and logistics operations.',
             shortcuts: [
                 {
-                    title: intlService.t('collection-rounds.title'),
-                    description: intlService.t('collection-rounds.help'),
-                    icon: 'truck',
-                    route: 'console.fleet-ops.operations.collection-rounds',
+                    title: intlService.t('planning.workspace'),
+                    description: intlService.t('planning.pickups-help'),
+                    icon: 'circle-nodes',
+                    route: 'console.fleet-ops.operations.orchestrator',
                 },
                 {
                     title: 'Radar',

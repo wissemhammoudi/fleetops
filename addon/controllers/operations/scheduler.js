@@ -8,7 +8,7 @@ export default class OperationsSchedulerController extends Controller {
         return [
             {
                 route: 'operations.scheduler.index',
-                label: this.intl.t('scheduler.orders-tab'),
+                label: this.intl.t('planning.calendar'),
                 icon: 'box',
             },
             {

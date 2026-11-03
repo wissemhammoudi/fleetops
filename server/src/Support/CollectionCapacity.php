@@ -38,6 +38,10 @@ class CollectionCapacity
 
     public static function assertAssignment(CollectionRound $round, Driver $driver, array $schedule): void
     {
+        $conflict = CollectionRound::where('company_uuid', $round->company_uuid)->where('driver_uuid', $driver->uuid)
+            ->where('uuid', '!=', $round->uuid)->where('scheduled_at', $round->scheduled_at)
+            ->whereIn('status', ['draft', 'released', 'in_progress', 'awaiting_depot'])->exists();
+        abort_if($conflict, 409, 'This driver already has a round in this pickup slot. Assign another driver.');
         if (!$schedule['capacity_planning']) {
             return;
         }
@@ -45,10 +49,6 @@ class CollectionCapacity
         abort_unless($capacity, 422, 'Set the vehicle parcel capacity or a staff fallback capacity before assigning this driver.');
         abort_unless(self::parcels($round->stops) <= $capacity && count($round->stops) <= $schedule['max_pickup_stops'],
             422, 'This round exceeds the driver parcel capacity or pickup-stop limit. Re-plan before assigning.');
-        $conflict = CollectionRound::where('company_uuid', $round->company_uuid)->where('driver_uuid', $driver->uuid)
-            ->where('uuid', '!=', $round->uuid)->where('scheduled_at', $round->scheduled_at)
-            ->whereIn('status', ['draft', 'released', 'in_progress', 'awaiting_depot'])->exists();
-        abort_if($conflict, 409, 'This driver already has a round in this pickup slot. Assign another driver.');
     }
 
     public static function nearby(array $stops): array

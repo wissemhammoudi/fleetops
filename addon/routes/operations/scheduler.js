@@ -8,7 +8,7 @@ export default class OperationsSchedulerRoute extends Route {
     @service intl;
 
     beforeModel() {
-        if (this.abilities.cannot('fleet-ops list order')) {
+        if (this.abilities.cannot('fleet-ops list order') && this.abilities.cannot('fleet-ops view pickup-round')) {
             this.notifications.warning(this.intl.t('common.unauthorized-access'));
             return this.hostRouter.transitionTo('console.fleet-ops');
         }

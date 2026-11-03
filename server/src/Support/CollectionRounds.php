@@ -13,20 +13,29 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class CollectionRounds
 {
-    public static function plan(string $company): array
+    public static function plan(string $company, array $input = []): array
     {
-        return self::transaction($company, function () use ($company) {
+        return self::transaction($company, function () use ($company, $input) {
             $rounds = [];
             $warnings = [];
             $calendar = CollectionSchedule::forCompany($company);
             $capacities = $calendar['capacity_planning'] ? CollectionCapacity::candidates($company, $calendar) : [];
-            $orders = Order::where('company_uuid', $company)->where('meta->collection_workflow->state', 'ready_for_pickup')
+            $query = Order::where('company_uuid', $company)->where('meta->collection_workflow->state', 'ready_for_pickup');
+            if (isset($input['order_uuids'])) $query->whereIn('uuid', $input['order_uuids']);
+            $orders = $query
                 ->orderBy('uuid')->lockForUpdate()->get();
+            if (isset($input['order_uuids'])) {
+                abort_unless($orders->count() === count(array_unique($input['order_uuids'])), 409, 'Some selected orders are no longer ready. Refresh before planning.');
+            }
             foreach ($orders as $order) {
                 try {
                     CollectionReadiness::assertReadyForPlanning($order);
                     $dispatcher = data_get($order->meta, 'collection_workflow.scheduling_mode') === 'dispatcher';
                     $planned = $dispatcher ? CollectionSchedule::pickupAt(now(), $calendar) : Carbon::parse(data_get($order->meta, 'collection_workflow.planned_collection_at'));
+                    if (!empty($input['pickup_date'])) {
+                        abort_unless($dispatcher, 409, 'A historical customer pickup window cannot be moved. Reconfirm readiness before choosing a new date.');
+                        $planned = self::departure($input['pickup_date'], $calendar);
+                    }
                     $cutoff = $planned->copy()->setTimezone($calendar['timezone'])->setTimeFromTimeString($calendar['cutoff_time']);
                     if (!$dispatcher && now()->lessThan($cutoff)) {
                         continue;
@@ -107,6 +116,33 @@ class CollectionRounds
                 abort_unless($depot && trim((string) $depot->street1) !== '', 422, 'Select a depot with a complete street address from this company.');
                 $round->driver_uuid = $driver->uuid;
                 $round->depot = \Illuminate\Support\Arr::only((array) $depot, ['uuid', 'name', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'phone', 'location_wkt']);
+            } elseif ($action === 'reschedule') {
+                abort_unless($round->status === 'draft' && count($round->stops), 409, 'Only nonempty draft pickups can be moved. Recall released work before changing its date.');
+                $calendar = CollectionSchedule::forCompany($company);
+                $orders = self::orders($round);
+                foreach ($orders as $order) {
+                    self::assertContract($order, $round);
+                    abort_unless(data_get($order->meta, 'collection_workflow.scheduling_mode') === 'dispatcher', 409,
+                        'Historical customer pickup windows cannot be moved. Reconfirm readiness first.');
+                }
+                $planned = self::departure($input['pickup_date'], $calendar);
+                abort_if(!$calendar['capacity_planning'] && CollectionRound::where('company_uuid', $company)
+                    ->where('uuid', '!=', $round->uuid)->where('scheduled_at', $planned)->exists(), 409,
+                    'A round already occupies this date. Choose another operating date.');
+                $round->scheduled_at = $planned;
+                $round->timezone = $calendar['timezone'];
+                if (!empty($input['driver_uuid'])) {
+                    $round->driver_uuid = $input['driver_uuid'];
+                }
+                if ($round->driver_uuid) {
+                    $driver = Driver::where('company_uuid', $company)->where('uuid', $round->driver_uuid)->first();
+                    abort_unless($driver, 422, 'Select an active driver from this company.');
+                    CollectionCapacity::assertAssignment($round, $driver, $calendar);
+                }
+                foreach ($orders as $order) {
+                    $order->recordCollectionPlanDate('pickup', $planned->toISOString(), $calendar['timezone']);
+                    $order->save();
+                }
             } elseif ($action === 'release') {
                 abort_unless($round->status === 'draft' && $round->driver_uuid && $round->depot && count($round->stops), 409, 'Assign a driver and depot to a nonempty draft before release.');
                 self::assertCalendar($company, $round->scheduled_at, data_get(self::orders($round)->first()?->meta, 'collection_workflow.pickup_window.end'));
@@ -116,6 +152,7 @@ class CollectionRounds
                 foreach ($orders as $order) {
                     self::assertContract($order, $round);
                 }
+
                 CollectionDepot::prepare($round, $orders);
                 $round->status = 'released';
             } elseif ($action === 'cancel') {
@@ -132,10 +169,17 @@ class CollectionRounds
                 $round->depot = null;
                 $round->custody = null;
             }
-            self::audit($round, $action, ['driver_uuid' => $round->driver_uuid, 'depot' => $round->depot]);
+            self::audit($round, $action, ['driver_uuid' => $round->driver_uuid, 'depot' => $round->depot, 'scheduled_at' => $round->scheduled_at->toISOString()]);
 
             return $round;
         });
+    }
+
+    private static function departure(string $date, array $calendar): \Carbon\CarbonInterface
+    {
+        CollectionSchedule::pickupSlots(now(), $calendar, $date);
+
+        return Carbon::parse($date . ' ' . $calendar['departure_time'], $calendar['timezone'])->utc();
     }
 
     public static function drive(string $company, string $driver, string $id, array $input): CollectionRound

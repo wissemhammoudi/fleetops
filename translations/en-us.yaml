@@ -1,6 +1,36 @@
 fleet-ops:
     extension-name: Fleet-Ops
 
+planning:
+    workspace: Planning workspace
+    pickups: Pickups
+    depot: Depot & delivery
+    other-orders: Other orders
+    calendar: Planning calendar
+    unassigned: Unassigned pickups & deliveries
+    pickup-event: "Pickup - {orders} orders - {parcels} parcels"
+    delivery-event: "Delivery date - {order}"
+    keep-driver: Change delivery drivers in the handover details. Assigned pickups cannot be dragged to the unassigned row.
+    new-date: "New date: {date}."
+    new-driver: "New driver: {driver}."
+    pickups-help: Select ready orders, choose an operating date and review draft rounds before assigning and releasing them. Waiting orders cannot be planned.
+    depot-help: Receive and reconcile physical parcels, resolve holds, prepare delivery handovers and release eligible deliveries here.
+    ready: Ready to plan
+    waiting: Waiting for customer readiness
+    no-waiting: No orders awaiting pickup planning.
+    pickup-date: Pickup date
+    choose-date: Choose an operating date
+    create-draft: Review and save draft pickups
+    review-plan: "Create draft pickups for {count} selected orders on {date}? This does not release or dispatch them. Capacity and address checks may leave some orders for review."
+    round-details: Pickup and delivery details
+    no-custody: Parcel custody becomes available after this pickup is released.
+    move-draft: Move draft plan
+    move-help: Confirm this draft pickup date or driver change. The company departure time, calendar and capacity rules still apply. Released or started rounds cannot be moved.
+    delivery-date-help: Only unstaged draft handovers can move. The new date must be an operating day on or after depot eligibility. Staged or accepted goods require recall before replanning.
+    locked: This work is released, staged or not editable with your permissions. Open its details to review the next permitted action.
+    switch-title: Switch planning workspace?
+    switch-help: Uncommitted order route previews and selections will be discarded. Saved pickup rounds and delivery handovers are not affected.
+
 collection-depot:
     title: Depot parcel receipt
     help: Attach one unique label to each physical parcel at pickup. Scan each label once the parcel is physically at the assigned depot. Damage or missing parcels hold the entire affected order; no partial delivery dispatch.

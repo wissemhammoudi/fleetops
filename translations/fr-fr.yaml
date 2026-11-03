@@ -1,3 +1,33 @@
+planning:
+    workspace: Espace de planification
+    pickups: Collectes
+    depot: Dépôt et livraison
+    other-orders: Autres commandes
+    calendar: Calendrier de planification
+    unassigned: Collectes et livraisons non affectées
+    pickup-event: "Collecte - {orders} commandes - {parcels} colis"
+    delivery-event: "Date de livraison - {order}"
+    keep-driver: Changez le chauffeur de livraison dans la remise. Une collecte affectée ne peut pas être déplacée vers la ligne sans chauffeur.
+    new-date: "Nouvelle date : {date}."
+    new-driver: "Nouveau chauffeur : {driver}."
+    pickups-help: Sélectionnez les commandes prêtes, choisissez un jour ouvré puis vérifiez les brouillons avant affectation et départ.
+    depot-help: Réceptionnez les colis, rapprochez les quantités, traitez les blocages et préparez les livraisons ici.
+    ready: Prête à planifier
+    waiting: En attente de préparation client
+    no-waiting: Aucune commande en attente de planification.
+    pickup-date: Date de collecte
+    choose-date: Choisir un jour ouvré
+    create-draft: Vérifier et enregistrer les collectes
+    review-plan: "Créer des collectes en brouillon pour {count} commandes le {date} ? Aucun départ automatique. Les commandes bloquées seront signalées."
+    round-details: Détails de collecte et livraison
+    no-custody: Le suivi physique des colis sera disponible après libération de la collecte.
+    move-draft: Déplacer le brouillon
+    move-help: Confirmez le changement de date ou de chauffeur. Les horaires, capacités et jours ouvrés restent obligatoires. Une tournée libérée ou commencée ne peut pas être déplacée.
+    delivery-date-help: Seuls les brouillons non chargés peuvent changer de date, après la date admissible du dépôt et sur un jour ouvré. Rappelez les remises déjà chargées ou acceptées avant replanification.
+    locked: Cette opération est libérée, chargée ou non modifiable avec vos droits. Consultez ses détails.
+    switch-title: Changer d’espace de planification ?
+    switch-help: Les aperçus et sélections non enregistrés seront perdus. Les collectes et remises enregistrées restent inchangées.
+
 fleet-ops:
   extension-name: Fleet-Ops
 common:
