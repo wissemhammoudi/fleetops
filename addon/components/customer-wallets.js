@@ -22,6 +22,9 @@ export default class CustomerWalletsComponent extends Component {
     @tracked edits = {};
     @tracked bankDetails = {};
     @tracked error = '';
+    @tracked paymentAmount = '';
+    @tracked paymentReference = '';
+    @tracked paymentRequestId;
 
     constructor() {
         super(...arguments);
@@ -47,7 +50,7 @@ export default class CustomerWalletsComponent extends Component {
 
     get selectedBalances() {
         if (!this.selected) return [];
-        return ['available', 'pending', 'reserved', 'paid_out'].map((key) => ({
+        return ['gross', 'fee', 'vat', 'net', 'driver_pending', 'remitted', 'remaining_due', 'available', 'pending', 'reserved', 'paid_out'].map((key) => ({
             label: key.replace('_', ' '),
             amount: this.money(this.selected.wallet[key], this.selected.wallet.currency),
         }));
@@ -96,7 +99,7 @@ export default class CustomerWalletsComponent extends Component {
         return this.payoutPage >= (this.payoutData?.last_page ?? 1);
     }
     get busy() {
-        return this.load.isRunning || this.decide.isRunning || this.remit.isRunning;
+        return this.load.isRunning || this.decide.isRunning || this.remit.isRunning || this.recordPayment.isRunning;
     }
 
     @action edit(id, key, event) {
@@ -123,6 +126,9 @@ export default class CustomerWalletsComponent extends Component {
 
     @action closeCustomer() {
         this.selected = null;
+        this.paymentAmount = '';
+        this.paymentReference = '';
+        this.paymentRequestId = null;
     }
 
     @task *watch() {
@@ -152,6 +158,11 @@ export default class CustomerWalletsComponent extends Component {
 
     @dropTask *openCustomer(id) {
         try {
+            if (this.selected?.customer.uuid !== id) {
+                this.paymentAmount = '';
+                this.paymentReference = '';
+                this.paymentRequestId = null;
+            }
             this.selected = yield this.fetch.get(`wallets/${encodeURIComponent(id)}`, {}, API);
         } catch (error) {
             this.notifications.serverError(error);
@@ -165,6 +176,51 @@ export default class CustomerWalletsComponent extends Component {
         } catch (error) {
             this.notifications.serverError(error);
         }
+    }
+
+    @action confirmPayment() {
+        const input = this.paymentAmount.trim().replace(',', '.');
+        const reference = this.paymentReference.trim();
+        if (!/^\d+(\.\d{1,3})?$/.test(input) || !reference) {
+            this.notifications.warning('Enter an exact amount (up to three decimal places) and the completed bank transfer reference.');
+            return;
+        }
+        const [whole, fraction = ''] = input.split('.');
+        const amount = Number(whole) * 1000 + Number(fraction.padEnd(3, '0'));
+        const retry = this.selected.payouts?.find((payout) => payout.uuid === this.paymentRequestId);
+        const retryAmount = retry && ['approved', 'paid'].includes(retry.status) ? Number(retry.amount) : 0;
+        if (!Number.isSafeInteger(amount) || amount <= 0 || amount > this.selected.wallet.available + retryAmount) {
+            this.notifications.warning('Payment must be positive and covered by unreserved received customer funds.');
+            return;
+        }
+        const customer = this.selected.customer;
+        this.modalsManager.confirm({
+            title: 'Record completed bank transfer',
+            body: `${customer.name}: ${this.money(amount)}. Reference: ${reference}. Continue ONLY after the bank transfer actually occurred. This records it with the existing approval and payment controls; it never sends money.`,
+            confirm: () => this.recordPayment.perform(customer.uuid, amount, reference),
+        });
+    }
+
+    @dropTask *recordPayment(customer, amount, reference) {
+        this.paymentRequestId ??= crypto.randomUUID();
+        try {
+            const response = yield this.fetch.post(`wallets/${encodeURIComponent(customer)}/payments`, { request_id: this.paymentRequestId, amount, method: 'bank_transfer' }, API);
+            if (response.payout.status !== 'paid') {
+                yield this.fetch.post(`payouts/${encodeURIComponent(response.payout.uuid)}/paid`, { reference }, API);
+            } else if (response.payout.reference !== reference) {
+                this.notifications.warning(`This transfer is already recorded with reference ${response.payout.reference}. The reference was not changed.`);
+            }
+            this.paymentAmount = '';
+            this.paymentReference = '';
+            this.paymentRequestId = null;
+            this.status = 'paid';
+            this.payoutPage = 1;
+            this.notifications.success('Completed bank transfer recorded.');
+        } catch (error) {
+            this.notifications.serverError(error);
+            this.notifications.warning('Refresh and review the approved/paid queue before retrying. An approved reservation may remain; do not repeat the bank transfer.');
+        }
+        yield this.load.perform();
     }
 
     @action confirmDecision(payout, decision) {

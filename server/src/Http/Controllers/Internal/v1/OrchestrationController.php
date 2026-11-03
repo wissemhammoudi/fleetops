@@ -16,6 +16,10 @@ use Fleetbase\FleetOps\Models\Vendor;
 use Fleetbase\FleetOps\Orchestration\Engines\DriverAssignmentEngine;
 use Fleetbase\FleetOps\Orchestration\Engines\RouteSequencingEngine;
 use Fleetbase\FleetOps\Orchestration\OrchestrationEngineRegistry;
+use Fleetbase\FleetOps\Support\Authorization;
+use Fleetbase\FleetOps\Support\CollectionWorkflow;
+use Fleetbase\FleetOps\Support\OrchestrationPlan;
+use Fleetbase\FleetOps\Support\OrchestrationResourceGuard;
 use Fleetbase\FleetOps\Traits\AuthorizesMethods;
 use Fleetbase\Http\Controllers\Controller;
 use Fleetbase\Models\Setting;
@@ -47,8 +51,8 @@ class OrchestrationController extends Controller
         $this->authorizeMethods([
             'orders'                => 'list order',
             'run'                   => 'optimize order',
-            'preview'               => 'list order',
-            'commit'                => 'assign-driver-for order',
+            'preview'               => 'optimize order',
+            'commit'                => ['assign-driver-for order', 'assign-vehicle-for order', 'update-route-for order'],
             'engines'               => 'list order',
             'orderConfigFields'     => 'list order',
             'importOrders'          => 'import order',
@@ -130,7 +134,27 @@ class OrchestrationController extends Controller
      */
     public function run(Request $request): JsonResponse
     {
+        $this->authorizeOrchestrationAction('optimize order');
+        $request->validate([
+            'mode' => 'sometimes|in:assign_vehicles,assign_drivers,optimize,optimize_routes,allocate',
+            'order_ids' => 'sometimes|array|max:500', 'order_ids.*' => 'required|string|distinct|max:191',
+            'vehicle_ids' => 'sometimes|array|max:500', 'vehicle_ids.*' => 'required|string|distinct|max:191',
+            'driver_ids' => 'sometimes|array|max:500', 'driver_ids.*' => 'required|string|distinct|max:191',
+            'prior_assignments' => 'sometimes|array|max:500',
+            'prior_assignments.*.order_id' => 'required|string|distinct|max:191',
+            'prior_assignments.*.vehicle_id' => 'nullable|string|max:191',
+            'prior_assignments.*.driver_id' => 'nullable|string|max:191',
+            'plan_version' => 'nullable|uuid', 'options' => 'sometimes|array',
+        ]);
         $companyUuid       = $this->companyUuid();
+        $previousSnapshot = null;
+        if ($request->filled('prior_assignments')) {
+            abort_unless($request->filled('plan_version'), 422, 'Prior assignments require their plan version.');
+            $previousSnapshot = OrchestrationPlan::assertFresh(OrchestrationPlan::load($companyUuid, $request->input('plan_version')), $companyUuid);
+            foreach ($request->input('prior_assignments') as $assignment) {
+                $this->assertSnapshotAssignment($assignment, $previousSnapshot);
+            }
+        }
         $mode              = $request->input('mode', 'assign_vehicles');
         $orderIds          = $request->input('order_ids', []);
         $vehicleIds        = $request->input('vehicle_ids', []);
@@ -140,9 +164,19 @@ class OrchestrationController extends Controller
         // been committed to the database. Keyed by order_id (public_id).
         $priorAssignments  = collect($request->input('prior_assignments', []))
             ->keyBy('order_id');
+        $candidateOrderIds = !empty($orderIds) ? $orderIds : DB::table('orders')->where('company_uuid', $companyUuid)
+            ->where('status', 'created')->whereNull('deleted_at')->orderBy('uuid')->limit(OrchestrationPlan::LIMIT + 1)->pluck('public_id')->all();
+        $snapshot = OrchestrationPlan::capture($companyUuid, [
+            'orders' => $candidateOrderIds,
+            ...(!empty($vehicleIds) ? ['vehicles' => $vehicleIds] : []),
+            ...(!empty($driverIds) ? ['drivers' => $driverIds] : []),
+        ]);
+        if ($previousSnapshot) {
+            abort_unless($snapshot === $previousSnapshot, 409, 'Plan resources changed between phases. Run a new plan.');
+        }
 
         // ── Resolve orders ────────────────────────────────────────────────────
-        $ordersQuery = $this->orchestrationRunOrdersQuery($companyUuid);
+        $ordersQuery = $this->orchestrationRunOrdersQuery($companyUuid)->whereIn('public_id', $candidateOrderIds);
 
         if ($mode === 'assign_vehicles' || $mode === 'allocate') {
             // Exclude orders that already have a vehicle assigned in the DB
@@ -184,7 +218,12 @@ class OrchestrationController extends Controller
         if (!empty($orderIds)) {
             $ordersQuery->whereIn('public_id', $orderIds);
         }
-        $orders = $ordersQuery->get();
+        $orders = $ordersQuery->limit(OrchestrationPlan::LIMIT + 1)->get();
+        abort_if($orders->count() > OrchestrationPlan::LIMIT, 422, 'Select at most 500 orders.');
+        foreach ($orders as $order) {
+            abort_if(CollectionWorkflow::applies($order), 422, 'Use the dedicated collection/depot flow for collection-enrolled orders.');
+            abort_unless($order->status === 'created' && !$order->started && !$order->dispatched && !$order->started_at && !$order->dispatched_at, 409, 'Only unstarted, undispatched orders can be planned.');
+        }
 
         // Augment orders with prior-phase vehicle AND driver assignments so the
         // engines can group by vehicle_id and preserve driver_id even before the
@@ -245,7 +284,7 @@ class OrchestrationController extends Controller
         }
 
         // ── Resolve vehicles ──────────────────────────────────────────────────
-        $vehiclesQuery = $this->orchestrationRunVehiclesQuery($companyUuid);
+        $vehiclesQuery = $this->orchestrationRunVehiclesQuery($companyUuid)->whereIn('public_id', array_keys($snapshot['vehicles']));
 
         if (!empty($vehicleIds)) {
             $vehiclesQuery->whereIn('public_id', $vehicleIds);
@@ -256,11 +295,12 @@ class OrchestrationController extends Controller
         // assign_vehicles, assign_drivers and optimize_routes do not require an
         // online/assigned driver — use all matching vehicles as-is.
         if (in_array($mode, ['assign_vehicles', 'assign_drivers', 'optimize_routes'])) {
-            $vehicles = $vehiclesQuery->get();
+            $vehicles = $vehiclesQuery->limit(OrchestrationPlan::LIMIT + 1)->get();
         } else {
             // Legacy allocate / optimize modes require a driver to be linked.
-            $vehicles = $vehiclesQuery->get()->filter(fn ($v) => $v->driver !== null);
+            $vehicles = $vehiclesQuery->limit(OrchestrationPlan::LIMIT + 1)->get()->filter(fn ($v) => $v->driver !== null);
         }
+        abort_if($vehicles->count() > OrchestrationPlan::LIMIT, 422, 'Select at most 500 vehicles.');
 
         if ($orders->isEmpty()) {
             return response()->json([
@@ -325,6 +365,12 @@ class OrchestrationController extends Controller
             ], 503);
         }
 
+        foreach ($result['assignments'] ?? [] as $assignment) {
+            $this->assertSnapshotAssignment($assignment, $snapshot);
+        }
+        $result['plan_version'] = OrchestrationPlan::propose($companyUuid, $snapshot);
+        $result['requires_review'] = true;
+
         return response()->json($result);
     }
 
@@ -340,6 +386,9 @@ class OrchestrationController extends Controller
 
     protected function companyUuid(): ?string
     {
+        abort_unless(session('company'), 403, 'A company session is required.');
+        abort_if(session('is_customer') || session('is_driver'), 403, 'The orchestrator requires an operations staff session.');
+
         return session('company');
     }
 
@@ -351,34 +400,34 @@ class OrchestrationController extends Controller
     protected function orchestrationRunOrdersQuery(?string $companyUuid): mixed
     {
         return Order::where('company_uuid', $companyUuid)
-            ->whereIn('status', ['created', 'dispatched', 'started'])
+            ->whereIn('status', ['created', 'dispatched'])
             ->with(['payload.dropoff', 'payload.pickup', 'payload.waypoints', 'payload.waypointMarkers', 'payload.entities']);
     }
 
     protected function orchestrationRunVehiclesQuery(?string $companyUuid): mixed
     {
         return Vehicle::where('company_uuid', $companyUuid)
-            ->with(['driver' => fn ($q) => $q->with(['scheduleItems'])]);
+            ->with(['driver' => fn ($q) => $q->where('company_uuid', $companyUuid)->with(['scheduleItems'])]);
     }
 
     protected function driversByPublicId(array $publicIds)
     {
-        return Driver::whereIn('public_id', $publicIds)
+        return Driver::where('company_uuid', $this->companyUuid())->whereIn('public_id', $publicIds)
             ->get()
             ->keyBy('public_id');
     }
 
     protected function vehicleByPublicIdWithDriver(string $publicId): ?Vehicle
     {
-        return Vehicle::where('public_id', $publicId)
-            ->with(['driver' => fn ($q) => $q->with(['scheduleItems'])])
+        return Vehicle::where('company_uuid', $this->companyUuid())->where('public_id', $publicId)
+            ->with(['driver' => fn ($q) => $q->where('company_uuid', $this->companyUuid())->with(['scheduleItems'])])
             ->first();
     }
 
     protected function vehicleByUuidWithDriver(string $uuid): ?Vehicle
     {
-        return Vehicle::where('uuid', $uuid)
-            ->with(['driver'])
+        return Vehicle::where('company_uuid', $this->companyUuid())->where('uuid', $uuid)
+            ->with(['driver' => fn ($q) => $q->where('company_uuid', $this->companyUuid())])
             ->first();
     }
 
@@ -407,89 +456,133 @@ class OrchestrationController extends Controller
      */
     public function commit(Request $request): JsonResponse
     {
-        $assignments   = $request->input('assignments', []);
-        $scheduledDate = $request->input('scheduled_date', now()->toDateString());
-        $companyUuid   = session('company');
+        $validated = $request->validate([
+            'request_id' => 'required|uuid', 'plan_version' => 'required|uuid',
+            'reviewed' => 'required|accepted', 'scheduled_date' => 'sometimes|date_format:Y-m-d',
+            'assignments' => 'required|array|min:1|max:500',
+            'assignments.*.order_id' => 'required|string|distinct|max:191',
+            'assignments.*.vehicle_id' => 'required|string|max:191',
+            'assignments.*.driver_id' => 'nullable|string|max:191',
+            'assignments.*.sequence' => 'nullable|integer|min:1|max:500',
+            'assignments.*.arrival' => 'nullable|integer|min:0|max:4102444800',
+            'assignments.*.distance' => 'nullable|numeric|min:0|max:1000000000',
+            'assignments.*.duration' => 'nullable|numeric|min:0|max:1000000000',
+            'assignments.*.waypoint_sequence' => 'nullable|array|max:500',
+            'assignments.*.waypoint_sequence.*' => 'required|string|distinct|max:191',
+        ]);
+        $companyUuid = $this->companyUuid();
+        $assignments = array_map(fn ($a) => \Illuminate\Support\Arr::only($a, [
+            'order_id', 'vehicle_id', 'driver_id', 'sequence', 'arrival', 'distance', 'duration', 'waypoint_sequence',
+        ]), $validated['assignments']);
+        // Do not include an implicit date in the digest: a midnight retry is the same request.
+        $hash = hash('sha256', json_encode([$validated['plan_version'], $validated['scheduled_date'] ?? null, $assignments], JSON_THROW_ON_ERROR));
 
-        if (empty($assignments)) {
-            return response()->json(['error' => 'No assignments provided.'], 422);
-        }
-
-        $committed = [];
-        $failed    = [];
-        $manifests = [];
-
-        $this->beginOrchestrationTransaction();
-        try {
-            // Group assignments by vehicle_id
-            $byVehicle = [];
-            foreach ($assignments as $assignment) {
-                $vehicleId = $assignment['vehicle_id'] ?? null;
-                if (!$vehicleId) {
-                    $failed[] = $assignment['order_id'] ?? 'unknown';
-                    continue;
+        return DB::transaction(function () use ($validated, $companyUuid, $assignments, $hash) {
+            abort_unless(DB::table('companies')->where('uuid', $companyUuid)->lockForUpdate()->first(), 403, 'Company unavailable.');
+            $receipt = DB::table('orchestration_plans')->where('company_uuid', $companyUuid)
+                ->where('request_id', $validated['request_id'])->first();
+            if ($receipt) {
+                abort_unless(hash_equals($receipt->request_hash, $hash), 409, 'Request ID already used for a different commit.');
+                $stored = json_decode($receipt->response, true, 512, JSON_THROW_ON_ERROR);
+                foreach ($stored['permissions'] as $permission) {
+                    $this->authorizeOrchestrationAction($permission);
                 }
-                $byVehicle[$vehicleId][] = $assignment;
+
+                return response()->json($stored['result']);
             }
-
-            foreach ($byVehicle as $vehiclePublicId => $vehicleAssignments) {
-                $vehicle = $this->findVehicleByPublicId($vehiclePublicId);
-                if (!$vehicle) {
-                    foreach ($vehicleAssignments as $a) {
-                        $failed[] = $a['order_id'];
-                    }
-                    continue;
+            $plan = OrchestrationPlan::load($companyUuid, $validated['plan_version'], true);
+            $snapshot = OrchestrationPlan::assertFresh($plan, $companyUuid, true);
+            $permissions = ['update-route-for order'];
+            $byVehicle = [];
+            $driverVehicles = [];
+            $orders = [];
+            foreach ($assignments as $assignment) {
+                $this->assertSnapshotAssignment($assignment, $snapshot);
+                $order = $this->findOrderByPublicId($assignment['order_id']);
+                $vehicle = $this->findVehicleByPublicId($assignment['vehicle_id']);
+                $driver = !empty($assignment['driver_id']) ? $this->findDriverByPublicId($assignment['driver_id']) : null;
+                abort_unless($order && $vehicle && (empty($assignment['driver_id']) || $driver), 422, 'Unavailable company resource.');
+                abort_unless($order->status === 'created' && !$order->started && !$order->dispatched && !$order->started_at && !$order->dispatched_at, 409, 'Only unstarted, undispatched orders can be planned.');
+                abort_if(CollectionWorkflow::applies($order), 422, 'Use the dedicated collection/depot flow for collection-enrolled orders; generic manifests cannot manage custody.');
+                abort_unless(in_array($vehicle->status, ['available', 'active'], true), 409, 'Vehicle is not available.');
+                if (!$driver && $order->driver_assigned_uuid) {
+                    $driver = Driver::where('company_uuid', $companyUuid)->where('uuid', $order->driver_assigned_uuid)->first();
+                    abort_unless($driver && isset($snapshot['drivers'][$driver->public_id]), 422, 'Existing driver is outside the reviewed plan.');
                 }
-
-                // Driver is optional (vehicle-only assignment)
-                $driverPublicId = $vehicleAssignments[0]['driver_id'] ?? null;
-                $driver         = $driverPublicId
-                    ? $this->findDriverByPublicId($driverPublicId)
-                    : null;
-
-                $totalDistance = (int) array_sum(array_column($vehicleAssignments, 'distance'));
-                $totalDuration = (int) array_sum(array_column($vehicleAssignments, 'duration'));
-
-                // Create Manifest
-                $manifest = $this->createManifest([
-                    'company_uuid'     => $companyUuid,
-                    'vehicle_uuid'     => $vehicle->uuid,
-                    'driver_uuid'      => $driver?->uuid,
-                    'status'           => 'draft',
-                    'scheduled_date'   => $scheduledDate,
-                    'total_distance_m' => $totalDistance,
-                    'total_duration_s' => $totalDuration,
-                    'stop_count'       => count($vehicleAssignments),
-                ]);
-
-                // Sort stops by sequence
+                abort_if($driver && !in_array($driver->status, ['available', 'active'], true), 409, 'Driver is not available.');
+                if ($order->vehicle_assigned_uuid !== $vehicle->uuid) {
+                    $permissions[] = 'assign-vehicle-for order';
+                }
+                if ($driver && $order->driver_assigned_uuid !== $driver->uuid) {
+                    $permissions[] = 'assign-driver-for order';
+                }
+                // Replacing an existing manifest would leave a second live stop behind.
+                abort_if($order->manifest_uuid || ManifestStop::where('order_uuid', $order->uuid)->exists(), 409, 'Order already belongs to a manifest. Review it in the dedicated manifest flow.');
+                if ($driver) {
+                    abort_if(isset($driverVehicles[$driver->uuid]) && $driverVehicles[$driver->uuid] !== $vehicle->uuid, 422, 'A driver cannot serve multiple vehicles in one plan.');
+                    $driverVehicles[$driver->uuid] = $vehicle->uuid;
+                }
+                $group = $byVehicle[$vehicle->public_id] ?? null;
+                abort_if($group && ($group['driver']?->uuid !== $driver?->uuid), 422, 'All orders on a vehicle must use the same driver.');
+                foreach ($assignment['waypoint_sequence'] ?? [] as $waypointId) {
+                    abort_unless(DB::table('waypoints')->where('company_uuid', $companyUuid)
+                        ->where('payload_uuid', $order->payload_uuid)->where('public_id', $waypointId)->whereNull('deleted_at')->exists(), 422, 'Waypoint is outside the order payload.');
+                }
+                $orders[$order->public_id] = $order;
+                $byVehicle[$vehicle->public_id] ??= ['vehicle' => $vehicle, 'driver' => $driver, 'assignments' => []];
+                $byVehicle[$vehicle->public_id]['assignments'][] = $assignment;
+            }
+            $permissions = array_values(array_unique($permissions));
+            foreach ($permissions as $permission) {
+                $this->authorizeOrchestrationAction($permission);
+            }
+            $committed = [];
+            $manifests = [];
+            foreach ($byVehicle as $group) {
+                $vehicle = $group['vehicle'];
+                $driver = $group['driver'];
+                $vehicleAssignments = $group['assignments'];
+                abort_if($vehicle->max_tasks && count($vehicleAssignments) > $vehicle->max_tasks, 422, 'Vehicle task capacity exceeded.');
+                OrchestrationResourceGuard::validate($vehicle, $driver, collect($vehicleAssignments)->map(fn ($a) => $orders[$a['order_id']]));
+                $busy = Order::where('company_uuid', $companyUuid)
+                    ->where(fn ($q) => $q->whereIn('status', ['dispatched', 'started'])->orWhere('started', true)->orWhere('dispatched', true))
+                    ->where(function ($q) use ($vehicle, $driver) {
+                        $q->where('vehicle_assigned_uuid', $vehicle->uuid);
+                        if ($driver) {
+                            $q->orWhere('driver_assigned_uuid', $driver->uuid);
+                        }
+                    })->lockForUpdate()->exists();
+                $reserved = Manifest::where('company_uuid', $companyUuid)
+                    ->where(fn ($q) => $q->whereIn('status', ['active', 'in_progress'])
+                        ->orWhere(fn ($draft) => $draft->where('status', 'draft')->whereDate('scheduled_date', $validated['scheduled_date'] ?? now()->toDateString())))
+                    ->where(function ($q) use ($vehicle, $driver) {
+                        $q->where('vehicle_uuid', $vehicle->uuid);
+                        if ($driver) {
+                            $q->orWhere('driver_uuid', $driver->uuid);
+                        }
+                    })->lockForUpdate()->exists();
+                abort_if($busy || $reserved, 409, 'Vehicle or driver already has active or reserved work.');
                 usort($vehicleAssignments, fn ($a, $b) => ($a['sequence'] ?? 0) <=> ($b['sequence'] ?? 0));
-
-                foreach ($vehicleAssignments as $idx => $assignment) {
-                    $order = $this->findOrderByPublicId($assignment['order_id']);
-                    if (!$order) {
-                        $failed[] = $assignment['order_id'];
-                        continue;
-                    }
-
-                    $placeUuid = $order->payload?->dropoff?->uuid ?? null;
-
+                $sequences = array_filter(array_column($vehicleAssignments, 'sequence'), fn ($s) => $s !== null);
+                abort_if(count($sequences) !== count(array_unique($sequences)), 422, 'Stop sequences must be unique per vehicle.');
+                $manifest = $this->createManifest([
+                    'company_uuid' => $companyUuid, 'vehicle_uuid' => $vehicle->uuid, 'driver_uuid' => $driver?->uuid,
+                    'status' => 'draft', 'scheduled_date' => $validated['scheduled_date'] ?? now()->toDateString(),
+                    'total_distance_m' => (int) array_sum(array_column($vehicleAssignments, 'distance')),
+                    'total_duration_s' => (int) array_sum(array_column($vehicleAssignments, 'duration')),
+                    'stop_count' => count($vehicleAssignments),
+                ]);
+                foreach ($vehicleAssignments as $index => $assignment) {
+                    $order = $orders[$assignment['order_id']];
+                    $placeUuid = $order->payload_uuid ? DB::table('payloads')->where('company_uuid', $companyUuid)->where('uuid', $order->payload_uuid)->value('dropoff_uuid') : null;
                     $this->createManifestStop([
-                        'manifest_uuid'        => $manifest->uuid,
-                        'order_uuid'           => $order->uuid,
-                        'place_uuid'           => $placeUuid,
-                        'sequence'             => (int) ($assignment['sequence'] ?? ($idx + 1)),
-                        'status'               => 'pending',
-                        'estimated_arrival'    => isset($assignment['arrival'])
-                            ? Carbon::createFromTimestamp($assignment['arrival'])
-                            : null,
-                        'distance_from_prev_m' => (int) ($assignment['distance'] ?? 0),
-                        'duration_from_prev_s' => (int) ($assignment['duration'] ?? 0),
+                        'manifest_uuid' => $manifest->uuid, 'order_uuid' => $order->uuid, 'place_uuid' => $placeUuid,
+                        'sequence' => $index + 1, 'status' => 'pending',
+                        'estimated_arrival' => isset($assignment['arrival']) ? Carbon::createFromTimestamp($assignment['arrival']) : null,
+                        'distance_from_prev_m' => (int) ($assignment['distance'] ?? 0), 'duration_from_prev_s' => (int) ($assignment['duration'] ?? 0),
                     ]);
-
-                    // Update order assignments
                     $order->vehicle_assigned_uuid = $vehicle->uuid;
-                    $order->manifest_uuid         = $manifest->uuid;
+                    $order->manifest_uuid = $manifest->uuid;
                     if ($driver) {
                         $order->driver_assigned_uuid = $driver->uuid;
                     }
@@ -497,37 +590,42 @@ class OrchestrationController extends Controller
                         $order->is_route_optimized = true;
                     }
                     $order->save();
-
-                    // Update waypoint sequence if provided
-                    if (!empty($assignment['waypoint_sequence']) && $order->payload) {
-                        foreach ($assignment['waypoint_sequence'] as $seq => $waypointId) {
-                            $this->updateWaypointSequence($order->payload_uuid, $waypointId, $seq);
-                        }
+                    foreach ($assignment['waypoint_sequence'] ?? [] as $sequence => $waypointId) {
+                        $this->updateWaypointSequence($order->payload_uuid, $waypointId, $sequence);
                     }
-
-                    $committed[] = $assignment['order_id'];
+                    $committed[] = $order->public_id;
                 }
-
                 $manifests[] = $manifest->public_id;
             }
+            $result = ['committed' => $committed, 'failed' => [], 'manifests' => $manifests];
+            DB::table('orchestration_plans')->where('uuid', $plan->uuid)->update([
+                'request_id' => $validated['request_id'], 'request_hash' => $hash,
+                'response' => json_encode(['result' => $result, 'permissions' => $permissions], JSON_THROW_ON_ERROR), 'updated_at' => now(),
+            ]);
 
-            $this->commitOrchestrationTransaction();
-        } catch (\Exception $e) {
-            // Only roll back if a transaction is still active.
-            // A PDOException from a missing table can cause MySQL to implicitly
-            // roll back the transaction before we reach this catch block.
-            if ($this->orchestrationTransactionLevel() > 0) {
-                $this->rollBackOrchestrationTransaction();
+            return response()->json($result);
+        }, 3);
+    }
+
+    protected function assertSnapshotAssignment(array $assignment, array $snapshot): void
+    {
+        foreach (['order_id' => 'orders', 'vehicle_id' => 'vehicles', 'driver_id' => 'drivers'] as $key => $table) {
+            if (!empty($assignment[$key])) {
+                abort_unless(isset($snapshot[$table][$assignment[$key]]), 422, 'Assignment references a resource outside the reviewed company plan.');
             }
 
-            return response()->json(['error' => 'Commit failed: ' . $e->getMessage()], 500);
+        }
+    }
+
+    protected function authorizeOrchestrationAction(string $permission): void
+    {
+        // The public controller deliberately uses organization-credential route
+        // authorization, not Console user IAM (see its constructor).
+        if ($this instanceof \Fleetbase\FleetOps\Http\Controllers\Api\v1\OrchestrationController) {
+            return;
         }
 
-        return response()->json([
-            'committed' => $committed,
-            'failed'    => $failed,
-            'manifests' => $manifests,
-        ]);
+        Authorization::authorize($permission);
     }
 
     protected function beginOrchestrationTransaction(): void
@@ -552,17 +650,17 @@ class OrchestrationController extends Controller
 
     protected function findVehicleByPublicId(string $publicId): ?Vehicle
     {
-        return Vehicle::where('public_id', $publicId)->first();
+        return Vehicle::where('company_uuid', $this->companyUuid())->where('public_id', $publicId)->first();
     }
 
     protected function findDriverByPublicId(string $publicId): ?Driver
     {
-        return Driver::where('public_id', $publicId)->first();
+        return Driver::where('company_uuid', $this->companyUuid())->where('public_id', $publicId)->first();
     }
 
     protected function findOrderByPublicId(string $publicId): ?Order
     {
-        return Order::where('public_id', $publicId)->first();
+        return Order::where('company_uuid', $this->companyUuid())->where('public_id', $publicId)->first();
     }
 
     protected function createManifest(array $attributes): Manifest
@@ -578,6 +676,7 @@ class OrchestrationController extends Controller
     protected function updateWaypointSequence(string $payloadUuid, string $waypointPublicId, int|string $sequence): void
     {
         DB::table('waypoints')
+            ->where('company_uuid', $this->companyUuid())
             ->where('payload_uuid', $payloadUuid)
             ->where('public_id', $waypointPublicId)
             ->update(['order' => $sequence]);
@@ -603,7 +702,7 @@ class OrchestrationController extends Controller
      */
     public function orderConfigFields(): JsonResponse
     {
-        $companyUuid = session('company');
+        $companyUuid = $this->companyUuid();
 
         $configs = $this->getOrderConfigFieldConfigs($companyUuid)
             ->map(function ($config) {
@@ -661,7 +760,8 @@ class OrchestrationController extends Controller
     public function importOrders(Request $request): JsonResponse
     {
         $rows        = $request->input('rows', []);
-        $companyUuid = session('company');
+        $companyUuid = $this->companyUuid();
+        $request->validate(['rows' => 'required|array|max:500', 'rows.*' => 'required|array']);
 
         if (empty($rows)) {
             return response()->json(['error' => 'No rows provided.'], 422);
@@ -699,6 +799,7 @@ class OrchestrationController extends Controller
                 $resolvedOrderConfig = null;
                 if (!empty($firstRow['type'])) {
                     $resolvedOrderConfig = OrderConfig::resolveFromIdentifier($firstRow['type']);
+                    abort_unless($resolvedOrderConfig && $resolvedOrderConfig->company_uuid === $companyUuid, 422, 'Unknown company order configuration.');
                     if ($resolvedOrderConfig) {
                         $orderConfigUuid = $resolvedOrderConfig->uuid;
                     }
@@ -752,6 +853,7 @@ class OrchestrationController extends Controller
                     $vehicle = Vehicle::where('company_uuid', $companyUuid)
                         ->where('plate_number', $firstRow['vehicle_plate'])
                         ->first();
+                    abort_unless($vehicle, 422, 'Unknown company vehicle.');
                     if ($vehicle) {
                         $vehicleUuid = $vehicle->uuid;
                     }
@@ -762,6 +864,7 @@ class OrchestrationController extends Controller
                 $driverIdentifier = $firstRow['driver_email'] ?? $firstRow['driver_phone'] ?? $firstRow['driver_name'] ?? null;
                 if ($driverIdentifier) {
                     $driver = Driver::findByIdentifier($driverIdentifier);
+                    abort_unless($driver && $driver->company_uuid === $companyUuid, 422, 'Unknown company driver.');
                     if ($driver) {
                         $driverUuid = $driver->uuid;
                     }

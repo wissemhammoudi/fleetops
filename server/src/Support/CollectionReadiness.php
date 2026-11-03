@@ -3,7 +3,6 @@
 namespace Fleetbase\FleetOps\Support;
 
 use Fleetbase\FleetOps\Models\Order;
-use Illuminate\Support\Carbon;
 
 class CollectionReadiness
 {
@@ -21,41 +20,26 @@ class CollectionReadiness
     public static function preview(Order $order, ?string $pickupDate = null): array
     {
         self::assertEditable($order);
-        $schedule = CollectionSchedule::forCompany((string) $order->company_uuid);
-        $earliest = now();
-        if ($order->scheduled_at) {
-            $scheduledDate = Carbon::parse($order->scheduled_at)->setTimezone($schedule['timezone'])->startOfDay();
-            if ($scheduledDate->greaterThan($earliest)) {
-                $earliest = $scheduledDate;
-            }
-        }
-        $planned = CollectionSchedule::pickupAt($earliest, $schedule)->toISOString();
+        abort_if($pickupDate !== null, 422, 'Pickup dates are organized by the dispatcher.');
         $fingerprint = self::fingerprint($order);
         $snapshot = self::snapshot($order);
-        $slots = ($schedule['pickup_windows'] ?? []) ? CollectionSchedule::pickupSlots($earliest, $schedule, $pickupDate) : [];
-        if ($slots) {
-            $planned = $slots[0]['start'];
-        }
 
         return [
             'state' => data_get($order->meta, 'collection_workflow.state'),
-            'planned_collection_at' => $planned,
-            'timezone' => $schedule['timezone'],
-            'pickup_date' => Carbon::parse($planned)->setTimezone($schedule['timezone'])->toDateString(),
-            'pickup_slots' => $slots,
-            'available_pickup_dates' => $slots ? CollectionSchedule::pickupDates($earliest, $schedule, $pickupDate) : [],
-            'pickup_unavailable_reason' => $slots ? null : 'Pickup time windows are not configured. Contact support to arrange collection.',
+            'scheduling_mode' => 'dispatcher',
+            'planned_collection_at' => null,
             'pickup_stops' => array_column(self::pickupStops($order), 'contact'),
             'parcel_count' => array_sum(array_map(fn ($entity) => $entity->quantity ?? 1, $snapshot['entities'])),
             'parcels' => array_map(fn ($entity) => ['name' => $entity->name, 'quantity' => $entity->quantity ?? 1], $snapshot['entities']),
-            'confirmation_token' => hash('sha256', json_encode([$order->uuid, $fingerprint, $schedule, $planned, count(data_get($order->meta, 'collection_workflow.history', []))], JSON_THROW_ON_ERROR)),
-            'message' => 'Confirm the pickup address, contact phone, parcel count and compliant packaging. This is a planned collection date, not a guaranteed appointment.',
+            'confirmation_token' => hash('sha256', json_encode([$order->uuid, $fingerprint, 'dispatcher', count(data_get($order->meta, 'collection_workflow.history', []))], JSON_THROW_ON_ERROR)),
+            'message' => 'Confirm the pickup address, contact phone, parcel count and compliant packaging. The dispatcher will organize collection after readiness is confirmed.',
         ];
     }
 
     public static function change(Order $order, bool $ready, ?string $token, ?string $pickupStart = null): array
     {
         self::assertEditable($order);
+        abort_if($pickupStart !== null, 422, 'Pickup windows are organized by the dispatcher.');
         $workflow = data_get($order->meta, 'collection_workflow');
         $target = $ready ? 'ready_for_pickup' : 'awaiting_preparation';
         if ($workflow['state'] === $target) {
@@ -68,18 +52,13 @@ class CollectionReadiness
             return $workflow;
         }
         if ($ready) {
-            $schedule = CollectionSchedule::forCompany((string) $order->company_uuid);
-            $pickupDate = $pickupStart ? Carbon::parse($pickupStart)->setTimezone($schedule['timezone'])->toDateString() : null;
-            $preview = self::preview($order, $pickupDate);
-            abort_unless($preview['pickup_slots'], 422, $preview['pickup_unavailable_reason']);
-            abort_unless($token && hash_equals($preview['confirmation_token'], $token), 409, 'The order, collection calendar or cutoff changed. Review the updated pickup date and confirm again.');
-            $window = collect($preview['pickup_slots'])->firstWhere('start', $pickupStart);
-            abort_unless(!$preview['pickup_slots'] || $window, 422, 'Select an available pickup time window before confirming readiness.');
-            abort_if(!$preview['pickup_slots'] && $pickupStart !== null, 422, 'Pickup windows are not configured for this company.');
+            $preview = self::preview($order);
+            abort_unless($token && hash_equals($preview['confirmation_token'], $token), 409, 'The order changed. Review the current parcels and pickup contacts before confirming again.');
             $workflow['ready_at'] = now()->toISOString();
-            $workflow['planned_collection_at'] = $window['start'] ?? $preview['planned_collection_at'];
-            $workflow['pickup_window'] = $window;
-            $workflow['timezone'] = $preview['timezone'];
+            $workflow['scheduling_mode'] = 'dispatcher';
+            $workflow['planned_collection_at'] = null;
+            $workflow['pickup_window'] = null;
+            $workflow['timezone'] = null;
             $workflow['confirmation_token'] = $token;
             $workflow['content_fingerprint'] = self::fingerprint($order);
         } else {

@@ -11,7 +11,7 @@
     {{#if this.released}}
         <p>{{t "collection-delivery.released"}}</p>
     {{else}}
-        {{#if this.assignable}}
+        {{#if (and this.assignable @permissions.assign-delivery)}}
             <label class="block">
                 {{t "collection-delivery.driver"}}
                 <select class="form-select w-full" disabled={{this.save.isRunning}} {{on "change" this.selectDriver}} data-test-delivery-driver>
@@ -19,22 +19,22 @@
                     {{#each @drivers as |driver|}}<option value={{driver.uuid}} selected={{eq driver.uuid this.driver}}>{{driver.name}}</option>{{/each}}
                 </select>
             </label>
-            <Button @text={{t "collection-delivery.assign"}} @onClick={{perform this.save "assign"}} @disabled={{or this.save.isRunning (not this.driver)}} @permission="fleet-ops update scheduling-settings" data-test-delivery-assign />
+            <Button @text={{t "collection-delivery.assign"}} @onClick={{perform this.save "assign"}} @disabled={{or this.save.isRunning (not this.driver)}} data-test-delivery-assign />
         {{/if}}
-        {{#if this.staging}}
+        {{#if (and this.staging @permissions.load-delivery)}}
             <InputGroup @name={{t "collection-delivery.barcode"}}>
                 <Input @value={{this.barcode}} disabled={{this.save.isRunning}} class="form-input w-full" data-test-delivery-barcode />
             </InputGroup>
-            <Button @text={{t "collection-delivery.load"}} @onClick={{perform this.save "load"}} @disabled={{or this.save.isRunning (not this.barcode)}} @permission="fleet-ops update scheduling-settings" data-test-delivery-load />
+            <Button @text={{t "collection-delivery.load"}} @onClick={{perform this.save "load"}} @disabled={{or this.save.isRunning (not this.barcode)}} data-test-delivery-load />
         {{/if}}
-        {{#if this.accepted}}
-            <Button @text={{t "collection-delivery.release"}} @onClick={{fn this.confirm "release"}} @disabled={{or this.save.isRunning (not @order.eligible)}} @permission="fleet-ops update scheduling-settings" data-test-delivery-release />
+        {{#if (and this.accepted @permissions.release-delivery)}}
+            <Button @text={{t "collection-delivery.release"}} @onClick={{fn this.confirm "release"}} @disabled={{or this.save.isRunning (not @order.eligible)}} data-test-delivery-release />
         {{/if}}
-        {{#if this.leg}}
+        {{#if (and this.leg @permissions.recall-delivery)}}
             <InputGroup @name={{t "collection-delivery.reason"}}>
                 <Textarea @value={{this.reason}} disabled={{this.save.isRunning}} class="form-input w-full" data-test-delivery-reason />
             </InputGroup>
-            <Button @text={{t "collection-delivery.recall"}} @onClick={{fn this.confirm "recall"}} @disabled={{or this.save.isRunning (not this.reason)}} @permission="fleet-ops update scheduling-settings" data-test-delivery-recall />
+            <Button @text={{t "collection-delivery.recall"}} @onClick={{fn this.confirm "recall"}} @disabled={{or this.save.isRunning (not this.reason)}} data-test-delivery-recall />
         {{/if}}
     {{/if}}
 </div>

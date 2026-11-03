@@ -38,8 +38,13 @@ function fleetopsOrchImportBoot(): SQLiteConnection
     }
 
     $pdo = new PDO('sqlite::memory:');
-    $pdo->sqliteCreateFunction('ST_PointFromText', fn ($wkt, $srid = 0, $axisOrder = null) => $wkt);
-    $pdo->sqliteCreateFunction('ST_GeomFromText', fn ($wkt, $srid = 0, $axisOrder = null) => $wkt);
+    $geometry = function ($wkt, $srid = 0, $axisOrder = null) {
+        $point = Fleetbase\LaravelMysqlSpatial\Types\Point::fromWKT($wkt);
+
+        return pack('V', $srid) . pack('CV', 1, 1) . pack('e2', $point->getLng(), $point->getLat());
+    };
+    $pdo->sqliteCreateFunction('ST_PointFromText', $geometry);
+    $pdo->sqliteCreateFunction('ST_GeomFromText', $geometry);
     $pdo->sqliteCreateFunction('ST_Equals', fn ($a, $b) => $a === $b ? 1 : 0);
     $connection = new SQLiteConnection($pdo);
     $resolver   = new ConnectionResolver(['default' => $connection, 'mysql' => $connection]);
@@ -96,7 +101,7 @@ function fleetopsOrchImportBoot(): SQLiteConnection
     $tables = [
         'orders'            => ['uuid', 'public_id', 'internal_id', 'company_uuid', 'payload_uuid', 'order_config_uuid', 'tracking_number_uuid', 'driver_assigned_uuid', 'vehicle_assigned_uuid', 'customer_uuid', 'customer_type', 'facilitator_uuid', 'facilitator_type', 'status', 'type', 'adhoc', 'dispatched', 'started', 'scheduled_at', 'notes', 'meta', 'time_window_start', 'time_window_end', 'required_skills', 'orchestrator_priority', 'distance', 'time', 'pod_required', 'pod_method', 'created_by_uuid', 'updated_by_uuid'],
         'payloads'          => ['uuid', 'public_id', 'company_uuid', 'pickup_uuid', 'dropoff_uuid', 'return_uuid', 'current_waypoint_uuid', 'meta', 'type', 'cod_amount', 'cod_currency', 'cod_payment_method', 'capacity_weight_kg', 'capacity_volume_m3', 'capacity_parcels', '_key'],
-        'places'            => ['uuid', 'public_id', 'company_uuid', 'name', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'phone', 'location', 'meta', '_key', 'owner_uuid', 'type', '_import_id'],
+        'places'            => ['uuid', 'public_id', 'company_uuid', 'name', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'phone', 'location', 'meta', '_key', 'owner_uuid', 'owner_type', 'type', '_import_id'],
         'waypoints'         => ['uuid', 'public_id', 'company_uuid', 'payload_uuid', 'place_uuid', 'tracking_number_uuid', 'order', 'type', '_import_id', '_key'],
         'entities'          => ['uuid', 'public_id', 'company_uuid', 'payload_uuid', 'destination_uuid', 'tracking_number_uuid', 'name', 'type', 'weight', 'weight_unit', 'meta', '_import_id', '_key', 'internal_id', 'sku', 'height', 'width', 'length', 'dimensions_unit', 'declared_value', 'currency', 'description'],
         'contacts'          => ['uuid', 'public_id', 'internal_id', 'company_uuid', 'user_uuid', 'name', 'email', 'phone', 'type', 'meta', 'slug', '_key'],
@@ -198,7 +203,8 @@ test('import orders creates a pickup dropoff order with resolutions', function (
         ->and($connection->table('orders')->value('driver_assigned_uuid'))->toBe('driver-1')
         ->and($connection->table('contacts')->where('email', 'import.customer@example.test')->count())->toBe(1)
         ->and($connection->table('vendors')->where('email', 'import.vendor@example.test')->count())->toBe(1)
-        ->and($connection->table('places')->count())->toBe(2);
+        ->and($connection->table('places')->where('type', 'order_contact')->count())->toBe(2)
+        ->and($connection->table('places')->count())->toBe(4);
 });
 
 test('import orders collapses multi waypoint groups into one order', function () {

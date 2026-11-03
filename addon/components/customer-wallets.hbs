@@ -1,7 +1,7 @@
 <div class="p-6 space-y-5 overflow-y-auto h-full">
     <h1 class="text-xl font-semibold">Customer wallets</h1>
     {{#if this.currentUser.isAdmin}}
-        <p>COD balances and withdrawals. This does not add prepaid credit or allow manual balance edits.</p>
+        <p>Read-only customer finances and staff-recorded payments. Customers cannot request withdrawals. This does not send bank transfers, add prepaid credit or allow manual balance edits.</p>
         <p role="status" class="font-semibold">New payout requests: {{or this.data.requested_payouts 0}}</p>
         <Button @text="Refresh" @icon="arrows-rotate" @onClick={{perform this.load}} @disabled={{this.busy}} />
         {{#if this.error}}<p role="alert">{{this.error}}</p>{{/if}}
@@ -35,6 +35,15 @@
                 <p>{{this.selected.customer.email}} - {{this.selected.customer.uuid}}</p>
                 <Button @text="Close customer" @onClick={{this.closeCustomer}} />
                 {{#each this.selectedBalances as |balance|}}<p>{{balance.label}}: {{balance.amount}}</p>{{/each}}
+                <h3 class="font-semibold">Record a completed bank transfer</h3>
+                <p>Only use this after the transfer actually occurred. Fees and VAT are already deducted from COD net; do not deduct invoices again.</p>
+                <label class="block">Amount transferred (TND)
+                    <Input @value={{this.paymentAmount}} class="form-input" inputmode="decimal" />
+                </label>
+                <label class="block">Completed bank transfer audit reference
+                    <Input @value={{this.paymentReference}} class="form-input" maxlength="120" />
+                </label>
+                <Button @text="Record completed transfer" @onClick={{this.confirmPayment}} @disabled={{or this.busy this.error}} />
                 <h3 class="font-semibold">Latest 100 ledger entries</h3>
                 {{#each this.selectedActivity as |entry|}}<p>{{entry.entry_date}} - {{entry.reference}} - {{entry.entry}} - {{entry.formattedAmount}}</p>{{else}}<p>No ledger activity yet.</p>{{/each}}
             </section>

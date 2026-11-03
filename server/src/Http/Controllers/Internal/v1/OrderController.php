@@ -767,6 +767,12 @@ class OrderController extends FleetOpsController
 
     protected function assignDriverToOrders($orderUuids, Driver $driver): void
     {
+        $orders = $this->scopedToCompany(Order::whereIn('uuid', $orderUuids))->orderBy('uuid')->lockForUpdate()->get();
+        foreach ($orders as $order) {
+            abort_if(CollectionWorkflow::applies($order), 409, 'Use collection rounds and depot handover for this order.');
+            abort_unless(!$order->started && !$order->dispatched && in_array($order->status, ['created', 'pending'], true),
+                409, 'An order is already active or closed. Refresh before assigning a driver.');
+        }
         $this->scopedToCompany(Order::whereIn('uuid', $orderUuids))->update([
             'driver_assigned_uuid' => $driver->uuid,
             'updated_at'           => now(),
@@ -2024,6 +2030,9 @@ class OrderController extends FleetOpsController
         $order = $this->findOrderForSchedule($orderId);
         if (!$order) {
             return response()->error('No order found to schedule.');
+        }
+        if (CollectionWorkflow::applies($order)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['collection_workflow' => 'Use collection rounds and depot handover for this order.']);
         }
         CollectionWorkflow::assertCanDispatch($order);
 

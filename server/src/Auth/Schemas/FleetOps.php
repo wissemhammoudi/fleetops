@@ -30,6 +30,21 @@ class FleetOps
      */
     public array $resources = [
         [
+            'name' => 'pickup-round',
+            'actions' => ['plan', 'assign', 'release', 'cancel', 'labels'],
+            'remove_actions' => ['create', 'update', 'delete', 'export'],
+        ],
+        [
+            'name' => 'depot-custody',
+            'actions' => ['scan', 'reconcile', 'resolve'],
+            'remove_actions' => ['create', 'update', 'delete', 'export'],
+        ],
+        [
+            'name' => 'delivery-handover',
+            'actions' => ['assign', 'load', 'release', 'recall'],
+            'remove_actions' => ['create', 'update', 'delete', 'export'],
+        ],
+        [
             'name' => 'email-campaign',
             'actions' => ['submit', 'approve', 'send', 'cancel', 'import', 'test'],
         ],
@@ -504,6 +519,37 @@ class FleetOps
      */
     public array $roles = [
         [
+            'name' => 'Dispatcher',
+            'description' => 'Plans and assigns company pickups and deliveries without changing money, configuration, physical custody or driver acceptance.',
+            'permissions' => [
+                'see extension',
+                'see order', 'list order', 'view order', 'schedule order', 'dispatch order', 'optimize order',
+                'assign-driver-for order', 'assign-vehicle-for order', 'update-route-for order',
+                'see route', 'list route', 'view route', 'optimize route',
+                'see driver', 'list driver', 'view driver',
+                'see vehicle', 'list vehicle', 'view vehicle',
+                'see fleet', 'list fleet', 'view fleet',
+                'see contact', 'list contact', 'view contact',
+                'see customer', 'list customer', 'view customer',
+                'see place', 'list place', 'view place',
+                'see order-config', 'list order-config', 'view order-config',
+                'see pickup-round', 'list pickup-round', 'view pickup-round', 'plan pickup-round',
+                'assign pickup-round', 'release pickup-round', 'cancel pickup-round', 'labels pickup-round',
+                'see depot-custody', 'list depot-custody', 'view depot-custody',
+                'see delivery-handover', 'list delivery-handover', 'view delivery-handover',
+                'assign delivery-handover', 'release delivery-handover', 'recall delivery-handover',
+            ],
+        ],
+        [
+            'name' => 'Depot Operator',
+            'description' => 'Receives, reconciles and stages physical parcels. Cannot dispatch, resolve holds or accept as a driver.',
+            'permissions' => [
+                'see extension', 'see pickup-round', 'list pickup-round', 'view pickup-round', 'labels pickup-round',
+                'see depot-custody', 'list depot-custody', 'view depot-custody', 'scan depot-custody', 'reconcile depot-custody',
+                'see delivery-handover', 'list delivery-handover', 'view delivery-handover', 'load delivery-handover',
+            ],
+        ],
+        [
             'name' => 'Customer Support',
             'description' => 'Handles customer issues, website enquiries and driver applications. Does not create driver accounts or manage payments.',
             'permissions' => [
@@ -530,6 +576,13 @@ class FleetOps
                 'DispatchManager',
                 'FleetManager',
                 'OrderCoordinator',
+            ],
+            'permissions' => [
+                'see pickup-round', 'list pickup-round', 'view pickup-round', 'plan pickup-round',
+                'assign pickup-round', 'release pickup-round', 'cancel pickup-round', 'labels pickup-round',
+                'see depot-custody', 'list depot-custody', 'view depot-custody', 'scan depot-custody', 'reconcile depot-custody', 'resolve depot-custody',
+                'see delivery-handover', 'list delivery-handover', 'view delivery-handover',
+                'assign delivery-handover', 'load delivery-handover', 'release delivery-handover', 'recall delivery-handover',
             ],
         ],
         [

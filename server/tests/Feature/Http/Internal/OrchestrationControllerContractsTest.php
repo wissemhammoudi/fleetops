@@ -18,6 +18,71 @@ use Fleetbase\Models\CustomField;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Fleetbase\FleetOps\Support\OrchestrationPlan;
+use Illuminate\Database\ConnectionResolver;
+use Illuminate\Database\Eloquent\Model as EloquentModel;
+use Illuminate\Database\SQLiteConnection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Facade;
+use Illuminate\Validation\ValidationException;
+
+beforeEach(function () {
+    // Use real validation, abort responses, SQL snapshots and transactions rather
+    // than the package bootstrap's permissive request/DB fallbacks.
+    $previous = app();
+    $application = new Illuminate\Foundation\Application();
+    foreach (['config', 'session', 'session.store', 'cache', 'cache.store', 'log', Illuminate\Contracts\Routing\ResponseFactory::class] as $binding) {
+        if ($previous->bound($binding)) $application->instance($binding, $previous->make($binding));
+    }
+    Facade::setFacadeApplication($application);
+    Facade::clearResolvedInstances();
+    $translator = new Illuminate\Translation\Translator(new Illuminate\Translation\ArrayLoader(), 'en');
+    $application->instance('validator', new Illuminate\Validation\Factory($translator, $application));
+    Illuminate\Http\Request::macro('validate', function (array $rules) {
+        return app('validator')->make($this->all(), $rules)->validate();
+    });
+    $user = Mockery::mock(Fleetbase\Models\User::class)->makePartial();
+    $user->shouldReceive('isAdmin')->andReturn(true);
+    $auth = new class($user) {
+        public function __construct(private $user) {}
+        public function user() { return $this->user; }
+    };
+    $application->instance(Illuminate\Contracts\Auth\Factory::class, $auth);
+    $connection = new SQLiteConnection(new PDO('sqlite::memory:'));
+    $resolver = new ConnectionResolver(['default' => $connection, 'mysql' => $connection]);
+    $resolver->setDefaultConnection('mysql');
+    EloquentModel::setConnectionResolver($resolver);
+    $application->instance('db', new class($connection) {
+        public function __construct(public SQLiteConnection $connection) {}
+        public function connection($name = null) { return $this->connection; }
+        public function __call($method, $arguments) { return $this->connection->{$method}(...$arguments); }
+    });
+    foreach (['companies', 'orders', 'vehicles', 'drivers', 'payloads', 'places', 'waypoints', 'entities', 'manifest_stops', 'manifests'] as $table) {
+        $connection->getSchemaBuilder()->create($table, function ($t) use ($table) {
+            $t->string('uuid')->primary(); $t->string('public_id')->nullable(); $t->string('company_uuid')->nullable();
+            $t->softDeletes(); $t->timestamps();
+            if ($table === 'orders') {
+                foreach (['payload_uuid', 'vehicle_assigned_uuid', 'driver_assigned_uuid', 'manifest_uuid', 'status', 'started_at', 'dispatched_at'] as $field) $t->string($field)->nullable();
+                $t->boolean('started')->default(false); $t->boolean('dispatched')->default(false); $t->text('meta')->nullable();
+            } elseif ($table === 'payloads') {
+                foreach (['pickup_uuid', 'dropoff_uuid', 'return_uuid'] as $field) $t->string($field)->nullable();
+            } elseif (in_array($table, ['waypoints', 'entities'])) {
+                $t->string('payload_uuid'); $t->string('place_uuid')->nullable(); $t->integer('order')->nullable();
+            } elseif ($table === 'manifest_stops') {
+                $t->string('order_uuid');
+            } elseif ($table === 'manifests') {
+                foreach (['vehicle_uuid', 'driver_uuid', 'status', 'scheduled_date'] as $field) $t->string($field)->nullable();
+            }
+        });
+    }
+    $connection->getSchemaBuilder()->create('orchestration_plans', function ($t) {
+        $t->uuid('uuid')->primary(); $t->uuid('company_uuid'); $t->text('snapshot'); $t->timestamp('expires_at');
+        $t->uuid('request_id')->nullable(); $t->string('request_hash')->nullable(); $t->text('response')->nullable(); $t->timestamps();
+        $t->unique(['company_uuid', 'request_id']);
+    });
+    $connection->table('companies')->insert(['uuid' => 'company-uuid']);
+    session(['company' => 'company-uuid', 'is_customer' => false, 'is_driver' => false]);
+});
 
 class FleetOpsOrchestrationCommitControllerProbe extends OrchestrationController
 {
@@ -39,6 +104,13 @@ class FleetOpsOrchestrationCommitControllerProbe extends OrchestrationController
     public string $engineSetting                             = 'greedy';
     public bool $throwOnCreateManifest                       = false;
     public int $transactionLevel                             = 0;
+
+    public function run(Request $request): Illuminate\Http\JsonResponse
+    {
+        fleetopsSeedOrchestrationProbe($this);
+
+        return parent::run($request);
+    }
 
     protected function companyUuid(): ?string
     {
@@ -303,6 +375,8 @@ function fleetopsOrchestrationVehicle(string $publicId = 'vehicle_public'): Vehi
     $vehicle->setRawAttributes([
         'uuid'      => $publicId . '-uuid',
         'public_id' => $publicId,
+        'company_uuid' => 'company-uuid',
+        'status' => 'available',
     ], true);
 
     return $vehicle;
@@ -314,6 +388,8 @@ function fleetopsOrchestrationDriver(string $publicId = 'driver_public'): Driver
     $driver->setRawAttributes([
         'uuid'      => $publicId . '-uuid',
         'public_id' => $publicId,
+        'company_uuid' => 'company-uuid',
+        'status' => 'available',
     ], true);
 
     return $driver;
@@ -327,16 +403,50 @@ function fleetopsOrchestrationOrder(string $publicId, ?string $dropoffUuid = 'dr
     $payload = new Payload();
     $payload->setRawAttributes(['uuid' => 'payload-' . $publicId], true);
     $payload->setRelation('dropoff', $dropoff);
+    $payload->setRelation('entities', collect());
 
     $order = new FleetOpsOrchestrationCommitOrderFake();
     $order->setRawAttributes([
         'uuid'         => $publicId . '-uuid',
         'public_id'    => $publicId,
         'payload_uuid' => $payload->uuid,
+        'company_uuid' => 'company-uuid',
+        'status' => 'created',
     ], true);
     $order->setRelation('payload', $payload);
 
     return $order;
+}
+
+function fleetopsSeedOrchestrationProbe(FleetOpsOrchestrationCommitControllerProbe $controller): void
+{
+    $orders = collect($controller->orders)->merge($controller->orderQuery?->results ?? []);
+    $vehicles = collect($controller->vehicles)->merge($controller->vehicleQuery?->results ?? []);
+    $drivers = collect($controller->drivers)->merge($controller->driverMap);
+    foreach ($vehicles as $vehicle) {
+        if ($vehicle->relationLoaded('driver') && $vehicle->driver) $drivers->push($vehicle->driver);
+    }
+    foreach (['orders' => $orders, 'vehicles' => $vehicles, 'drivers' => $drivers] as $table => $records) {
+        foreach ($records as $record) {
+            $row = ['uuid' => $record->uuid, 'public_id' => $record->public_id, 'company_uuid' => 'company-uuid'];
+            if ($table === 'orders') {
+                $row += ['payload_uuid' => $record->payload_uuid, 'status' => 'created', 'meta' => '{}'];
+                if ($record->payload_uuid) {
+                    $dropoff = $record->payload?->dropoff?->uuid;
+                    DB::table('payloads')->updateOrInsert(['uuid' => $record->payload_uuid], ['company_uuid' => 'company-uuid', 'dropoff_uuid' => $dropoff]);
+                    if ($dropoff) DB::table('places')->updateOrInsert(['uuid' => $dropoff], ['company_uuid' => 'company-uuid']);
+                }
+            }
+            DB::table($table)->updateOrInsert(['uuid' => $record->uuid], $row);
+        }
+    }
+}
+
+function fleetopsOrchestrationVersion(FleetOpsOrchestrationCommitControllerProbe $controller): string
+{
+    fleetopsSeedOrchestrationProbe($controller);
+
+    return OrchestrationPlan::propose('company-uuid', OrchestrationPlan::capture('company-uuid', []));
 }
 
 function fleetopsOrchestrationOrderConfig(string $uuid, string $publicId, array $attributes = [], array $customFields = []): OrderConfig
@@ -417,9 +527,6 @@ test('orchestration run reports empty criteria and preview delegates to run', fu
 
     $response = $controller->run(Request::create('/orchestrator/run', 'POST', [
         'mode'              => 'allocate',
-        'prior_assignments' => [
-            ['order_id' => 'order_taken', 'vehicle_id' => 'vehicle_one'],
-        ],
     ]));
 
     $preview = $controller->preview(Request::create('/orchestrator/preview', 'GET', [
@@ -435,7 +542,7 @@ test('orchestration run reports empty criteria and preview delegates to run', fu
             'unassigned'  => [],
         ])
         ->and($preview->getData(true)['message'])->toBe('No orders found for the given criteria.')
-        ->and($orderMethods)->toContain('whereNull', 'whereNotIn', 'get');
+        ->and($orderMethods)->toContain('whereNull', 'get');
 });
 
 test('orchestration run reports unavailable vehicles with selected order ids', function () {
@@ -447,7 +554,7 @@ test('orchestration run reports unavailable vehicles with selected order ids', f
     $response = $controller->run(Request::create('/orchestrator/run', 'POST', [
         'mode'        => 'assign_vehicles',
         'order_ids'   => ['order_one'],
-        'vehicle_ids' => ['vehicle_missing'],
+        'vehicle_ids' => [],
     ]));
 
     $orderMethods   = array_column($controller->orderQuery->calls, 0);
@@ -479,6 +586,7 @@ test('orchestration assign drivers augments orders from prior assignments before
     $response = $controller->run(Request::create('/orchestrator/run', 'POST', [
         'mode'              => 'assign_drivers',
         'options'           => ['respect_skills' => false],
+        'plan_version'      => fleetopsOrchestrationVersion($controller),
         'prior_assignments' => [
             [
                 'order_id'   => 'order_one',
@@ -548,9 +656,12 @@ test('orchestration controller exposes engines and rejects empty commits before 
     $controller = fleetopsOrchestrationController();
 
     $engines = $controller->engines();
-    $commit  = $controller->commit(Request::create('/orchestrator/commit', 'POST', [
-        'assignments' => [],
-    ]));
+    try {
+        $controller->commit(Request::create('/orchestrator/commit', 'POST', ['assignments' => []]));
+        test()->fail('An unreviewed, unversioned commit was accepted.');
+    } catch (ValidationException $error) {
+        expect(array_keys($error->errors()))->toContain('assignments', 'reviewed', 'request_id', 'plan_version');
+    }
 
     expect($engines->getData(true))->toBe([
         'engines' => [
@@ -559,9 +670,7 @@ test('orchestration controller exposes engines and rejects empty commits before 
                 'name'  => 'Greedy (built-in)',
             ],
         ],
-    ])
-        ->and($commit->getStatusCode())->toBe(422)
-        ->and($commit->getData(true))->toBe(['error' => 'No assignments provided.']);
+    ]);
 });
 
 test('orchestration controller maps order config card fields with fallback lookups', function () {
@@ -648,7 +757,7 @@ test('orchestration controller maps order config card fields with fallback looku
     ]);
 });
 
-test('orchestration commit creates manifests stops assignments and waypoint ordering', function () {
+test('orchestration reviewed commit creates draft manifests stops assignments and waypoint ordering', function () {
     session(['company' => 'company-uuid']);
 
     $controller                          = fleetopsOrchestrationCommitController();
@@ -661,28 +770,16 @@ test('orchestration commit creates manifests stops assignments and waypoint orde
         'order_b' => $first,
     ];
 
-    $response = $controller->commit(Request::create('/orchestrator/commit', 'POST', [
+    fleetopsSeedOrchestrationProbe($controller);
+    foreach (['waypoint_b', 'waypoint_c'] as $waypoint) {
+        DB::table('waypoints')->insert(['uuid' => $waypoint, 'public_id' => $waypoint, 'company_uuid' => 'company-uuid', 'payload_uuid' => 'payload-order_b']);
+    }
+    $requestId = (string) Str::uuid();
+    $version = fleetopsOrchestrationVersion($controller);
+    $request = Request::create('/orchestrator/commit', 'POST', [
+        'request_id' => $requestId, 'plan_version' => $version, 'reviewed' => true,
         'scheduled_date' => '2026-08-01',
         'assignments'    => [
-            [
-                'order_id'          => 'missing_vehicle_order',
-                'distance'          => 100,
-                'duration'          => 10,
-            ],
-            [
-                'vehicle_id'        => 'missing_vehicle',
-                'order_id'          => 'missing_vehicle_order',
-                'distance'          => 100,
-                'duration'          => 10,
-            ],
-            [
-                'vehicle_id'        => 'vehicle_one',
-                'driver_id'         => 'driver_one',
-                'order_id'          => 'missing_order',
-                'sequence'          => 9,
-                'distance'          => 300,
-                'duration'          => 30,
-            ],
             [
                 'vehicle_id'        => 'vehicle_one',
                 'driver_id'         => 'driver_one',
@@ -702,24 +799,26 @@ test('orchestration commit creates manifests stops assignments and waypoint orde
                 'duration'          => 10,
             ],
         ],
-    ]));
+    ]);
+    $response = $controller->commit($request);
 
     $payload = $response->getData(true);
 
     expect($response->getStatusCode())->toBe(200)
         ->and($payload['committed'])->toBe(['order_a', 'order_b'])
-        ->and($payload['failed'])->toContain('missing_vehicle_order', 'missing_order')
+        ->and($payload['failed'])->toBe([])
         ->and($payload['manifests'])->toBe(['manifest_public_1'])
-        ->and($controller->transactions)->toBe(['begin', 'commit'])
+        ->and(DB::transactionLevel())->toBe(0)
         ->and($controller->manifests)->toHaveCount(1)
         ->and($controller->manifests[0])->toMatchArray([
             'company_uuid'     => 'company-uuid',
             'vehicle_uuid'     => 'vehicle_one-uuid',
             'driver_uuid'      => 'driver_one-uuid',
             'scheduled_date'   => '2026-08-01',
-            'total_distance_m' => 600,
-            'total_duration_s' => 60,
-            'stop_count'       => 3,
+            'status'           => 'draft',
+            'total_distance_m' => 300,
+            'total_duration_s' => 30,
+            'stop_count'       => 2,
         ])
         ->and(array_column($controller->manifestStops, 'order_uuid'))->toBe(['order_a-uuid', 'order_b-uuid'])
         ->and($controller->manifestStops[1]['estimated_arrival']->timestamp)->toBe(1785542400)
@@ -733,6 +832,9 @@ test('orchestration commit creates manifests stops assignments and waypoint orde
         ->and($first->is_route_optimized)->toBeTrue()
         ->and($second->saved)->toBeTrue()
         ->and($second->manifest_uuid)->toBe('manifest-1');
+    expect($controller->commit($request)->getData(true))->toBe($payload)
+        ->and($controller->manifests)->toHaveCount(1)
+        ->and(DB::table('orchestration_plans')->where('uuid', $version)->value('request_id'))->toBe($requestId);
 });
 
 test('orchestration commit rolls back and reports persistence failures', function () {
@@ -740,18 +842,24 @@ test('orchestration commit rolls back and reports persistence failures', functio
 
     $controller                          = fleetopsOrchestrationCommitController();
     $controller->vehicles['vehicle_one'] = fleetopsOrchestrationVehicle('vehicle_one');
+    $controller->orders['order_a'] = fleetopsOrchestrationOrder('order_a');
     $controller->throwOnCreateManifest   = true;
 
-    $response = $controller->commit(Request::create('/orchestrator/commit', 'POST', [
+    $version = fleetopsOrchestrationVersion($controller);
+    try {
+        $controller->commit(Request::create('/orchestrator/commit', 'POST', [
+        'request_id' => (string) Str::uuid(), 'plan_version' => $version, 'reviewed' => true,
         'assignments' => [[
             'vehicle_id' => 'vehicle_one',
             'order_id'   => 'order_a',
         ]],
-    ]));
-
-    expect($response->getStatusCode())->toBe(500)
-        ->and($response->getData(true))->toBe(['error' => 'Commit failed: manifest boom'])
-        ->and($controller->transactions)->toBe(['begin', 'rollback']);
+        ]));
+        test()->fail('Persistence failure was ignored.');
+    } catch (RuntimeException $error) {
+        expect($error->getMessage())->toBe('manifest boom');
+    }
+    expect(DB::transactionLevel())->toBe(0)
+        ->and(DB::table('orchestration_plans')->where('uuid', $version)->value('request_id'))->toBeNull();
 });
 
 test('orchestration import helpers build place points and entity payloads from rows', function () {
@@ -864,8 +972,8 @@ test('public orchestration wrappers sanitize run and commit payloads', function 
     expect($run->getStatusCode())->toBe(200)
         ->and($run->getData(true)['message'] ?? '')->toContain('No orders');
 
-    $commit = $controller->commit(Request::create('/v1/orchestration/commit', 'POST', []));
-    expect($commit)->not->toBeNull();
+    expect(fn () => $controller->commit(Request::create('/v1/orchestration/commit', 'POST', [])))
+        ->toThrow(ValidationException::class);
 
     // Internal identifier keys are stripped recursively from public payloads
     $sanitized = $controller->callSanitize(['uuid' => 'x', 'nested' => ['company_uuid' => 'y', 'name' => 'keep'], 'name' => 'top']);
@@ -894,6 +1002,7 @@ test('run modes scope orders by vehicle assignment and drivers by public id', fu
     $byDriver               = fleetopsOrchestrationCommitController();
     $byDriver->orderQuery   = new FleetOpsOrchestrationQueryFake(collect([$order]));
     $byDriver->vehicleQuery = new FleetOpsOrchestrationQueryFake();
+    $byDriver->driverMap = ['driver_one' => fleetopsOrchestrationDriver('driver_one')];
     $byDriver->run(Request::create('/orchestrator/run', 'POST', [
         'mode'       => 'assign_vehicles',
         'driver_ids' => ['driver_one'],
@@ -917,6 +1026,7 @@ test('assign drivers skips orders without a prior assignment entry', function ()
 
     $controller->run(Request::create('/orchestrator/run', 'POST', [
         'mode'              => 'assign_drivers',
+        'plan_version'      => fleetopsOrchestrationVersion($controller),
         'prior_assignments' => [
             ['order_id' => 'order_one', 'vehicle_id' => 'vehicle_one', 'driver_id' => 'driver_one'],
         ],

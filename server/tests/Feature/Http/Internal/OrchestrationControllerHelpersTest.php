@@ -132,7 +132,7 @@ test('engine and transaction helpers execute their real bodies', function () {
 
 test('waypoint sequence helper updates the waypoint order column', function () {
     $connection = fleetopsOrchestrationHelpersBoot();
-    $connection->table('waypoints')->insert(['uuid' => 'waypoint-1', 'public_id' => 'waypoint_a', 'payload_uuid' => 'payload-1', 'order' => '0']);
+    $connection->table('waypoints')->insert(['uuid' => 'waypoint-1', 'public_id' => 'waypoint_a', 'company_uuid' => 'company-1', 'payload_uuid' => 'payload-1', 'order' => '0']);
 
     fleetopsOrchestrationHelpersProbe()->callProtected('updateWaypointSequence', 'payload-1', 'waypoint_a', 3);
 

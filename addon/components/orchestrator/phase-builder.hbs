@@ -172,10 +172,6 @@
                                     <Toggle @isToggled={{this.draftPhase.returnToDepot}} @onToggle={{fn this.setDraftOption "returnToDepot"}} />
                                 </div>
                             {{/if}}
-                            <div class="flex items-center justify-between">
-                                <span class="text-xs text-gray-600 dark:text-gray-400">{{t "orchestrator.auto-commit"}}</span>
-                                <Toggle @isToggled={{this.draftPhase.autoCommit}} @onToggle={{fn this.setDraftOption "autoCommit"}} />
-                            </div>
                         </div>
                     </InputGroup>
 

@@ -25,15 +25,16 @@ class CollectionRounds
             foreach ($orders as $order) {
                 try {
                     CollectionReadiness::assertReadyForPlanning($order);
-                    $planned = Carbon::parse(data_get($order->meta, 'collection_workflow.planned_collection_at'));
+                    $dispatcher = data_get($order->meta, 'collection_workflow.scheduling_mode') === 'dispatcher';
+                    $planned = $dispatcher ? CollectionSchedule::pickupAt(now(), $calendar) : Carbon::parse(data_get($order->meta, 'collection_workflow.planned_collection_at'));
                     $cutoff = $planned->copy()->setTimezone($calendar['timezone'])->setTimeFromTimeString($calendar['cutoff_time']);
-                    if (now()->lessThan($cutoff)) {
+                    if (!$dispatcher && now()->lessThan($cutoff)) {
                         continue;
                     }
                     self::assertCalendar($company, $planned, data_get($order->meta, 'collection_workflow.pickup_window.end'));
                     abort_if(data_get($order->meta, 'collection_workflow.pickup_window.end')
                         && now()->greaterThanOrEqualTo(Carbon::parse(data_get($order->meta, 'collection_workflow.pickup_window.end'))),
-                        409, 'The selected pickup window has expired. Ask the customer to select a new window.');
+                        409, 'The legacy pickup window has expired. Ask the customer to withdraw and reconfirm readiness; the Dispatcher will organize the new date.');
                     $stops = CollectionReadiness::pickupStops($order);
                     abort_if($calendar['capacity_planning'] && collect($stops)->contains(fn ($stop) => !isset($stop['location'])),
                         409, 'A pickup map location is missing. Staff must verify the address before capacity-aware planning.');
@@ -73,6 +74,12 @@ class CollectionRounds
                 }
                 self::audit($round, 'order_added', ['order_uuid' => $order->uuid]);
                 $order->recordCollectionRound($round->uuid, 'pickup_scheduled');
+                if ($dispatcher) {
+                    $meta = $order->meta;
+                    $meta['collection_workflow']['planned_collection_at'] = $planned->toISOString();
+                    $meta['collection_workflow']['timezone'] = $calendar['timezone'];
+                    $order->meta = $meta;
+                }
                 $order->save();
                 $rounds[$round->uuid] = $round;
             }
@@ -214,7 +221,7 @@ class CollectionRounds
         self::assertCalendar($round->company_uuid, $round->scheduled_at, data_get($order->meta, 'collection_workflow.pickup_window.end'));
         abort_if(data_get($order->meta, 'collection_workflow.pickup_window.end')
             && now()->greaterThanOrEqualTo(Carbon::parse(data_get($order->meta, 'collection_workflow.pickup_window.end'))),
-            409, 'The pickup window has expired. Recall this unstarted round and ask the customer to select a new window.');
+            409, 'The legacy pickup window has expired. Recall this unstarted round, then ask the customer to withdraw and reconfirm readiness for Dispatcher planning.');
         abort_unless(data_get($order->meta, 'collection_workflow.collection_round_uuid') === $round->uuid
             && in_array(data_get($order->meta, 'collection_workflow.state'), ['pickup_scheduled', 'pickup_in_progress'], true)
             && in_array($order->status, ['created', 'pending', 'pickup_scheduled', 'pickup_in_progress'], true)
@@ -227,11 +234,11 @@ class CollectionRounds
         abort_unless($round->revision === (int) $input['revision'], 409, 'The round changed. Refresh before continuing.');
     }
 
-    private static function assertCalendar(string $company, Carbon $planned, ?string $end = null): void
+    private static function assertCalendar(string $company, \Carbon\CarbonInterface $planned, ?string $end = null): void
     {
         $calendar = CollectionSchedule::forCompany($company);
         abort_unless(CollectionSchedule::containsPickup($planned, $calendar, $end), 409,
-            'The collection calendar changed. Recall the unstarted round and ask the customer to confirm the new pickup date.');
+            'The collection calendar changed. Recall any unstarted round, then ask the customer to withdraw and reconfirm readiness for Dispatcher planning.');
     }
 
     private static function audit(CollectionRound $round, string $event, array $detail = []): void

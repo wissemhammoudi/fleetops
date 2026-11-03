@@ -20,17 +20,22 @@ export default class CollectionRoundsComponent extends Component {
     @tracked followupPage = 1;
     @tracked followupLastPage = 1;
     @tracked followupTotal = 0;
+    @tracked permissions = {};
 
     get followupCards() {
-        return this.followup.map(order => ({
+        return this.followup.map((order) => ({
             ...order,
             pickupDate: order.pickup_window ? new Date(order.pickup_window.start).toLocaleDateString(undefined, { timeZone: order.timezone }) : null,
-            stops: order.stops.map(stop => ({ ...stop, callUrl: pickupCallLink(stop.contact?.phone) })),
+            stops: order.stops.map((stop) => ({ ...stop, callUrl: pickupCallLink(stop.contact?.phone) })),
         }));
     }
 
-    get firstFollowupPage() { return this.followupPage <= 1; }
-    get lastFollowupPage() { return this.followupPage >= this.followupLastPage; }
+    get firstFollowupPage() {
+        return this.followupPage <= 1;
+    }
+    get lastFollowupPage() {
+        return this.followupPage >= this.followupLastPage;
+    }
 
     @action pageFollowup(offset) {
         this.followupPage += offset;
@@ -45,9 +50,10 @@ export default class CollectionRoundsComponent extends Component {
     get cards() {
         return this.rounds.map((round) => ({
             ...round,
-            stops: round.stops.map(stop => ({ ...stop, callUrl: pickupCallLink(stop.contact?.phone) })),
+            stops: round.stops.map((stop) => ({ ...stop, callUrl: pickupCallLink(stop.contact?.phone) })),
             departure: new Date(round.scheduled_at).toLocaleString(undefined, { timeZone: round.timezone }),
             editable: ['draft', 'released'].includes(round.status),
+            assignable: ['draft', 'released'].includes(round.status) && this.permissions.assign,
             draft: round.status === 'draft',
             selectedDriver: this.selections[round.uuid]?.driver ?? round.driver_uuid ?? '',
             selectedDepot: this.selections[round.uuid]?.depot ?? round.depot?.uuid ?? '',
@@ -62,6 +68,7 @@ export default class CollectionRoundsComponent extends Component {
         try {
             const data = yield this.fetch.get('fleet-ops/collection-rounds', { followup_page: this.followupPage });
             this.rounds = data.rounds;
+            this.permissions = data.permissions ?? {};
             this.drivers = data.drivers;
             this.depots = data.depots;
             this.selections = {};
@@ -72,6 +79,7 @@ export default class CollectionRoundsComponent extends Component {
             this.followupTotal = data.follow_up_total ?? 0;
         } catch (error) {
             this.loaded = false;
+            this.permissions = {};
             this.notifications.serverError(error);
         }
     }

@@ -115,6 +115,12 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
 
     get operationsItems() {
         return this.withRegistryItems('operations', [
+            this.createItem('collection-rounds.title', 'truck', 'operations.collection-rounds', 'fleet-ops view pickup-round', 'fleet-ops see pickup-round', [
+                'pickup',
+                'depot',
+                'handover',
+                'dispatcher',
+            ]),
             ...(!this.abilities.cannot('fleet-ops list email-campaign')
                 ? [
                       {
@@ -129,8 +135,8 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
             ...(!this.abilities.cannot('fleet-ops list contact-enquiry') || !this.abilities.cannot('fleet-ops list driver-application')
                 ? [
                       {
-                          label: 'Website inbox',
-                          description: 'Contact enquiries and driver applications',
+                          label: 'Website requests',
+                          description: 'Status and assignment for contact enquiries and driver applications',
                           icon: 'inbox',
                           route: this.fullRoute('operations.website-inbox'),
                           keywords: ['support', 'contact', 'driver applications'],

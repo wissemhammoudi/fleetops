@@ -38,10 +38,11 @@
 
             {{! Commit / Discard / Run }}
             {{#if this.hasProposedPlan}}
-                <Button @icon="check" @text={{t "orchestrator.commit-plan"}} @type="success" @size="sm" @isLoading={{this.commitPlan.isRunning}} @onClick={{perform this.commitPlan}} />
-                <Button @icon="times" @text={{t "orchestrator.discard-plan"}} @type="default" @size="sm" @onClick={{this.discardPlan}} />
+                <Button data-test-orchestrator-review @icon="check" @text={{t "orchestrator.commit-plan"}} @type="success" @size="sm" @isLoading={{this.commitPlan.isRunning}} @disabled={{not this.planVersion}} @onClick={{this.reviewPlan}} />
+                <Button data-test-orchestrator-discard @icon="times" @text={{t "orchestrator.discard-plan"}} @type="default" @size="sm" @onClick={{this.discardPlan}} />
             {{else}}
                 <Button
+                    data-test-orchestrator-run
                     @icon="bolt"
                     @text={{if this.phaseCount (t "orchestrator.run-phases" count=this.phaseCount) (t "orchestrator.run-orchestration")}}
                     @type="primary"

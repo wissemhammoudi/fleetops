@@ -53,6 +53,10 @@ export default class OrchestratorWorkbenchComponent extends Component {
     // ── Plan state ────────────────────────────────────────────────────────────
 
     @tracked proposedPlan = null;
+    @tracked planVersion = null;
+    _commitRequestId = null;
+    _commitPayload = null;
+    _reviewRevision = 0;
     @tracked routeSummaries = {};
     @tracked unassignedAfterRun = [];
     @tracked orchestratorRunMessage = null;
@@ -70,7 +74,7 @@ export default class OrchestratorWorkbenchComponent extends Component {
     /**
      * User-composed list of phases to execute in sequence.
      * Each phase: { id, mode, label, engine, allocationStrategy, orderStatuses, balanceWorkload,
-     *               respectSkills, respectCapacity, returnToDepot, autoCommit }
+     *               respectSkills, respectCapacity, returnToDepot }
      */
     @tracked phases = [];
 
@@ -222,9 +226,13 @@ export default class OrchestratorWorkbenchComponent extends Component {
      * falls back to a single legacy 'allocate' run.
      */
     @task *runOrchestration() {
+        this._reviewRevision++;
         // Clear any routing controls from a previous run before starting a new one
         this._clearRoutingControls();
         this.proposedPlan = null;
+        this.planVersion = null;
+        this._commitRequestId = null;
+        this._commitPayload = null;
         this.isCommitted = false;
         this.manualOverrides = {};
         this.routeSummaries = {};
@@ -238,11 +246,7 @@ export default class OrchestratorWorkbenchComponent extends Component {
 
     @task *_executePhases(phases) {
         for (const phase of phases) {
-            yield this._runSinglePhase.perform(phase);
-            // If phase has autoCommit, commit immediately before next phase
-            if (phase.autoCommit && this.proposedPlan?.length) {
-                yield this.commitPlan.perform();
-            }
+            if ((yield this._runSinglePhase.perform(phase)) === false) break;
         }
     }
 
@@ -282,12 +286,17 @@ export default class OrchestratorWorkbenchComponent extends Component {
                 // them for phase-aware order/vehicle resolution without requiring
                 // a DB commit between phases.
                 prior_assignments: this.proposedPlan?.length ? this.proposedPlan : [],
+                plan_version: this.planVersion,
             };
             if (driverIds) {
                 payload.driver_ids = driverIds;
             }
 
             const result = yield this.fetch.post('fleet-ops/orchestrator/run', payload);
+            this._reviewRevision++;
+            this.planVersion = result.plan_version ?? this.planVersion;
+            this._commitRequestId = null;
+            this._commitPayload = null;
 
             // Merge results — later phases can override earlier assignments
             const newAssignments = result.assignments ?? [];
@@ -337,27 +346,54 @@ export default class OrchestratorWorkbenchComponent extends Component {
             }
             this.routeSummaries = summaries;
         } catch (error) {
+            this.planVersion = null;
             this.notifications.serverError(error);
+            return false;
         }
     }
 
-    /** Commit the (possibly modified) proposed plan and generate manifests. */
-    @task *commitPlan() {
-        if (!this.proposedPlan?.length) return;
+    @action reviewPlan() {
+        if (!this.planVersion || this.commitPlan.isRunning) return;
+        const review = { revision: this._reviewRevision, payload: this._currentCommitPayload() };
+        this.modalsManager.confirm({
+            title: this.intl.t('orchestrator.commit-plan'),
+            body: 'Commit the reviewed assignments as draft manifests? This does not dispatch orders. Collection orders require the dedicated collection/depot flow.',
+            confirm: () => this.commitPlan.perform(review),
+        });
+    }
 
+    _currentCommitPayload() {
         const finalAssignments = this.proposedPlan.map((assignment) => {
             const override = this.manualOverrides[assignment.order_id];
             return override ? { ...assignment, ...override } : assignment;
         });
 
+        return JSON.stringify({ assignments: finalAssignments, plan_version: this.planVersion, reviewed: true });
+    }
+
+    /** Consent applies only to the exact assignments/version displayed for review. */
+    @task({ drop: true }) *commitPlan(review) {
+        if (!this.proposedPlan?.length || !this.planVersion || !review) return;
+        const payload = this._currentCommitPayload();
+        if (review.revision !== this._reviewRevision || review.payload !== payload) return;
+        if (payload !== this._commitPayload) {
+            this._commitPayload = payload;
+            this._commitRequestId = crypto.randomUUID();
+        }
+
         try {
             const result = yield this.fetch.post('fleet-ops/orchestrator/commit', {
-                assignments: finalAssignments,
+                ...JSON.parse(this._commitPayload),
+                request_id: this._commitRequestId,
             });
 
-            this.notifications.success(this.intl.t('orchestrator.committed', { count: result?.committed?.length ?? finalAssignments.length }));
+            this.notifications.success(this.intl.t('orchestrator.committed', { count: result?.committed?.length ?? this.proposedPlan.length }));
+            this._reviewRevision++;
             this.isCommitted = true;
             this.proposedPlan = null;
+            this.planVersion = null;
+            this._commitRequestId = null;
+            this._commitPayload = null;
             this.unassignedAfterRun = [];
             this.manualOverrides = {};
             this.routeSummaries = {};
@@ -368,8 +404,12 @@ export default class OrchestratorWorkbenchComponent extends Component {
     }
 
     @action discardPlan() {
+        this._reviewRevision++;
         this._clearRoutingControls();
         this.proposedPlan = null;
+        this.planVersion = null;
+        this._commitRequestId = null;
+        this._commitPayload = null;
         this.unassignedAfterRun = [];
         this.manualOverrides = {};
         this.isCommitted = false;
@@ -378,6 +418,10 @@ export default class OrchestratorWorkbenchComponent extends Component {
         this.ranPhaseTypes = new Set();
     }
     @action clearRunError() {
+        this._reviewRevision++;
+        this.planVersion = null;
+        this._commitRequestId = null;
+        this._commitPayload = null;
         this.runError = null;
         this.proposedPlan = null;
         this.unassignedAfterRun = [];

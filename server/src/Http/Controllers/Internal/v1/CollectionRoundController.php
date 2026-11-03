@@ -11,25 +11,17 @@ use Fleetbase\FleetOps\Support\CollectionDepot;
 use Fleetbase\FleetOps\Support\CollectionCapacity;
 use Fleetbase\FleetOps\Support\CollectionReadiness;
 use Fleetbase\FleetOps\Support\CollectionSchedule;
+use Fleetbase\FleetOps\Support\CollectionConsoleAccess;
 use Fleetbase\Http\Controllers\Controller;
-use Fleetbase\Support\Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Milon\Barcode\Facades\DNS2DFacade as DNS2D;
 
 class CollectionRoundController extends Controller
 {
-    private function authorizeConsole(bool $write): string
-    {
-        abort_unless(session('company') && session('user') && !session('is_customer') && !session('is_driver'), 403, 'Console access is required.');
-        abort_unless(session('is_admin') || Auth::can('fleet-ops ' . ($write ? 'update' : 'view') . ' scheduling-settings'), 403, 'Scheduling permission is required.');
-
-        return (string) session('company');
-    }
-
     public function index()
     {
-        $company = $this->authorizeConsole(false);
+        $company = CollectionConsoleAccess::authorize('read');
         $paging = request()->validate(['followup_page' => ['sometimes', 'integer', 'min:1']]);
         $page = (int) ($paging['followup_page'] ?? 1);
         $schedule = CollectionSchedule::forCompany($company);
@@ -53,7 +45,8 @@ class CollectionRoundController extends Controller
             }
         });
 
-        return response()->json(['follow_up' => $rows, 'follow_up_page' => $followup->currentPage(), 'follow_up_last_page' => $followup->lastPage(), 'follow_up_total' => $followup->total(),
+        return response()->json(['permissions' => CollectionConsoleAccess::permissions(),
+            'follow_up' => $rows, 'follow_up_page' => $followup->currentPage(), 'follow_up_last_page' => $followup->lastPage(), 'follow_up_total' => $followup->total(),
             'rounds' => CollectionRound::where('company_uuid', $company)->where('status', '!=', 'closed')->whereJsonLength('stops', '>', 0)
             ->orderBy('scheduled_at')->limit(100)->get()->map(function ($round) use ($drivers, $schedule) {
                 $data = $round->toArray();
@@ -92,22 +85,24 @@ class CollectionRoundController extends Controller
 
     public function plan()
     {
-        return response()->json(CollectionRounds::plan($this->authorizeConsole(true)));
+        return response()->json(CollectionRounds::plan(CollectionConsoleAccess::authorize('plan')));
     }
 
     public function depot(Request $request, string $id)
     {
-        return response()->json(['round' => CollectionDepot::change($this->authorizeConsole(true), $id, $request->all())]);
+        $input = $request->validate(['action' => ['required', 'in:scan,reconcile,resolve']]);
+        return response()->json(['round' => CollectionDepot::change(CollectionConsoleAccess::authorize($input['action']), $id, $request->all())]);
     }
 
     public function delivery(Request $request, string $id)
     {
-        return response()->json(['delivery' => CollectionDelivery::change($this->authorizeConsole(true), $id, $request->all())]);
+        $input = $request->validate(['action' => ['required', 'in:assign,load,release,recall']]);
+        return response()->json(['delivery' => CollectionDelivery::change(CollectionConsoleAccess::authorize($input['action'] . '-delivery'), $id, $request->all())]);
     }
 
     public function labels(string $id)
     {
-        $round = CollectionRound::where('company_uuid', $this->authorizeConsole(false))->where('uuid', $id)->firstOrFail();
+        $round = CollectionRound::where('company_uuid', CollectionConsoleAccess::authorize('labels'))->where('uuid', $id)->firstOrFail();
         abort_unless($round->custody && $round->status !== 'draft', 409, 'Release the round to create physical parcel labels.');
 
         return response()->json(['labels' => array_map(fn ($unit) => \Illuminate\Support\Arr::only($unit, ['barcode', 'order_id', 'name', 'number', 'quantity'])
@@ -116,7 +111,7 @@ class CollectionRoundController extends Controller
 
     public function update(Request $request, string $id)
     {
-        $company = $this->authorizeConsole(true);
+        CollectionConsoleAccess::authorize('read');
         $input = $request->validate([
             'action' => ['required', 'in:assign,release,cancel'],
             'revision' => ['required', 'integer', 'min:1'],
@@ -124,6 +119,6 @@ class CollectionRoundController extends Controller
             'depot_uuid' => ['required_if:action,assign', 'uuid'],
         ]);
 
-        return response()->json(['round' => CollectionRounds::operate($company, $id, $input)]);
+        return response()->json(['round' => CollectionRounds::operate(CollectionConsoleAccess::authorize($input['action']), $id, $input)]);
     }
 }

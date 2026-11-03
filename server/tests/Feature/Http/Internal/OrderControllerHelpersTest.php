@@ -160,8 +160,8 @@ test('bulk assign driver validation enforces uuid contracts', function () {
 test('assign driver to orders updates the assignment column', function () {
     $connection = fleetopsInternalOrderHelpersBoot();
     $connection->table('orders')->insert([
-        ['uuid' => 'order-1', 'company_uuid' => 'company-1'],
-        ['uuid' => 'order-2', 'company_uuid' => 'company-1'],
+        ['uuid' => 'order-1', 'company_uuid' => 'company-1', 'status' => 'created'],
+        ['uuid' => 'order-2', 'company_uuid' => 'company-1', 'status' => 'created'],
     ]);
     $driver = new Driver();
     $driver->setRawAttributes(['uuid' => 'driver-1'], true);
