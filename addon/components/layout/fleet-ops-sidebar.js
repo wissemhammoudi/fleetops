@@ -134,17 +134,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                       },
                   ]
                 : []),
-            ...(this.currentUser.isAdmin
-                ? [
-                      {
-                          label: 'Customer wallets',
-                          description: 'COD balances, payout requests and driver cash receipts',
-                          icon: 'wallet',
-                          route: this.fullRoute('operations.customer-wallets'),
-                          keywords: ['wallet', 'COD', 'payout', 'billing'],
-                      },
-                  ]
-                : []),
             this.createItem('menu.orders', 'map-location-dot', 'operations.orders', 'fleet-ops list order', 'fleet-ops see order', [
                 'dashboard',
                 'orders',
