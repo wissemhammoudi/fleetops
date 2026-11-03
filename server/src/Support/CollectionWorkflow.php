@@ -20,12 +20,30 @@ class CollectionWorkflow
         'collected', 'pickup_exception', 'depot_hold', 'received_at_depot', 'ready_for_delivery_dispatch', 'out_for_delivery', 'delivered', 'cancelled',
     ];
 
+    public static function sameSnapshot(mixed $left, mixed $right): bool
+    {
+        if (!is_array($left) || !is_array($right)) {
+            return $left === $right;
+        }
+        if (count($left) !== count($right) || array_is_list($left) !== array_is_list($right)) {
+            return false;
+        }
+        // MySQL JSON storage reorders object keys, but list order and value types still matter.
+        foreach ($left as $key => $value) {
+            if (!array_key_exists($key, $right) || !self::sameSnapshot($value, $right[$key])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static function prepareForSave(Order $order): void
     {
         $meta = $order->meta ?? [];
         $original = $order->getOriginal('meta') ?? [];
         if (!$order->isRecordingCollectionReadiness() && (array_key_exists('collection_workflow', $meta) !== array_key_exists('collection_workflow', $original)
-            || data_get($meta, 'collection_workflow') !== data_get($original, 'collection_workflow'))) {
+            || !self::sameSnapshot(data_get($meta, 'collection_workflow'), data_get($original, 'collection_workflow')))) {
             throw ValidationException::withMessages(['meta.collection_workflow' => 'Collection state is managed by the collection workflow, not order edits.']);
         }
 

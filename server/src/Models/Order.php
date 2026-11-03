@@ -365,7 +365,7 @@ class Order extends Model
 
         return $this->getConnection()->transaction(function () use ($options) {
             $current = static::where('uuid', $this->uuid)->lockForUpdate()->firstOrFail();
-            abort_unless(data_get($current->meta, 'collection_workflow') === data_get($this->getOriginal('meta'), 'collection_workflow'),
+            abort_unless(CollectionWorkflow::sameSnapshot(data_get($current->meta, 'collection_workflow'), data_get($this->getOriginal('meta'), 'collection_workflow')),
                 409, 'Collection changed. Refresh the order before making changes.');
 
             return parent::save($options);
