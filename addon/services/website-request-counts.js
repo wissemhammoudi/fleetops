@@ -8,15 +8,18 @@ export default class WebsiteRequestCountsService extends Service {
     @service fetch;
     @service abilities;
     @service universe;
+    @service notifications;
     @tracked counts = { new: 0, contact: 0, driver: 0 };
     timer = null;
     started = false;
+    loading = false;
 
     get canList() {
         return !this.abilities.cannot('fleet-ops list contact-enquiry') || !this.abilities.cannot('fleet-ops list driver-application');
     }
 
     get badge() {
+        if (!this.canList) return null;
         const count = this.counts.new ?? 0;
         if (count <= 0) return null;
         return count > 99 ? '99+' : String(count);
@@ -33,13 +36,17 @@ export default class WebsiteRequestCountsService extends Service {
     }
 
     async refresh() {
-        if (!this.canList) return;
+        if (!this.canList || this.loading || this.isDestroying || this.isDestroyed) return;
+        this.loading = true;
         try {
             const result = await this.fetch.get('website-inbox/counts', {}, API);
-            if (this.isDestroying || this.isDestroyed || typeof result?.new !== 'number') return;
+            if (this.isDestroying || this.isDestroyed) return;
+            if (!Number.isInteger(result?.new) || result.new < 0) throw new Error('The website request count response was invalid.');
             this.counts = { new: result.new, contact: result.contact ?? 0, driver: result.driver ?? 0 };
-        } catch {
-            // Keep the last known badge; the page itself reports load errors.
+        } catch (error) {
+            if (!this.isDestroying && !this.isDestroyed) this.notifications.serverError(error);
+        } finally {
+            this.loading = false;
         }
     }
 
