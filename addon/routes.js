@@ -172,6 +172,11 @@ export default buildRoutes(function () {
                 this.route('edit', { path: '/edit/:public_id' });
             });
         });
+        this.route('website-requests', function () {
+            this.route('index', { path: '/' }, function () {
+                this.route('details', { path: '/:id' });
+            });
+        });
     });
     this.route('connectivity', function () {
         this.route('fuel-providers', { path: '/fuel-integrations' }, function () {

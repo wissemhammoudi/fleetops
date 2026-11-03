@@ -1,15 +1,11 @@
 import Route from '@ember/routing/route';
 import { inject as service } from '@ember/service';
 
+// Website requests moved next to Issues; keep old links working.
 export default class OperationsWebsiteInboxRoute extends Route {
-    @service abilities;
     @service hostRouter;
-    @service notifications;
 
     beforeModel() {
-        if (this.abilities.cannot('fleet-ops list contact-enquiry') && this.abilities.cannot('fleet-ops list driver-application')) {
-            this.notifications.warning('You do not have permission to access the website inbox.');
-            return this.hostRouter.transitionTo('console.home');
-        }
+        return this.hostRouter.transitionTo('console.fleet-ops.management.website-requests.index');
     }
 }

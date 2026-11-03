@@ -20,6 +20,7 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
     @service abilities;
     @service fetch;
     @service currentUser;
+    @service websiteRequestCounts;
 
     @tracked routePrefix = 'console.fleet-ops.';
     @tracked universeMenuItems = [];
@@ -34,6 +35,7 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
     constructor() {
         super(...arguments);
         this.createMenuItemsFromUniverseRegistry();
+        this.websiteRequestCounts.start();
     }
 
     get createOrderAction() {
@@ -132,17 +134,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                       },
                   ]
                 : []),
-            ...(!this.abilities.cannot('fleet-ops list contact-enquiry') || !this.abilities.cannot('fleet-ops list driver-application')
-                ? [
-                      {
-                          label: 'Website requests',
-                          description: 'Status and assignment for contact enquiries and driver applications',
-                          icon: 'inbox',
-                          route: this.fullRoute('operations.website-inbox'),
-                          keywords: ['support', 'contact', 'driver applications'],
-                      },
-                  ]
-                : []),
             ...(this.currentUser.isAdmin
                 ? [
                       {
@@ -193,6 +184,19 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
             this.createItem('menu.fuel-reports', 'gas-pump', 'management.fuel-reports', 'fleet-ops list fuel-report', 'fleet-ops see fuel-report'),
             this.createItem('menu.fuel-transactions', 'credit-card', 'management.fuel-transactions', 'fleet-ops list fuel-report', 'fleet-ops see fuel-report'),
             this.createItem('menu.issues', 'triangle-exclamation', 'management.issues', 'fleet-ops list issue', 'fleet-ops see issue'),
+            ...(this.websiteRequestCounts.canList
+                ? [
+                      {
+                          priority: this.defaultPriorityForRoute('management.website-requests'),
+                          label: 'Website requests',
+                          description: 'Contact us enquiries and Become a driver applications',
+                          icon: 'inbox',
+                          route: this.fullRoute('management.website-requests'),
+                          badge: this.websiteRequestCounts.badge,
+                          keywords: ['website', 'inbox', 'support', 'contact', 'driver applications'],
+                      },
+                  ]
+                : []),
         ]);
     }
 
@@ -406,6 +410,7 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
             'management.fuel-reports': 8,
             'management.fuel-transactions': 9,
             'management.issues': 10,
+            'management.website-requests': 11,
             'maintenance.index': 0,
             'maintenance.schedules': 1,
             'maintenance.work-orders': 2,

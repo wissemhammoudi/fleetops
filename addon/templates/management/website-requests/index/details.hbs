@@ -1,0 +1,74 @@
+<Layout::Resource::Panel
+    @resource={{this.submission}}
+    @pojoResource={{true}}
+    @controller={{this}}
+    @headerComponent={{component "website-request/panel-header" receivedAt=this.receivedAt}}
+    @actionButtons={{this.actionButtons}}
+    @onPressCancel={{this.close}}
+    @headerClass="no-bottom-border"
+    @bodyClass="no-scroll"
+    @width="800px"
+>
+    <TabNavigation @tabs={{this.tabs}} @contentClass="scrollable" @tablistClass="pl-2" as |tab|>
+        <div class="p-4 space-y-4" data-test-website-request-tab={{tab.id}}>
+            {{#if this.error}}<p role="alert" class="text-sm text-red-500">{{this.error}}</p>{{/if}}
+            {{#if (eq tab.id "history")}}
+                <ol class="space-y-3" aria-label="Request history">
+                    {{#each this.history as |entry|}}
+                        <li class="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-1" data-test-website-request-history>
+                            <div class="flex flex-wrap justify-between gap-2 text-xs text-gray-500">
+                                <span class="font-semibold text-gray-700 dark:text-gray-200">{{entry.who}}</span>
+                                <span>{{entry.when}}</span>
+                            </div>
+                            <p class="text-sm whitespace-pre-wrap break-words dark:text-gray-100">{{entry.body}}</p>
+                            {{#if entry.omitted_attachments}}<p class="text-xs text-gray-500">{{entry.omitted_attachments}} historical email attachment(s) were not imported.</p>{{/if}}
+                        </li>
+                    {{else}}
+                        <li class="text-sm text-gray-500">No status or assignment changes yet.</li>
+                    {{/each}}
+                </ol>
+                {{#unless (and this.newestHistory this.oldestHistory)}}
+                    <div class="flex items-center gap-2">
+                        <Button @size="sm" @text="Older" @disabled={{or this.oldestHistory this.busy}} @onClick={{fn this.historyPage 1}} />
+                        <span class="text-xs text-gray-500">Page {{this.model.messages_page}} / {{this.model.messages_last_page}}</span>
+                        <Button @size="sm" @text="Newer" @disabled={{or this.newestHistory this.busy}} @onClick={{fn this.historyPage -1}} />
+                    </div>
+                {{/unless}}
+            {{else}}
+                <ContentPanel @title="Review" @open={{true}} @wrapperClass="bordered-top">
+                    {{#if this.canUpdate}}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <InputGroup @name="Status">
+                                <select aria-label="Status" class="form-select w-full" disabled={{this.busy}} {{on "change" (fn this.field "status")}}>
+                                    {{#if this.legacyStatus}}<option value="waiting_for_reply" selected={{eq this.status "waiting_for_reply"}} disabled>Waiting for reply (historical)</option>{{/if}}
+                                    {{#each this.model.statuses as |status|}}<option value={{status}} selected={{eq this.status status}}>{{humanize status}}</option>{{/each}}
+                                </select>
+                            </InputGroup>
+                            <InputGroup @name="Assigned to">
+                                <select aria-label="Assigned to" class="form-select w-full" disabled={{this.busy}} {{on "change" (fn this.field "assignee")}}>
+                                    <option value="" selected={{not this.assignee}}>Unassigned</option>
+                                    {{#each this.model.assignees as |staff|}}<option value={{staff.uuid}} selected={{eq this.assignee staff.uuid}}>{{staff.name}}</option>{{/each}}
+                                </select>
+                            </InputGroup>
+                        </div>
+                        {{#if this.isDriver}}
+                            <p class="text-xs text-gray-500 mb-3">Contacted means you reached the applicant outside the platform, for example by phone. Accepting records a decision only; it never creates a driver account.</p>
+                        {{/if}}
+                        <Button @type="primary" @icon="save" @text="Save review" @isLoading={{this.busy}} @disabled={{this.unchanged}} @onClick={{this.save}} />
+                    {{else}}
+                        <p class="text-sm text-gray-500">You can view this request but not change its status or assignment.</p>
+                    {{/if}}
+                </ContentPanel>
+                <ContentPanel @title="Request details" @open={{true}} @wrapperClass="bordered-top">
+                    <dl class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div><dt class="field-info-container-label">Email</dt><dd class="break-words dark:text-gray-100">{{or this.submission.email "-"}}</dd></div>
+                        <div><dt class="field-info-container-label">Phone</dt><dd class="dark:text-gray-100" dir="ltr">{{or this.submission.phone "-"}}</dd></div>
+                        {{#each this.fields as |field|}}
+                            <div data-test-website-request-field><dt class="field-info-container-label capitalize">{{field.label}}</dt><dd class="whitespace-pre-wrap break-words dark:text-gray-100">{{field.value}}</dd></div>
+                        {{/each}}
+                    </dl>
+                </ContentPanel>
+            {{/if}}
+        </div>
+    </TabNavigation>
+</Layout::Resource::Panel>

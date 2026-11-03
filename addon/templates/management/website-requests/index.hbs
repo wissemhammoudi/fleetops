@@ -1,0 +1,26 @@
+<Layout::Resource::Tabular
+    @resource="website-request"
+    @title="Website requests"
+    @searchQuery={{this.query}}
+    @onSearch={{perform this.searchTask}}
+    @data={{@model}}
+    @columns={{this.columns}}
+    @page={{this.page}}
+    @onPageChange={{fn (mut this.page)}}
+    @setupTable={{fn (mut this.table)}}
+    @actionButtons={{this.actionButtons}}
+    @onRowClick={{this.view}}
+    @selectable={{false}}
+    @canSelectAll={{false}}
+    @isFiltered={{this.isFiltered}}
+    @controller={{this}}
+    @emptyStateComponent={{component
+        "table/empty-state"
+        icon="inbox"
+        title="No website requests yet"
+        description="Contact us enquiries and Become a driver applications from the website appear here. Staff are notified in the bell when a new one arrives."
+        filteredTitle="No requests match your filters"
+        filteredDescription="Clear the search or filters to review other website requests."
+    }}
+/>
+{{outlet}}

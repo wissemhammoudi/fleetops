@@ -1,0 +1,31 @@
+<div class="issue-panel-header website-request-panel-header" data-test-website-request-header>
+    <div class="issue-panel-header-main">
+        <div class="issue-panel-header-icon">
+            <FaIcon @icon={{if (eq @resource.type "driver") "id-card" "envelope"}} />
+        </div>
+        <div class="issue-panel-header-content">
+            <div class="issue-panel-header-title-row">
+                <h1 class="issue-panel-header-title">{{@resource.name}}</h1>
+            </div>
+            {{#if @resource.reference}}
+                <ClickToCopy @value={{@resource.reference}} class="issue-panel-header-id">
+                    <FaIcon @icon="hashtag" />
+                    <span>{{@resource.reference}}</span>
+                </ClickToCopy>
+            {{/if}}
+            <div class="issue-panel-header-meta">
+                <span>{{if (eq @resource.type "driver") "Driver application" "Contact enquiry"}}</span>
+                {{#if @receivedAt}}
+                    <span>Received {{@receivedAt}}</span>
+                {{/if}}
+            </div>
+        </div>
+    </div>
+
+    <div class="issue-panel-header-actions">
+        <div class="issue-panel-header-badges">
+            <Badge @status={{@resource.status}} />
+        </div>
+        <Layout::Resource::Panel::HeaderActions @resource={{@resource}} @pojoResource={{true}} @actionButtons={{@actionButtons}} @onPressCancel={{@onPressCancel}} />
+    </div>
+</div>
