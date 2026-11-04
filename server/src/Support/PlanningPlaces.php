@@ -25,6 +25,27 @@ class PlanningPlaces
             ->get()->map(fn ($place) => self::summary($place))->all();
     }
 
+    public static function depotIds(string $company): array
+    {
+        $configuration = self::configuration($company);
+
+        return $configuration['depot_uuids'] ?? array_values(array_filter([$configuration['default_depot_uuid'] ?? null]));
+    }
+
+    public static function depots(string $company): array
+    {
+        $ids = self::depotIds($company);
+
+        return array_values(array_filter(self::places($company), fn ($place) => in_array($place['uuid'], $ids, true)));
+    }
+
+    public static function depot(string $company, string $uuid): array
+    {
+        abort_unless(in_array($uuid, self::depotIds($company), true), 422, 'Choose a depot registered in Organization management.');
+
+        return self::snapshot($company, $uuid);
+    }
+
     public static function snapshot(string $company, string $uuid): array
     {
         $place = DB::connection(config('fleetbase.connection.db', 'mysql'))->table('places')
@@ -62,9 +83,14 @@ class PlanningPlaces
             $previous = $setting->value;
             $revision = (int) $input['revision'];
             abort_unless(($previous['revision'] ?? 0) === $revision, 409, 'Planning configuration changed. Refresh before saving.');
-            $configuration = ['default_depot_uuid' => $input['default_depot_uuid'], 'revision' => $revision + 1];
+            $depots = $input['depot_uuids'] ?? array_values(array_unique([...self::depotIds($company), $input['default_depot_uuid']]));
+            if (!$depots || !in_array($input['default_depot_uuid'], $depots, true)) {
+                throw ValidationException::withMessages(['default_depot_uuid' => 'Keep at least one depot and select its default.']);
+            }
+            foreach ($depots as $uuid) self::snapshot($company, $uuid);
+            $configuration = ['default_depot_uuid' => $input['default_depot_uuid'], 'depot_uuids' => array_values($depots), 'revision' => $revision + 1];
             $history = $previous['history'] ?? [];
-            $history[] = ['actor_uuid' => $actor, 'at' => now()->toISOString(), 'default_depot_uuid' => $input['default_depot_uuid']];
+            $history[] = ['actor_uuid' => $actor, 'at' => now()->toISOString()] + $configuration;
             $setting->value = $configuration + ['history' => $history];
             $setting->save();
 

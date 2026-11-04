@@ -37,6 +37,12 @@ export default class PlanningWorkspaceComponent extends Component {
                 ((this.data.permissions.plan_pickup && order.state === 'ready_for_pickup') || (this.data.permissions.optimize_delivery && order.state === 'received_at_depot')),
             canOpenRound: this.data.permissions.collection && this.collectionPlanning.rounds.some((round) => round.uuid === order.round_uuid),
             stateLabel: this.intl.exists(`planning.states.${order.state}`) ? this.intl.t(`planning.states.${order.state}`) : order.state,
+            stateClass:
+                order.stage === 'attention'
+                    ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    : order.stage === 'complete'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
         }));
     }
 
@@ -49,6 +55,22 @@ export default class PlanningWorkspaceComponent extends Component {
 
     get places() {
         return (this.data?.places ?? []).filter((place) => place.routable);
+    }
+
+    get depots() {
+        return (this.data?.depots ?? []).filter((place) => place.routable);
+    }
+
+    get selectedDepot() {
+        return this.depots.find((place) => place.uuid === this.depot);
+    }
+
+    get workflowStages() {
+        return ['waiting', 'pickup', 'depot', 'delivery', 'complete'].map((value, index) => ({
+            value,
+            number: index + 1,
+            label: this.intl.t(`planning.stages.${value}`),
+        }));
     }
 
     get savedRoutes() {
@@ -94,6 +116,7 @@ export default class PlanningWorkspaceComponent extends Component {
             if (
                 !Array.isArray(result.orders) ||
                 !Array.isArray(result.places) ||
+                !Array.isArray(result.depots) ||
                 !result.configuration ||
                 !result.permissions ||
                 !Number.isInteger(result.page) ||
@@ -105,7 +128,7 @@ export default class PlanningWorkspaceComponent extends Component {
             if (company !== this.currentUser.companyId) return;
             this.data = result;
             this.page = result.page;
-            this.depot = result.configuration.default_depot_uuid ?? '';
+            this.depot = (result.depots ?? []).some((place) => place.uuid === this.depot && place.routable) ? this.depot : (result.configuration.default_depot_uuid ?? '');
             return true;
         } catch (error) {
             if (company !== this.currentUser.companyId) return;
@@ -121,11 +144,21 @@ export default class PlanningWorkspaceComponent extends Component {
         this.load.perform(1);
     }
 
+    @action chooseStage(stage) {
+        this.stage = stage;
+        this.load.perform(1);
+    }
+
+    @action clearSelection() {
+        this.selected = new Set();
+    }
+
     @action setSearch(event) {
         this.search = event.target.value;
     }
 
-    @action find() {
+    @action find(event) {
+        event?.preventDefault();
         this.load.perform(1);
     }
 
@@ -184,23 +217,8 @@ export default class PlanningWorkspaceComponent extends Component {
         }
     }
 
-    @dropTask *saveDepot() {
-        const company = this.currentUser.companyId;
-        try {
-            yield this.fetch.post('fleet-ops/planning/configuration', {
-                default_depot_uuid: this.depot,
-                revision: this.data.configuration.revision,
-            });
-            if (company !== this.currentUser.companyId) return;
-            const refreshed = yield this.load.perform();
-            if (refreshed) this.notifications.success(this.intl.t('planning.depot-saved'));
-        } catch (error) {
-            if (company === this.currentUser.companyId) this.notifications.serverError(error);
-        }
-    }
-
     @action reviewPickups() {
-        if (!this.selected.size || !this.pickupDate || !this.defaultDepot || this.rows.some((order) => order.selected && order.state !== 'ready_for_pickup')) {
+        if (!this.selected.size || !this.pickupDate || !this.selectedDepot || this.rows.some((order) => order.selected && order.state !== 'ready_for_pickup')) {
             this.notifications.warning(this.intl.t('planning.pickup-required'));
             return;
         }

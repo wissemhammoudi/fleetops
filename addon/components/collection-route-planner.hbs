@@ -1,12 +1,12 @@
 <section
-    class="p-4 space-y-3 border rounded dark:border-gray-700"
+    class="p-5 lg:p-6 space-y-5 border border-gray-200 rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 shadow-sm"
     data-test-route-optimizer
     {{did-update this.invalidate @selection @depotUuid}}
     {{did-update this.resetCompany this.currentUser.companyId}}
 >
-    <h3 class="font-semibold">{{t "planning.optimizer.title"}}</h3>
-    <p>{{t "planning.optimizer.help"}}</p>
-    <fieldset disabled={{this.busy}} class="space-y-3">
+    <h3 class="text-lg font-semibold">{{t "planning.optimizer.title"}}</h3>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{{t "planning.optimizer.help"}}</p>
+    <fieldset disabled={{this.busy}} class="flex flex-wrap items-end gap-4">
         <label>{{t "planning.route-type"}}
             <select class="form-select" {{on "change" (fn this.setField "kind")}} data-test-route-kind>
                 {{#if @permissions.optimize_pickup}}<option value="pickup" selected={{eq this.kind "pickup"}}>{{t "planning.pickups"}}</option>{{/if}}
@@ -21,7 +21,7 @@
         {{/if}}
         <label>{{t "planning.optimizer.end"}} <input class="form-input" type="time" value={{this.endTime}} {{on "change" (fn this.setField "endTime")}} /></label>
         {{#each this.driverRows as |driver|}}
-            <div class="flex flex-wrap gap-3">
+            <div class="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                 <label><input type="checkbox" checked={{driver.checked}} {{on "change" (fn this.toggleDriver driver)}} data-test-route-driver={{driver.uuid}} /> {{driver.name}}</label>
                 {{#if (and driver.checked (eq this.kind "pickup"))}}
                     <label>{{t "planning.vehicle-start"}}
@@ -32,7 +32,14 @@
                 {{/if}}
             </div>
         {{/each}}
-        <Button @text={{t "planning.optimizer.orchestrate"}} @onClick={{perform this.orchestrate}} @disabled={{or (not this.permitted) this.busy (not @depotUuid)}} data-test-route-run />
+        <Button
+            @type="primary"
+            @icon="route"
+            @text={{t "planning.optimizer.orchestrate"}}
+            @onClick={{perform this.orchestrate}}
+            @disabled={{or (not this.permitted) this.busy (not @depotUuid) (not @selection.size)}}
+            data-test-route-run
+        />
     </fieldset>
     {{#if this.error}}<p role="alert">{{this.error}}</p>{{/if}}
     {{#if this.proposal}}
@@ -61,7 +68,7 @@
             </LeafletMap>
         </div>
         {{#each this.routes as |route|}}
-            <article class="border rounded p-3" data-test-route-review>
+            <article class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-2" data-test-route-review>
                 <h4>{{route.driver_name}}: {{route.kilometers}} km / {{route.minutes}} min</h4>
                 <p>{{route.origin.name}} &rarr; {{route.destination.name}}</p>
                 {{#unless route.geometry}}<p>{{t "planning.optimizer.no-geometry"}}</p>{{/unless}}

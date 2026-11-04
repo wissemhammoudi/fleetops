@@ -112,7 +112,7 @@ class CollectionRoutePlans
         if ($input['kind'] === 'pickup') {
             abort_unless(in_array($input['date'], CollectionSchedule::pickupDates(now(), $calendar), true), 422, 'Choose an available pickup operating date.');
         }
-        $depot = PlanningPlaces::snapshot($company, $input['depot_uuid']);
+        $depot = PlanningPlaces::depot($company, $input['depot_uuid']);
         $depotRow = self::db()->table('places')->where('company_uuid', $company)->where('uuid', $depot['uuid'])
             ->select('*')->selectRaw('ST_AsText(location) as location_wkt')->first();
         $depotLegacy = \Illuminate\Support\Arr::only((array) $depotRow,

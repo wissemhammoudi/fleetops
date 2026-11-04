@@ -1,4 +1,21 @@
 planning:
+    design:
+        eyebrow: Centre de contrôle des opérations
+        lifecycle: Parcours des commandes
+        overview: Aperçu de la planification
+        loading: Actualisation de la planification...
+        results: Commandes correspondantes
+        results-help: Total selon le statut et la recherche actuels.
+        selection: Commandes sélectionnées
+        selection-help: Sélectionnez les collectes prêtes ou les livraisons reçues au dépôt, puis vérifiez le trajet avant de l'enregistrer.
+        route-depot: Dépôt pour ce plan
+        manage-depots: Gérer les dépôts dans les paramètres de l'organisation
+        no-depot: Demandez au propriétaire ou à un Administrateur d'enregistrer un dépôt avec une adresse et une position vérifiées.
+        order-queue: Liste des commandes
+        search-placeholder: Rechercher par numéro de commande
+        empty-help: Essayez un autre statut ou une autre recherche, ou actualisez après la création d'une commande.
+        plan-selection: Planifier la sélection
+        clear-selection: Effacer la sélection
     optimizer:
         title: Orchestrer les commandes sélectionnées
         saved-routes: Trajets optimisés enregistrés (pas de positions en direct)

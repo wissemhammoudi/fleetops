@@ -2,6 +2,23 @@ fleet-ops:
     extension-name: Fleet-Ops
 
 planning:
+    design:
+        eyebrow: Operations control center
+        lifecycle: Order journey
+        overview: Planning overview
+        loading: Refreshing your planning workspace...
+        results: Matching orders
+        results-help: Total matching the current stage and search.
+        selection: Selected orders
+        selection-help: Select ready pickups or depot-received deliveries, then review a route before saving.
+        route-depot: Depot for this plan
+        manage-depots: Manage depots in Organization settings
+        no-depot: Ask an organization owner or Administrator to register a depot with a verified address and map position.
+        order-queue: Order queue
+        search-placeholder: Search by order number
+        empty-help: Try another stage or search, or refresh after a customer creates an order.
+        plan-selection: Plan your selection
+        clear-selection: Clear selection
     optimizer:
         title: Orchestrate selected orders
         saved-routes: Saved optimized routes (not a live position feed)
