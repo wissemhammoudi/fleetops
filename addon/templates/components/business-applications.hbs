@@ -1,0 +1,41 @@
+<ContentPanel @title="Customer business verification" @open={{false}} @wrapperClass="bordered-classic">
+    <div class="space-y-4">
+        <p>Review Tunisian business applications and private documents. Approval creates or verifies a separate customer company workspace; personal orders and financial history are never
+            moved.</p>
+        {{#if this.error}}<p role="alert" class="text-red-600">{{this.error}}</p>{{/if}}
+        <Button @text="Refresh applications" @onClick={{perform this.load}} @disabled={{this.decide.isRunning}} />
+        {{#each this.applications as |application|}}
+            <div class="border rounded p-3 flex flex-wrap gap-3 items-center">
+                <span>{{application.uuid}} - {{application.status}} - revision {{application.revision}}</span>
+                <Button @text="Review" @onClick={{perform this.show application.uuid}} @disabled={{this.decide.isRunning}} />
+            </div>
+        {{else}}
+            <p>No applications found.</p>
+        {{/each}}
+        <div class="flex flex-wrap gap-3">
+            <Button @text="Previous page" @onClick={{this.previous}} @disabled={{or (eq this.page 1) this.load.isRunning}} />
+            <span>Page {{this.page}} / {{this.lastPage}}</span>
+            <Button @text="Next page" @onClick={{this.next}} @disabled={{or (eq this.page this.lastPage) this.load.isRunning}} />
+        </div>
+        {{#if this.application}}
+            <h3 class="font-bold">{{this.application.status}} - revision {{this.application.revision}}</h3>
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {{#each this.fields as |field|}}<div><dt class="font-semibold">{{field.name}}</dt><dd class="break-words">{{field.value}}</dd></div>{{/each}}
+            </dl>
+            {{#each this.documents as |document|}}
+                <Button @text={{concat "Download and review " document.kind}} @onClick={{perform this.download document}} @disabled={{this.download.isRunning}} />
+            {{/each}}
+            {{#if (eq this.application.status "pending_review")}}
+                <p>Download and inspect all required documents before approving. Record your verification outcome below; notes are visible to the owner.</p>
+                <InputGroup @name="Review note (required)" @value={{this.note}} />
+                <div class="flex flex-wrap gap-3">
+                    <Button @text="Approve and activate" @type="primary" @onClick={{perform this.decide "verified"}} @disabled={{this.decide.isRunning}} />
+                    <Button @text="Request corrections" @onClick={{perform this.decide "changes_requested"}} @disabled={{this.decide.isRunning}} />
+                    <Button @text="Reject application" @type="danger" @onClick={{perform this.decide "rejected"}} @disabled={{this.decide.isRunning}} />
+                </div>
+            {{else}}
+                <p>{{this.application.review_note}}</p>
+            {{/if}}
+        {{/if}}
+    </div>
+</ContentPanel>

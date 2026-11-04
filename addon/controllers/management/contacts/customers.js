@@ -4,6 +4,7 @@ import { buildIdentityStub } from '../../../utils/identity-cell-resource';
 import relationValue from '../../../utils/relation-value';
 
 export default class ManagementContactsCustomersController extends ManagementContactsIndexController {
+    @service currentUser;
     @service('customerActions') contactActions;
 
     get customerActions() {

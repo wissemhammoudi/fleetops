@@ -1,3 +1,8 @@
+{{#if this.currentUser.isAdmin}}
+    <div class="p-4" data-test-customer-business-verification>
+        <BusinessApplications />
+    </div>
+{{/if}}
 {{#if (eq this.layout "table")}}
     <Layout::Resource::Tabular
         @resource="contact"
