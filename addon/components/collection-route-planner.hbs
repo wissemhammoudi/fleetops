@@ -1,6 +1,6 @@
 {{! CollectionRoutePlanner — centre map + right panel, laid out like the legacy orchestrator workbench }}
 <div
-    class="collection-route-planner flex flex-1 min-h-[32rem] h-full overflow-hidden"
+    class="collection-route-planner flex flex-1 min-h-0 h-full overflow-hidden"
     data-test-route-optimizer
     {{did-update this.invalidate @selection @depotUuid @kind}}
     {{did-update this.resetCompany this.currentUser.companyId}}
@@ -27,7 +27,7 @@
     </button>
 
     {{! ── RIGHT PANEL: drivers (pre-run) or proposed routes (post-run) ── }}
-    <aside class="driver-panel flex flex-col border-l dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0 {{if this.panelCollapsed 'w-0 overflow-hidden' 'w-96'}}">
+    <aside class="driver-panel flex flex-col min-h-0 border-l dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0 {{if this.panelCollapsed 'w-0 overflow-hidden' 'w-96'}}">
         {{! Header }}
         <div class="px-3 py-2 border-b dark:border-gray-700 flex-shrink-0">
             <div class="flex items-center gap-2">
@@ -73,7 +73,7 @@
             {{/each}}
         </ol>
 
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 min-h-0 overflow-y-auto">
             {{#if this.error}}
                 <div
                     class="flex items-start gap-2 mx-3 mt-2 px-3 py-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-xs text-red-800 dark:text-red-200"
