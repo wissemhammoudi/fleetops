@@ -25,6 +25,18 @@ class PlanningPlaces
             ->get()->map(fn ($place) => self::summary($place))->all();
     }
 
+    public static function summaries(string $company, array $ids): array
+    {
+        if (!$ids) {
+            return [];
+        }
+
+        return DB::connection(config('fleetbase.connection.db', 'mysql'))->table('places')
+            ->where('company_uuid', $company)->whereNull('deleted_at')->whereIn('uuid', array_values(array_unique($ids)))
+            ->select(['uuid', 'name', 'street1', 'phone'])->selectRaw('ST_AsText(location) as location_wkt')
+            ->get()->mapWithKeys(fn ($place) => [$place->uuid => self::summary($place)])->all();
+    }
+
     public static function depotIds(string $company): array
     {
         $configuration = self::configuration($company);

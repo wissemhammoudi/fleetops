@@ -37,6 +37,8 @@ export default class PlanningWorkspaceComponent extends Component {
     @tracked roundId = null;
     @tracked showDirectPlanner = false;
     @tracked hasCollectionPreview = false;
+    @tracked leftCollapsed = false;
+    @tracked rightCollapsed = false;
 
     constructor() {
         super(...arguments);
@@ -91,11 +93,11 @@ export default class PlanningWorkspaceComponent extends Component {
     get counts() {
         const counts = this.data?.counts ?? {};
         return [
-            { key: 'ready_for_pickup', stage: 'pickup', value: counts.ready_for_pickup ?? 0, tone: 'emerald' },
-            { key: 'pickup_planned', stage: 'pickup', value: counts.pickup_planned ?? 0, tone: 'blue' },
-            { key: 'at_depot', stage: 'depot', value: counts.at_depot ?? 0, tone: 'violet' },
-            { key: 'attention', stage: 'attention', value: counts.attention ?? 0, tone: 'red' },
-        ].map((card) => ({ ...card, label: this.intl.t(`planning.orchestrator.counts.${card.key}`) }));
+            { key: 'ready_for_pickup', stage: 'pickup', value: counts.ready_for_pickup ?? 0, dot: 'bg-emerald-500' },
+            { key: 'pickup_planned', stage: 'pickup', value: counts.pickup_planned ?? 0, dot: 'bg-blue-500' },
+            { key: 'at_depot', stage: 'depot', value: counts.at_depot ?? 0, dot: 'bg-violet-500' },
+            { key: 'attention', stage: 'attention', value: counts.attention ?? 0, dot: 'bg-red-500' },
+        ].map((card) => ({ ...card, label: this.intl.t(`planning.orchestrator.counts.${card.key}`), active: this.stage === card.stage }));
     }
 
     get canPlanPickup() {
@@ -125,12 +127,36 @@ export default class PlanningWorkspaceComponent extends Component {
         return this.depots.find((place) => place.uuid === this.depot);
     }
 
-    get workflowStages() {
-        return ['waiting', 'pickup', 'depot', 'delivery', 'complete'].map((value, index) => ({
-            value,
-            number: index + 1,
-            label: this.intl.t(`planning.stages.${value}`),
+    get selectedRows() {
+        return this.rows.filter((order) => order.selected);
+    }
+
+    get mapOrders() {
+        return this.selected.size ? this.selectedRows : this.rows.filter((order) => order.kind);
+    }
+
+    get idleDrivers() {
+        return (this.data?.route_drivers ?? []).map((driver) => ({
+            ...driver,
+            vehicleLabel: [driver.vehicle_name, driver.plate_number].filter(Boolean).join(' - '),
         }));
+    }
+
+    @action toggleLeftPanel() {
+        this.leftCollapsed = !this.leftCollapsed;
+    }
+
+    @action toggleRightPanel() {
+        this.rightCollapsed = !this.rightCollapsed;
+    }
+
+    @action stopPropagation(event) {
+        event.stopPropagation();
+    }
+
+    @action toggleCard(order) {
+        if (!order.selectable || this.load.isRunning) return;
+        this.toggle(order, { target: { checked: !order.selected } });
     }
 
     get savedRoutes() {
@@ -223,8 +249,7 @@ export default class PlanningWorkspaceComponent extends Component {
     @action openPlanner(kind) {
         this.plannerKind = kind;
         this.showDirectPlanner = false;
-        // Wait for the planner to render before scrolling it into view.
-        requestAnimationFrame(() => document.querySelector('[data-test-route-optimizer]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        this.roundId = null;
     }
 
     @action closePlanner() {

@@ -1,0 +1,76 @@
+<div class="orchestrator-map-container fleetbase-leaflet-map-container next-map-container relative w-full h-full" data-test-route-map>
+    <LeafletMap @lat={{this.center.lat}} @lng={{this.center.lng}} @zoom={{11}} class="w-full h-full" as |layers|>
+        <layers.tile @url={{this.mapSettings.leafletTileUrl}} />
+
+        {{#if this.depot}}
+            <layers.marker
+                @lat={{this.depot.location.lat}}
+                @lng={{this.depot.location.lng}}
+                @icon={{div-icon html=(this.icon "H" this.depotColor) className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16) popupAnchor=(array 0 -20)}}
+                @riseOnHover={{true}}
+                as |marker|
+            >
+                <marker.tooltip @permanent={{false}} @sticky={{true}} @direction="top">{{this.depot.name}} — {{this.depot.street1}}</marker.tooltip>
+            </layers.marker>
+        {{/if}}
+
+        {{#each this.markers as |stop|}}
+            <layers.marker
+                @lat={{stop.place.location.lat}}
+                @lng={{stop.place.location.lng}}
+                @opacity={{if stop.dimmed 0.45 1}}
+                @icon={{div-icon html=(this.icon stop.label stop.color) className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16) popupAnchor=(array 0 -20)}}
+                @riseOnHover={{true}}
+                as |marker|
+            >
+                <marker.tooltip @permanent={{false}} @sticky={{true}} @direction="top">
+                    <div class="text-xs">
+                        <div class="font-semibold">{{stop.order.order_id}}</div>
+                        <div class="text-gray-500">{{stop.place.name}} — {{stop.place.street1}}</div>
+                    </div>
+                </marker.tooltip>
+            </layers.marker>
+        {{/each}}
+
+        {{#each this.routes as |route|}}
+            {{#if route.coordinates.length}}<layers.polyline @locations={{route.coordinates}} @color={{route.color}} @weight={{5}} @opacity={{0.85}} />{{/if}}
+            <layers.marker @lat={{route.origin.location.lat}} @lng={{route.origin.location.lng}} as |marker|>
+                <marker.tooltip>{{route.driver_name}}: {{route.origin.name}}</marker.tooltip>
+            </layers.marker>
+            {{#each route.stops as |stop|}}
+                <layers.marker
+                    @lat={{stop.location.lat}}
+                    @lng={{stop.location.lng}}
+                    @icon={{div-icon
+                        html=(this.icon stop.sequence route.color)
+                        className="fleetops-waypoint-marker"
+                        iconSize=(array 32 32)
+                        iconAnchor=(array 16 32)
+                        popupAnchor=(array 0 -32)
+                    }}
+                    @riseOnHover={{true}}
+                    as |marker|
+                >
+                    <marker.tooltip @permanent={{false}} @sticky={{true}} @direction="top">
+                        <div class="text-xs">
+                            <div class="font-semibold">{{stop.sequence}}. {{stop.order_id}}</div>
+                            <div class="text-gray-500">{{stop.label}}</div>
+                            {{#if stop.time}}<div class="text-blue-400">{{stop.time}}</div>{{/if}}
+                        </div>
+                    </marker.tooltip>
+                </layers.marker>
+            {{/each}}
+            <layers.marker @lat={{route.destination.location.lat}} @lng={{route.destination.location.lng}} as |marker|>
+                <marker.tooltip>{{route.destination.name}}</marker.tooltip>
+            </layers.marker>
+        {{/each}}
+    </LeafletMap>
+
+    {{#unless this.routes.length}}
+        <div class="absolute bottom-3 left-3 z-[400] flex items-center gap-3 rounded bg-white/90 dark:bg-gray-900/90 px-2.5 py-1.5 text-xs shadow">
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-500"></span>{{t "planning.orchestrator.legend-pickup"}}</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span>{{t "planning.orchestrator.legend-dropoff"}}</span>
+            {{#if this.depot}}<span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-violet-600"></span>{{t "planning.orchestrator.legend-depot"}}</span>{{/if}}
+        </div>
+    {{/unless}}
+</div>

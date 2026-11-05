@@ -1,222 +1,282 @@
+{{! PlanningWorkspace — collection orchestrator, laid out like the legacy orchestrator workbench }}
 <div
-    class="flex flex-col h-full overflow-y-auto bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+    class="orchestrator-workbench flex flex-col h-full overflow-hidden bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
     data-test-unified-planning
     {{did-update this.companyChanged this.currentUser.companyId}}
 >
-    <div class="p-4 lg:p-6 space-y-5">
-        <header class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5 lg:p-6">
-            <div class="flex flex-wrap gap-4 justify-between items-start">
-                <div class="max-w-3xl">
-                    <p class="text-xs font-semibold tracking-widest uppercase text-blue-600 dark:text-blue-300 mb-2">{{t "planning.design.eyebrow"}}</p>
-                    <h2 class="text-2xl font-semibold tracking-tight">{{t "planning.workspace"}}</h2>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">{{t "planning.unified-help"}}</p>
-                </div>
-                <Button @icon="rotate" @text={{t "collection-rounds.refresh"}} @onClick={{perform this.load}} @disabled={{this.load.isRunning}} data-test-planning-refresh />
-            </div>
-            <nav class="grid grid-cols-1 md:grid-cols-5 gap-2 mt-6" aria-label={{t "planning.design.lifecycle"}}>
-                {{#each this.workflowStages as |stage|}}
-                    <button
-                        type="button"
-                        class="flex items-center gap-3 p-3 rounded-lg border text-left transition-colors focus:ring-2 focus:ring-blue-500
-                            {{if (eq this.stage stage.value) 'border-blue-500 bg-blue-50 dark:bg-blue-900' 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}}"
-                        disabled={{this.load.isRunning}}
-                        aria-pressed={{eq this.stage stage.value}}
-                        {{on "click" (fn this.chooseStage stage.value)}}
-                        data-test-stage-card={{stage.value}}
-                    >
-                        <span class="flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-semibold flex-shrink-0">{{stage.number}}</span>
-                        <span class="text-sm font-medium">{{stage.label}}</span>
-                    </button>
-                {{/each}}
-            </nav>
-        </header>
 
-        {{#if this.error}}<div class="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900 p-4 text-sm" role="alert">{{this.error}}</div>{{/if}}
-        {{#if this.load.isRunning}}<p role="status" class="text-sm text-gray-500">{{t "planning.design.loading"}}</p>{{/if}}
-        {{#if this.data}}
-            <section class="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label={{t "planning.design.overview"}} data-test-planning-counts>
+    {{! ── Toolbar ── }}
+    <Layout::Section::Header @title={{t "planning.workspace"}}>
+        <div class="flex items-center space-x-2">
+            {{#if this.data}}
                 {{#each this.counts as |card|}}
                     <button
                         type="button"
-                        class="group rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium transition-colors
+                            {{if card.active 'bg-indigo-500 text-white' 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}}"
                         disabled={{this.load.isRunning}}
+                        title={{card.label}}
                         {{on "click" (fn this.chooseStage card.stage)}}
                         data-test-planning-count={{card.key}}
                     >
-                        <span class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            <span
-                                class="w-2.5 h-2.5 rounded-full
-                                    {{if (eq card.tone 'emerald') 'bg-emerald-500'}}{{if (eq card.tone 'blue') 'bg-blue-500'}}{{if (eq card.tone 'violet') 'bg-violet-500'}}{{if
-                                        (eq card.tone 'red')
-                                        'bg-red-500'
-                                    }}"
-                            ></span>
-                            {{card.label}}
-                        </span>
-                        <span class="block text-3xl font-semibold mt-2">{{card.value}}</span>
+                        <span class="w-2 h-2 rounded-full {{card.dot}}"></span>
+                        <span class="tabular-nums font-semibold">{{card.value}}</span>
+                        <span class="hidden xl:inline">{{card.label}}</span>
                     </button>
                 {{/each}}
-            </section>
+                <div class="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+            {{/if}}
+            {{#if this.data.permissions.direct}}
+                <Button
+                    @icon="route"
+                    @text={{t "planning.direct-tools"}}
+                    @type={{if this.showDirectPlanner "primary" "default"}}
+                    @size="sm"
+                    @onClick={{this.toggleDirectPlanner}}
+                    title={{t "planning.direct-help"}}
+                    data-test-planning-direct
+                />
+            {{/if}}
+            <Button @icon="sync" @type="default" @size="sm" @isLoading={{this.load.isRunning}} @onClick={{perform this.load}} data-test-planning-refresh />
+        </div>
+    </Layout::Section::Header>
 
-            <section
-                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-4 flex flex-wrap items-center gap-4"
-                aria-label={{t "planning.design.route-depot"}}
-            >
-                <span class="flex items-center justify-center w-10 h-10 rounded-full bg-violet-50 dark:bg-violet-900 text-violet-700 dark:text-violet-200"><FaIcon @icon="warehouse" /></span>
-                <label class="text-sm font-medium flex-1 min-w-[16rem]" for="planning-route-depot">{{t "planning.design.route-depot"}}
-                    <select id="planning-route-depot" class="form-select w-full mt-1" {{on "change" this.selectDepot}} disabled={{this.load.isRunning}} data-test-planning-depot>
-                        <option value="">{{t "collection-rounds.choose-depot"}}</option>
-                        {{#each this.depots as |depot|}}<option value={{depot.uuid}} selected={{eq depot.uuid this.depot}}>{{depot.name}} - {{depot.street1}}</option>{{/each}}
-                    </select>
-                </label>
-                <div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                    {{#if this.defaultDepot}}<p data-test-default-depot>{{t "planning.default-depot"}}: {{this.defaultDepot.name}}</p>{{/if}}
-                    <a href="/account/organizations" class="inline-flex font-medium text-blue-600 dark:text-blue-300 hover:underline" data-test-manage-organization-depots>{{t
-                            "planning.design.manage-depots"
-                        }}</a>
-                </div>
-                {{#unless this.selectedDepot}}<p class="w-full text-sm text-amber-700 dark:text-amber-300" role="alert">{{t "planning.design.no-depot"}}</p>{{/unless}}
-            </section>
+    {{#if this.error}}
+        <div
+            class="flex items-start gap-2 px-4 py-2 border-b border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-sm text-red-800 dark:text-red-200 flex-shrink-0"
+            role="alert"
+        >
+            <FaIcon @icon="triangle-exclamation" class="mt-0.5" />{{this.error}}
+        </div>
+    {{/if}}
 
-            <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden" aria-label={{t "planning.design.order-queue"}}>
-                <div class="p-4 lg:p-5 border-b border-gray-200 dark:border-gray-700 flex flex-wrap gap-4 items-end">
-                    <label class="text-sm font-medium">{{t "planning.stage"}}
-                        <select class="form-select block mt-1" {{on "change" this.filter}} data-test-planning-stage>
-                            {{#each this.stages as |stage|}}<option value={{stage.value}} selected={{eq stage.value this.stage}}>{{stage.label}}</option>{{/each}}
-                        </select>
-                    </label>
-                    <form class="flex flex-wrap gap-2 items-end flex-1" {{on "submit" this.find}}>
-                        <label class="text-sm font-medium flex-1">{{t "planning.search"}}
+    {{#if this.data}}
+        {{! ── Depot strip (below toolbar, like the legacy collapsible panels) ── }}
+        <div class="px-4 py-1.5 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs flex-shrink-0">
+            <label class="flex items-center gap-2 font-medium text-gray-600 dark:text-gray-300" for="planning-route-depot">
+                <FaIcon @icon="warehouse" @size="xs" class="text-violet-500" />
+                {{t "planning.design.route-depot"}}
+            </label>
+            <select id="planning-route-depot" class="form-select form-input-sm min-w-[14rem]" {{on "change" this.selectDepot}} disabled={{this.load.isRunning}} data-test-planning-depot>
+                <option value="">{{t "collection-rounds.choose-depot"}}</option>
+                {{#each this.depots as |depot|}}<option value={{depot.uuid}} selected={{eq depot.uuid this.depot}}>{{depot.name}} - {{depot.street1}}</option>{{/each}}
+            </select>
+            {{#if this.defaultDepot}}<span class="text-gray-500 dark:text-gray-400" data-test-default-depot>{{t "planning.default-depot"}}: {{this.defaultDepot.name}}</span>{{/if}}
+            <a href="/account/organizations" class="text-indigo-500 hover:text-indigo-400" data-test-manage-organization-depots>{{t "planning.design.manage-depots"}}</a>
+            {{#unless this.selectedDepot}}<span class="text-amber-600 dark:text-amber-300" role="alert">{{t "planning.design.no-depot"}}</span>{{/unless}}
+            {{#if this.data.permissions.collection}}
+                {{#each this.collectionPlanning.warnings as |warning|}}
+                    <span class="text-amber-600 dark:text-amber-300"><FaIcon @icon="exclamation-triangle" @size="xs" class="mr-1" />{{warning.order_uuid}}: {{warning.message}}</span>
+                {{/each}}
+            {{/if}}
+        </div>
+    {{/if}}
+
+    {{#if this.showDirectPlanner}}
+        <div class="flex-1 min-h-0 overflow-hidden"><OrchestratorWorkbench /></div>
+    {{else if this.data}}
+        {{! ── Main 3-panel body ── }}
+        <div class="workbench-body flex flex-1 min-h-0 overflow-hidden">
+
+            {{! ── LEFT PANEL: order pool ── }}
+            <div class="order-pool-panel flex flex-col border-r dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0 {{if this.leftCollapsed 'w-0 overflow-hidden' 'w-80 xl:w-96'}}">
+                <div class="order-pool flex flex-col h-full overflow-hidden">
+                    {{! Search + stage }}
+                    <form class="px-3 py-2 border-b dark:border-gray-700 flex items-center gap-2 flex-shrink-0" {{on "submit" this.find}}>
+                        <div class="relative flex-1">
+                            <span class="absolute inset-y-0 left-0 flex items-center justify-center pointer-events-none text-gray-400 w-8">
+                                <FaIcon @icon="magnifying-glass" @size="xs" />
+                            </span>
                             <input
-                                class="form-input w-full block mt-1"
                                 type="search"
+                                class="form-input form-input-sm w-full pl-7"
                                 value={{this.search}}
                                 placeholder={{t "planning.design.search-placeholder"}}
+                                aria-label={{t "planning.search"}}
                                 {{on "input" this.setSearch}}
                                 data-test-planning-search
                             />
-                        </label>
-                        <Button @text={{t "planning.search"}} @onClick={{this.find}} @disabled={{this.load.isRunning}} />
+                        </div>
+                        <span class="text-xs text-gray-400 flex-shrink-0 tabular-nums">{{this.rows.length}}/{{this.data.total}}</span>
                     </form>
-                    <p class="w-full text-xs text-gray-500 dark:text-gray-400">{{t "planning.orchestrator.select-help"}}</p>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-sm" data-test-planning-table>
-                        <thead class="bg-gray-50 dark:bg-gray-900 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            <tr>
-                                <th class="p-4 w-10"><input
+                    <div class="px-3 py-1.5 border-b dark:border-gray-700 flex items-center gap-2 flex-shrink-0">
+                        <label class="sr-only" for="planning-stage">{{t "planning.stage"}}</label>
+                        <select id="planning-stage" class="form-select form-input-sm flex-1" {{on "change" this.filter}} data-test-planning-stage>
+                            {{#each this.stages as |stage|}}<option value={{stage.value}} selected={{eq stage.value this.stage}}>{{stage.label}}</option>{{/each}}
+                        </select>
+                    </div>
+
+                    {{! Select all }}
+                    <label class="px-3 py-1.5 border-b dark:border-gray-700 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            class="form-checkbox h-3.5 w-3.5 rounded text-indigo-600 border-gray-300 dark:border-gray-600"
+                            checked={{this.allSelected}}
+                            disabled={{or (not this.selectableForAll.length) this.load.isRunning}}
+                            aria-label={{t "planning.orchestrator.select-all"}}
+                            {{on "change" this.toggleAll}}
+                            data-test-select-all
+                        />
+                        <span class="font-medium">{{t "planning.orchestrator.select-all"}}</span>
+                    </label>
+
+                    {{! Order cards }}
+                    <div class="flex-1 overflow-y-auto py-1" data-test-planning-table>
+                        {{#if (and this.load.isRunning (not this.rows.length))}}
+                            <div class="flex justify-center py-8"><Spinner /></div>
+                        {{/if}}
+                        {{#each this.rows as |order|}}
+                            {{! template-lint-disable no-invalid-interactive }}
+                            <div
+                                class="order-pool-card mx-2 my-1.5 rounded border overflow-hidden select-none transition-shadow
+                                    {{if
+                                        order.selected
+                                        'ring-2 ring-indigo-500 border-indigo-400 dark:border-indigo-500 cursor-pointer'
+                                        (if
+                                            order.selectable
+                                            'border-gray-200 dark:border-gray-700 cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 hover:ring-1 hover:ring-indigo-400'
+                                            'border-gray-200 dark:border-gray-700 opacity-75'
+                                        )
+                                    }}"
+                                {{on "click" (fn this.toggleCard order)}}
+                                data-test-unified-order={{order.uuid}}
+                            >
+                                <div class="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                                    <input
                                         type="checkbox"
-                                        class="form-checkbox"
-                                        checked={{this.allSelected}}
-                                        disabled={{or (not this.selectableForAll.length) this.load.isRunning}}
-                                        aria-label={{t "planning.orchestrator.select-all"}}
-                                        title={{t "planning.orchestrator.select-all"}}
-                                        {{on "change" this.toggleAll}}
-                                        data-test-select-all
-                                    /></th>
-                                <th class="p-4">{{t "planning.order"}}</th>
-                                <th class="p-4">{{t "planning.stage"}}</th>
-                                <th class="p-4">{{t "planning.pickup-place"}}</th>
-                                <th class="p-4">{{t "planning.recipient"}}</th>
-                                <th class="p-4">{{t "planning.route-type"}}</th>
-                                <th class="p-4">{{t "planning.actions"}}</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                            {{#each this.rows as |order|}}
-                                <tr
-                                    class="transition-colors
-                                        {{if order.selected 'bg-blue-50 dark:bg-blue-950' 'hover:bg-gray-50 dark:hover:bg-gray-700'}}
-                                        {{unless order.kind 'text-gray-600 dark:text-gray-300'}}"
-                                    data-test-unified-order={{order.uuid}}
-                                >
-                                    <td class="p-4"><input
-                                            type="checkbox"
-                                            class="form-checkbox"
-                                            checked={{order.selected}}
-                                            disabled={{or (not order.selectable) this.load.isRunning}}
-                                            aria-label={{order.order_id}}
-                                            {{on "change" (fn this.toggle order)}}
-                                        /></td>
-                                    <td class="p-4 font-semibold whitespace-nowrap">{{order.order_id}}</td>
-                                    <td class="p-4"><span
-                                            class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ring-1 ring-inset {{order.stateClass}}"
-                                        ><span class="w-1.5 h-1.5 rounded-full bg-current"></span>{{order.stateLabel}}</span></td>
-                                    <td class="p-4"><span class="block font-medium">{{order.pickup.name}}</span><span
-                                            class="text-gray-500 dark:text-gray-400"
-                                        >{{order.pickup.street1}}</span></td>
-                                    <td class="p-4"><span class="block font-medium">{{order.dropoff.name}}</span><span
-                                            class="text-gray-500 dark:text-gray-400"
-                                        >{{order.dropoff.street1}}</span></td>
-                                    <td class="p-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">{{t
-                                            (if (eq order.route_type "collection") "planning.collection-route" "planning.direct-route")
-                                        }}</td>
-                                    <td class="p-4">{{#if order.canOpenRound}}<Button
-                                                @size="xs"
-                                                @text={{t "planning.round-details"}}
-                                                @onClick={{fn this.openRound order}}
-                                                data-test-order-round
-                                            />{{/if}}</td>
-                                </tr>
-                            {{else}}
-                                <tr><td colspan="7" class="p-10 text-center"><p class="font-semibold">{{t "planning.no-orders"}}</p><p class="text-gray-500 dark:text-gray-400 mt-2">{{t
-                                                "planning.design.empty-help"
-                                            }}</p></td></tr>
-                            {{/each}}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap justify-between gap-3 items-center">
-                    <span class="text-sm text-gray-500 dark:text-gray-400">{{this.page}} / {{this.data.last_page}} ({{this.data.total}})</span>
-                    <div class="flex gap-2">
-                        <Button @size="xs" @text={{t "collection-rounds.previous"}} @disabled={{or (eq this.page 1) this.load.isRunning}} @onClick={{fn this.pageBy -1}} />
-                        <Button @size="xs" @text={{t "collection-rounds.next"}} @disabled={{or (eq this.page this.data.last_page) this.load.isRunning}} @onClick={{fn this.pageBy 1}} />
+                                        class="form-checkbox h-3.5 w-3.5 rounded text-indigo-600 border-gray-300 dark:border-gray-600 cursor-pointer flex-shrink-0"
+                                        checked={{order.selected}}
+                                        disabled={{or (not order.selectable) this.load.isRunning}}
+                                        aria-label={{order.order_id}}
+                                        {{on "click" this.stopPropagation}}
+                                        {{on "change" (fn this.toggle order)}}
+                                    />
+                                    <span class="flex-1 min-w-0 truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{{order.order_id}}</span>
+                                    <span
+                                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium whitespace-nowrap ring-1 ring-inset {{order.stateClass}}"
+                                    ><span class="w-1.5 h-1.5 rounded-full bg-current"></span>{{order.stateLabel}}</span>
+                                </div>
+                                <div class="bg-white dark:bg-gray-900 px-2 py-1.5">
+                                    <dl class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
+                                        <dt class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                            <FaIcon @icon="circle-dot" @size="xs" class="w-3 text-center text-green-500" />{{t "planning.pickup-place"}}
+                                        </dt>
+                                        <dd class="truncate text-right text-xs text-gray-700 dark:text-gray-300" title={{order.pickup.street1}}>{{or order.pickup.name "-"}}</dd>
+                                        <dt class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                            <FaIcon @icon="location-dot" @size="xs" class="w-3 text-center text-red-500" />{{t "planning.recipient"}}
+                                        </dt>
+                                        <dd class="truncate text-right text-xs text-gray-700 dark:text-gray-300" title={{order.dropoff.street1}}>{{or order.dropoff.name "-"}}</dd>
+                                        <dt class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                            <FaIcon @icon="route" @size="xs" class="w-3 text-center text-indigo-400" />{{t "planning.route-type"}}
+                                        </dt>
+                                        <dd class="truncate text-right text-xs text-gray-700 dark:text-gray-300">{{t
+                                                (if (eq order.route_type "collection") "planning.collection-route" "planning.direct-route")
+                                            }}</dd>
+                                        {{#if order.delivery_date}}
+                                            <dt class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                                <FaIcon @icon="calendar-day" @size="xs" class="w-3 text-center text-blue-400" />{{t "planning.orchestrator.delivery-date"}}
+                                            </dt>
+                                            <dd class="truncate text-right text-xs text-blue-500">{{order.delivery_date}}</dd>
+                                        {{/if}}
+                                    </dl>
+                                    {{#if order.canOpenRound}}
+                                        <div class="mt-1.5 pt-1 border-t border-gray-100 dark:border-gray-700 flex justify-end" {{on "click" this.stopPropagation}}>
+                                            <Button @size="xs" @icon="eye" @text={{t "planning.round-details"}} @onClick={{fn this.openRound order}} data-test-order-round />
+                                        </div>
+                                    {{/if}}
+                                </div>
+                            </div>
+                        {{else}}
+                            <div class="flex flex-col items-center justify-center py-12 px-6 text-center text-gray-400 text-xs">
+                                <FaIcon @icon="check-circle" @size="2x" class="mb-2 text-green-400" />
+                                <p class="font-semibold text-gray-600 dark:text-gray-300">{{t "planning.no-orders"}}</p>
+                                <p class="mt-1">{{t "planning.design.empty-help"}}</p>
+                            </div>
+                        {{/each}}
                     </div>
-                </div>
-            </section>
 
-            {{#if this.selected.size}}
-                <div
-                    class="sticky bottom-4 z-20 mx-auto w-full max-w-4xl rounded-2xl border border-blue-200 dark:border-blue-800 bg-white/95 dark:bg-gray-800/95 backdrop-blur shadow-xl px-4 py-3 flex flex-wrap items-center gap-3"
-                    role="region"
-                    aria-label={{t "planning.design.plan-selection"}}
-                    data-test-selection-bar
-                >
-                    <span class="flex items-center justify-center min-w-[2.25rem] h-9 px-2 rounded-full bg-blue-600 text-white font-semibold">{{this.selected.size}}</span>
-                    <div class="flex-1 min-w-[12rem]">
-                        <p class="font-semibold">{{t "planning.orchestrator.selected" count=this.selected.size}}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">{{t
-                                (if (eq this.selectionKind "delivery") "planning.orchestrator.delivery-hint" "planning.orchestrator.pickup-hint")
-                            }}</p>
-                    </div>
-                    {{#if (eq this.selectionKind "pickup")}}
-                        <Button
-                            @type="primary"
-                            @icon="truck-pickup"
-                            @text={{t "planning.orchestrator.plan-pickup"}}
-                            @onClick={{fn this.openPlanner "pickup"}}
-                            @disabled={{or (not this.canPlanPickup) (not this.selectedDepot)}}
-                            data-test-plan-pickup
-                        />
+                    {{! Pagination }}
+                    {{#if (gt this.data.last_page 1)}}
+                        <div class="px-3 py-1.5 border-t dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+                            <Button @size="xs" @icon="chevron-left" @disabled={{or (eq this.page 1) this.load.isRunning}} @onClick={{fn this.pageBy -1}} />
+                            <span class="text-xs text-gray-400 tabular-nums">{{this.page}} / {{this.data.last_page}}</span>
+                            <Button @size="xs" @icon="chevron-right" @disabled={{or (eq this.page this.data.last_page) this.load.isRunning}} @onClick={{fn this.pageBy 1}} />
+                        </div>
                     {{/if}}
-                    {{#if (eq this.selectionKind "delivery")}}
-                        <Button
-                            @type="primary"
-                            @icon="truck-fast"
-                            @text={{t "planning.orchestrator.plan-delivery"}}
-                            @onClick={{fn this.openPlanner "delivery"}}
-                            @disabled={{or (not this.canPlanDelivery) (not this.selectedDepot)}}
-                            data-test-plan-delivery
-                        />
-                    {{/if}}
-                    <Button @text={{t "planning.design.clear-selection"}} @onClick={{this.clearSelection}} data-test-clear-selection />
-                </div>
-            {{/if}}
 
-            {{#if (and this.plannerKind (not this.showDirectPlanner))}}
+                    {{! Bulk action bar }}
+                    {{#if this.selected.size}}
+                        <div
+                            class="px-3 py-2 border-t dark:border-gray-700 bg-indigo-50 dark:bg-indigo-900/20 flex-shrink-0 space-y-2"
+                            role="region"
+                            aria-label={{t "planning.design.plan-selection"}}
+                            data-test-selection-bar
+                        >
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-medium text-indigo-600 dark:text-indigo-300">{{t "planning.orchestrator.selected" count=this.selected.size}}</span>
+                                <button
+                                    type="button"
+                                    class="text-xs text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
+                                    {{on "click" this.clearSelection}}
+                                    data-test-clear-selection
+                                >{{t "planning.design.clear-selection"}}</button>
+                            </div>
+                            {{#if (eq this.selectionKind "pickup")}}
+                                <Button
+                                    @type="primary"
+                                    @size="sm"
+                                    @icon="truck-pickup"
+                                    @text={{t "planning.orchestrator.plan-pickup"}}
+                                    @onClick={{fn this.openPlanner "pickup"}}
+                                    @disabled={{or (not this.canPlanPickup) (not this.selectedDepot)}}
+                                    @wrapperClass="w-full"
+                                    class="w-full"
+                                    data-test-plan-pickup
+                                />
+                            {{/if}}
+                            {{#if (eq this.selectionKind "delivery")}}
+                                <Button
+                                    @type="primary"
+                                    @size="sm"
+                                    @icon="truck-fast"
+                                    @text={{t "planning.orchestrator.plan-delivery"}}
+                                    @onClick={{fn this.openPlanner "delivery"}}
+                                    @disabled={{or (not this.canPlanDelivery) (not this.selectedDepot)}}
+                                    @wrapperClass="w-full"
+                                    class="w-full"
+                                    data-test-plan-delivery
+                                />
+                            {{/if}}
+                            <p class="text-xs text-gray-500 dark:text-gray-400">{{t
+                                    (if (eq this.selectionKind "delivery") "planning.orchestrator.delivery-hint" "planning.orchestrator.pickup-hint")
+                                }}</p>
+                        </div>
+                    {{else}}
+                        <p class="px-3 py-2 border-t dark:border-gray-700 text-xs text-gray-400 flex-shrink-0">{{t "planning.orchestrator.select-help"}}</p>
+                    {{/if}}
+                </div>
+            </div>
+
+            {{! ── Left panel collapse toggle ── }}
+            <button
+                type="button"
+                class="workbench-panel-toggle flex items-center justify-center w-4 flex-shrink-0 bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                title={{if this.leftCollapsed (t "planning.orchestrator.expand-panel") (t "planning.orchestrator.collapse-panel")}}
+                {{on "click" this.toggleLeftPanel}}
+            >
+                <FaIcon @icon={{if this.leftCollapsed "chevron-right" "chevron-left"}} @size="xs" class="text-gray-400" />
+            </button>
+
+            {{#if this.roundId}}
+                <div class="flex-1 min-w-0 overflow-y-auto p-4">
+                    <CollectionRounds @view="unified" @roundId={{this.roundId}} @defaultDepotUuid={{this.depot}} @routePlaces={{this.places}} @onClose={{this.closeRound}} />
+                </div>
+            {{else if this.plannerKind}}
                 <CollectionRoutePlanner
                     @kind={{this.plannerKind}}
                     @selection={{this.selected}}
+                    @orders={{this.selectedRows}}
+                    @depot={{this.selectedDepot}}
                     @depotUuid={{this.depot}}
                     @depotName={{this.selectedDepot.name}}
                     @places={{this.places}}
@@ -227,25 +287,76 @@
                     @onSaved={{this.plannerSaved}}
                     @onClose={{this.closePlanner}}
                 />
+            {{else}}
+                {{! ── CENTRE: Map ── }}
+                <div class="map-panel flex-1 relative overflow-hidden">
+                    <PlanningMap @orders={{this.mapOrders}} @depot={{this.selectedDepot}} />
+                </div>
+
+                {{! ── Right panel collapse toggle ── }}
+                <button
+                    type="button"
+                    class="workbench-panel-toggle flex items-center justify-center w-4 flex-shrink-0 bg-gray-100 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    title={{if this.rightCollapsed (t "planning.orchestrator.expand-panel") (t "planning.orchestrator.collapse-panel")}}
+                    {{on "click" this.toggleRightPanel}}
+                >
+                    <FaIcon @icon={{if this.rightCollapsed "chevron-left" "chevron-right"}} @size="xs" class="text-gray-400" />
+                </button>
+
+                {{! ── RIGHT PANEL: how to plan + drivers and their vehicles ── }}
+                <aside
+                    class="driver-panel flex flex-col border-l dark:border-gray-700 bg-white dark:bg-gray-900 flex-shrink-0 {{if this.rightCollapsed 'w-0 overflow-hidden' 'w-80'}}"
+                    data-test-planning-idle
+                >
+                    <div class="m-3 rounded border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-2.5 flex-shrink-0">
+                        <p class="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-1.5"><FaIcon @icon="bolt" @size="xs" class="mr-1" />{{t
+                                "planning.orchestrator.idle-title"
+                            }}</p>
+                        <ol class="space-y-1 text-xs text-gray-600 dark:text-gray-300">
+                            <li><span class="font-semibold tabular-nums">1.</span> {{t "planning.orchestrator.idle-step-select"}}</li>
+                            <li><span class="font-semibold tabular-nums">2.</span> {{t "planning.orchestrator.idle-step-plan"}}</li>
+                            <li><span class="font-semibold tabular-nums">3.</span> {{t "planning.orchestrator.idle-step-confirm"}}</li>
+                        </ol>
+                    </div>
+                    <div class="flex border-b dark:border-gray-700 flex-shrink-0">
+                        <span class="flex-1 py-2 pl-3 text-xs font-medium text-indigo-500 border-b-2 border-indigo-500 dark:text-indigo-400 dark:border-indigo-400">
+                            <FaIcon @icon="id-card-alt" @size="xs" class="mr-1" />{{t "planning.orchestrator.drivers-panel"}}
+                            <span class="ml-1 text-gray-400 tabular-nums">({{this.idleDrivers.length}})</span>
+                        </span>
+                    </div>
+                    <div class="flex-1 overflow-y-auto">
+                        {{#each this.idleDrivers as |driver|}}
+                            <div class="flex items-start gap-3 px-3 py-2.5 border-b dark:border-gray-700/60">
+                                <span class="flex items-center justify-center w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-300 flex-shrink-0"><FaIcon
+                                        @icon="user"
+                                    /></span>
+                                <div class="flex-1 min-w-0 space-y-0.5">
+                                    <div class="text-xs font-semibold truncate dark:text-white">{{driver.name}}</div>
+                                    <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                        <FaIcon @icon="truck" @size="xs" class="w-3 flex-shrink-0" />
+                                        <span class="truncate">{{if driver.vehicleLabel driver.vehicleLabel (t "planning.orchestrator.assigned-vehicle")}}</span>
+                                    </div>
+                                    {{#if driver.parcel_capacity}}
+                                        <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                            <FaIcon @icon="box" @size="xs" class="w-3 flex-shrink-0" />
+                                            <span>{{t "planning.orchestrator.capacity" count=driver.parcel_capacity}}</span>
+                                        </div>
+                                    {{/if}}
+                                </div>
+                            </div>
+                        {{else}}
+                            <div class="flex flex-col items-center justify-center py-10 px-6 text-center text-gray-400 text-xs">
+                                <FaIcon @icon="id-card-alt" @size="2x" class="mb-2 opacity-40" />
+                                {{t "planning.orchestrator.no-drivers"}}
+                            </div>
+                        {{/each}}
+                    </div>
+                </aside>
             {{/if}}
-            {{#if this.data.permissions.collection}}{{#each this.collectionPlanning.warnings as |warning|}}<p
-                        class="text-sm text-amber-700 dark:text-amber-300"
-                        role="alert"
-                    >{{warning.order_uuid}}: {{warning.message}}</p>{{/each}}{{/if}}
-            {{#if this.data.permissions.direct}}
-                <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-                    <Button @text={{t "planning.direct-tools"}} @onClick={{this.toggleDirectPlanner}} data-test-planning-direct />
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">{{t "planning.direct-help"}}</p>
-                </section>
-            {{/if}}
-            {{#if this.showDirectPlanner}}<div class="flex-none h-screen"><OrchestratorWorkbench /></div>{{/if}}
-            {{#if this.roundId}}<CollectionRounds
-                    @view="unified"
-                    @roundId={{this.roundId}}
-                    @defaultDepotUuid={{this.depot}}
-                    @routePlaces={{this.places}}
-                    @onClose={{this.closeRound}}
-                />{{/if}}
-        {{/if}}
-    </div>
+        </div>
+    {{else if this.load.isRunning}}
+        <div class="flex flex-1 items-center justify-center" role="status">
+            <Spinner class="mr-2" /><span class="text-sm text-gray-500">{{t "planning.design.loading"}}</span>
+        </div>
+    {{/if}}
 </div>

@@ -27,6 +27,20 @@ planning:
         stops: "Arrêts"
         distance: "Distance"
         drive-time: "Temps de conduite"
+        legend-pickup: "Collecte"
+        legend-dropoff: "Livraison"
+        legend-depot: "Dépôt"
+        optimizing: "Optimisation des tournées..."
+        expand-panel: "Afficher le panneau"
+        collapse-panel: "Masquer le panneau"
+        proposed-routes: "Tournées proposées"
+        discard: "Annuler"
+        drivers-panel: "Chauffeurs et véhicules"
+        idle-title: "Comment planifier"
+        idle-step-select: "Cochez les commandes dans la liste (collectes prêtes ou colis au dépôt)."
+        idle-step-plan: "Cliquez sur Planifier la collecte ou la livraison, choisissez la date et les chauffeurs."
+        idle-step-confirm: "Optimisez, vérifiez les tournées sur la carte, puis confirmez."
+        delivery-date: "Date de livraison"
         counts:
             ready_for_pickup: "Prêtes à collecter"
             pickup_planned: "Collecte planifiée"
@@ -2162,6 +2176,7 @@ route-list:
   collapse: Appuyez pour réduire
   more-waypoints: plus de points de passage
 collection-rounds:
+  choose-depot: "Choisir l'adresse du dépôt"
   follow-up: Suivi manuel des collectes
   pickup-window: Creneau de collecte demande
   follow-up-help: Appeler les clients non prets ou en attente de planification. Un appel ne confirme pas que les colis sont prets.

@@ -17,7 +17,6 @@ export default class CollectionRoutePlannerComponent extends Component {
     @service notifications;
     @service intl;
     @service modalsManager;
-    @service mapSettings;
     @tracked chosenKind = 'pickup';
     @tracked date = '';
     @tracked startTime = '09:00';
@@ -25,6 +24,7 @@ export default class CollectionRoutePlannerComponent extends Component {
     @tracked drivers = {};
     @tracked proposal = null;
     @tracked error = null;
+    @tracked panelCollapsed = false;
     revision = 0;
     requestId = null;
 
@@ -58,6 +58,16 @@ export default class CollectionRoutePlannerComponent extends Component {
         return Boolean(this.date && this.selectedDriverCount);
     }
 
+    get steps() {
+        const active = this.proposal ? 3 : this.stepOneDone ? 2 : 1;
+        return ['step-team', 'step-optimize', 'step-confirm'].map((key, index) => ({
+            number: index + 1,
+            label: this.intl.t(`planning.orchestrator.${key}`),
+            active: active === index + 1,
+            done: active > index + 1,
+        }));
+    }
+
     get totals() {
         const routes = this.proposal?.routes ?? [];
         return {
@@ -82,20 +92,18 @@ export default class CollectionRoutePlannerComponent extends Component {
     }
 
     get routes() {
+        const vehicles = new Map((this.args.drivers ?? []).map((driver) => [driver.uuid, [driver.vehicle_name, driver.plate_number].filter(Boolean).join(' - ')]));
         return (this.proposal?.routes ?? this.args.savedRoutes ?? [])
             .filter((route) => this.proposal || !this.date || route.date === this.date)
             .map((route, index) => ({
                 ...route,
                 color: COLORS[index % COLORS.length],
+                vehicleLabel: vehicles.get(route.driver_uuid) ?? '',
                 stops: (route.stops ?? []).map((stop) => ({ ...stop, time: this.formatTime(stop.arrival_at) })),
                 coordinates: route.geometry ? polyline.decode(route.geometry) : [],
                 kilometers: (route.distance_meters / 1000).toFixed(1),
                 minutes: Math.ceil(route.duration_seconds / 60),
             }));
-    }
-
-    get mapCenter() {
-        return this.routes[0]?.origin?.location ?? { lat: 36.8, lng: 10.18 };
     }
 
     formatTime(value) {
@@ -108,8 +116,16 @@ export default class CollectionRoutePlannerComponent extends Component {
         }
     }
 
+    get expiresAt() {
+        return this.proposal?.expires_at ? this.formatTime(this.proposal.expires_at) : '';
+    }
+
     get busy() {
         return this.orchestrate.isRunning || this.save.isRunning;
+    }
+
+    @action togglePanel() {
+        this.panelCollapsed = !this.panelCollapsed;
     }
 
     @action invalidate() {
