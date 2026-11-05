@@ -82,7 +82,7 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
         assert.dom('.next-sidebar-navigator-item').includesText('Operations');
         assert.dom('.next-sidebar-navigator-item').includesText('Resources');
         assert.dom('.next-sidebar-navigator-item').includesText('Maintenance');
-        assert.dom('.next-sidebar-navigator-item').includesText('Connectivity');
+        assert.dom('.next-sidebar-navigator-view-in').doesNotIncludeText('Connectivity');
         assert.dom('.next-sidebar-navigator-item').includesText('Analytics');
         assert.dom('.next-sidebar-navigator-item').includesText('Settings');
 
@@ -113,7 +113,7 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item').includesText('Vehicles');
     });
 
-    test('it renders Trailers directly below Vehicles in the Resources menu after priority sorting', async function (assert) {
+    test('it renders Fleets directly below Vehicles in the Resources menu with Trailers hidden', async function (assert) {
         // The universe services boot console-only extension modules; the sidebar only reads registries from them.
         this.owner.register('service:universe', UniverseStub);
         this.owner.register('service:universe/menu-service', MenuServiceStub);
@@ -127,21 +127,14 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
 
         const labels = Array.from(document.querySelectorAll('.next-sidebar-navigator-view-in .next-sidebar-navigator-item')).map((item) => item.textContent.trim());
         const vehiclesIndex = labels.findIndex((label) => label.includes('Vehicles'));
-        const trailersIndex = labels.findIndex((label) => label.includes('Trailers'));
 
         assert.ok(vehiclesIndex >= 0, `Vehicles is rendered (${labels.join(' | ')})`);
-        assert.ok(trailersIndex >= 0, `Trailers is rendered (${labels.join(' | ')})`);
-        assert.strictEqual(trailersIndex, vehiclesIndex + 1, 'Trailers is the item immediately after Vehicles in rendered order');
-        assert.ok(labels[trailersIndex + 1]?.includes('Fleets'), 'Fleets follows Trailers');
-
-        router.currentRouteName = 'console.fleet-ops.management.trailers.index';
-        router.currentURL = '/fleet-ops/manage/trailers';
-        router.triggerRouteDidChange();
-        await settled();
-
-        assert
-            .dom(`.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(${trailersIndex + 1})`)
-            .hasClass('is-active', 'the Trailers item is active on the trailers route');
+        assert.strictEqual(
+            labels.findIndex((label) => label.includes('Trailers')),
+            -1,
+            'Trailers is hidden'
+        );
+        assert.ok(labels[vehiclesIndex + 1]?.includes('Fleets'), 'Fleets follows Vehicles');
     });
 
     test('it treats root URL variants as FleetOps root entry', async function (assert) {
@@ -182,22 +175,13 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item').includesText('Vehicles');
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(3)').hasClass('is-active');
 
-        router.currentRouteName = 'console.fleet-ops.connectivity.telematics.index';
-        router.currentURL = '/fleet-ops/connectivity/telematics';
+        router.currentRouteName = 'console.fleet-ops.maintenance.work-orders.index';
+        router.currentURL = '/fleet-ops/maintenance/work-orders';
         router.triggerRouteDidChange();
         await settled();
 
-        assert.dom('.next-sidebar-navigator-back').includesText('Connectivity');
-        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type').includesText('Telematics');
-        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type').hasClass('is-active');
-
-        router.currentRouteName = 'console.fleet-ops.connectivity.devices.index';
-        router.currentURL = '/fleet-ops/connectivity/devices';
-        router.triggerRouteDidChange();
-        await settled();
-
-        assert.dom('.next-sidebar-navigator-back').includesText('Connectivity');
-        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item').includesText('Devices');
+        assert.dom('.next-sidebar-navigator-back').includesText('Maintenance');
+        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item').includesText('Work Orders');
     });
 
     test('it opens Operations nested for non-default order entry routes', async function (assert) {
@@ -315,40 +299,21 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
         assert.dom('.next-sidebar-navigator-search-result').doesNotExist('Radar is not searchable when Resources has no real visible children');
     });
 
-    test('it hides Connectivity when Telematics is the only visible child', async function (assert) {
-        const abilities = this.owner.lookup('service:abilities');
-        abilities.denied.add('fleet-ops see fuel-report');
-        abilities.denied.add('fleet-ops see device');
-        abilities.denied.add('fleet-ops see sensor');
-        abilities.denied.add('fleet-ops see device-event');
-
+    test('it hides Connectivity, Trailers and Fuel transactions from the menu', async function (assert) {
         await render(hbs`<Layout::FleetOpsSidebar />`);
 
         assert.dom('.next-sidebar-navigator-view-in').doesNotIncludeText('Connectivity');
 
+        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(2)');
+
+        assert.dom('.next-sidebar-navigator-back').includesText('Resources');
+        assert.dom('.next-sidebar-navigator').includesText('Vehicles');
+        assert.dom('.next-sidebar-navigator').doesNotIncludeText('Trailers');
+        assert.dom('.next-sidebar-navigator').doesNotIncludeText('Fuel Transactions');
+
         await fillIn('.next-sidebar-navigator-search input', 'connectivity hub');
 
-        assert.dom('.next-sidebar-navigator-search-result').doesNotExist('Telematics is not searchable when Connectivity has no real visible children');
-    });
-
-    test('it keeps Connectivity visible when at least one real child is visible', async function (assert) {
-        const abilities = this.owner.lookup('service:abilities');
-        abilities.denied.add('fleet-ops see fuel-report');
-        abilities.denied.add('fleet-ops see sensor');
-        abilities.denied.add('fleet-ops see device-event');
-
-        await render(hbs`<Layout::FleetOpsSidebar />`);
-
-        assert.dom('.next-sidebar-navigator-view-in').includesText('Connectivity');
-
-        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(4)');
-
-        assert.dom('.next-sidebar-navigator-back').includesText('Connectivity');
-        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type').includesText('Telematics');
-        assert.dom('.next-sidebar-navigator').includesText('Devices');
-        assert.dom('.next-sidebar-navigator').doesNotIncludeText('Fuel Integrations');
-        assert.dom('.next-sidebar-navigator').doesNotIncludeText('Sensors');
-        assert.dom('.next-sidebar-navigator').doesNotIncludeText('Events');
+        assert.dom('.next-sidebar-navigator-search-result').doesNotExist('connectivity pages are not searchable');
     });
 
     test('it routes nested branches to hub defaults', async function (assert) {
@@ -365,14 +330,10 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
 
         await click('.next-sidebar-navigator-back');
         await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(4)');
-        assert.strictEqual(router.transitions.at(-1).route, 'console.fleet-ops.connectivity.telematics');
-
-        await click('.next-sidebar-navigator-back');
-        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(5)');
         assert.strictEqual(router.transitions.at(-1).route, 'console.fleet-ops.analytics.index');
 
         await click('.next-sidebar-navigator-back');
-        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(6)');
+        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(5)');
         assert.strictEqual(router.transitions.at(-1).route, 'console.fleet-ops.settings.index');
     });
 
@@ -389,12 +350,12 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type svg[data-icon="wrench"]').exists();
 
         await click('.next-sidebar-navigator-back');
-        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(5)');
+        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(4)');
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type').includesText('Dashboard');
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type svg[data-icon="chart-line"]').exists();
 
         await click('.next-sidebar-navigator-back');
-        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(6)');
+        await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(5)');
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type').includesText('Settings Hub');
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type svg[data-icon="sliders"]').exists();
         assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type svg[data-icon="table-cells-large"]').doesNotExist();

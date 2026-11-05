@@ -3,7 +3,7 @@
  * to a badge colour, which actions are record-level, and the snooze presets.
  */
 
-export const RADAR_PILLS = ['overdue', 'due_week', 'unassigned', 'issues', 'inspections', 'shifts', 'expiring', 'low_stock', 'fuel', 'notices'];
+export const RADAR_PILLS = ['overdue', 'due_week', 'unassigned', 'issues', 'inspections', 'shifts', 'expiring', 'low_stock', 'notices'];
 
 export const RADAR_STATUSES = ['open', 'snoozed', 'resolved'];
 
@@ -14,7 +14,6 @@ export const RADAR_DEFAULT_VIEWS = [
     { id: 'my-assignments', intl: 'radar.saved-views.defaults.my-assignments', status: 'open', filters: '', assigned: 'me', q: '', isDefault: true },
     { id: 'shift-changes', intl: 'radar.saved-views.defaults.shift-changes', status: 'open', filters: 'shifts', assigned: '', q: '', isDefault: true },
     { id: 'due-this-week', intl: 'radar.saved-views.defaults.due-this-week', status: 'open', filters: 'due_week', assigned: '', q: '', isDefault: true },
-    { id: 'unmatched-fuel', intl: 'radar.saved-views.defaults.unmatched-fuel', status: 'open', filters: 'fuel', assigned: '', q: '', isDefault: true },
 ];
 
 /** Badge status per category; issues go by severity instead. */

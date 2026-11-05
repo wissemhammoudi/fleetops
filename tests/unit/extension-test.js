@@ -50,11 +50,11 @@ module('Unit | FleetOps extension', function () {
 
         extension.setupExtension(app, universe);
 
-        const trailersShortcut = headerMenuOptions.shortcuts.find((shortcut) => shortcut.route === 'console.fleet-ops.management.trailers');
+        const shortcutRoutes = headerMenuOptions.shortcuts.map((shortcut) => shortcut.route);
         assert.deepEqual(requestedUniverseServices, ['menu', 'registry', 'widget'], 'only asks Universe for Universe-owned services');
-        assert.ok(trailersShortcut, 'registers the trailers shortcut');
-        assert.strictEqual(trailersShortcut.title, 'translated:menu.trailers', 'translates the shortcut title');
-        assert.strictEqual(trailersShortcut.description, 'translated:trailer.navigation-description', 'translates the shortcut description');
+        assert.ok(shortcutRoutes.includes('console.fleet-ops.management.vehicles'), 'registers the vehicles shortcut');
+        assert.notOk(shortcutRoutes.includes('console.fleet-ops.management.trailers'), 'trailers are hidden');
+        assert.notOk(shortcutRoutes.includes('console.fleet-ops.connectivity.devices'), 'connectivity is hidden');
     });
 
     test('it registers the FleetOps analytics dashboard', function (assert) {

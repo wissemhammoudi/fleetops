@@ -122,7 +122,7 @@ module('Unit | Controller | management/index (radar)', function (hooks) {
         assert.strictEqual(controller.view, 'agenda');
         assert.deepEqual(
             controller.allViews.map((view) => view.id),
-            ['my-assignments', 'shift-changes', 'due-this-week', 'unmatched-fuel', 'view-1'],
+            ['my-assignments', 'shift-changes', 'due-this-week', 'view-1'],
             'defaults first, then the saved ones, dropping malformed entries'
         );
     });
@@ -134,7 +134,11 @@ module('Unit | Controller | management/index (radar)', function (hooks) {
         const pills = this.controller.pills;
         assert.strictEqual(pills.find((pill) => pill.key === 'overdue').count, 3);
         assert.strictEqual(pills.find((pill) => pill.key === 'issues').count, 8);
-        assert.strictEqual(pills.find((pill) => pill.key === 'fuel').count, 0);
+        assert.strictEqual(pills.find((pill) => pill.key === 'notices').count, 0);
+        assert.notOk(
+            pills.find((pill) => pill.key === 'fuel'),
+            'fuel is hidden in this deployment'
+        );
 
         this.controller.togglePill('overdue');
         this.controller.togglePill('issues');

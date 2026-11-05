@@ -131,6 +131,7 @@ class RadarController extends Controller
         $built   = $this->buildItems($company, $now, false);
         $history = $this->scoreHistory($company);
         $brief   = RadarBriefing::build($built['items'], $now, $history);
+        $brief['categories'] = array_values(array_filter($brief['categories'], fn ($row) => !in_array($row['key'] ?? $row['category'] ?? null, self::HIDDEN_CATEGORIES, true)));
 
         $this->rememberScore($company, RadarBriefing::pushHistory($history, $brief['score']['value'], $now));
 
@@ -433,6 +434,25 @@ class RadarController extends Controller
      *
      * @return array{items: array, counts: array, summary: array, errors: array}
      */
+    /**
+     * Fuel, connectivity and trailer modules are hidden in this deployment,
+     * so their rules must not raise items or score rows.
+     */
+    public const HIDDEN_CATEGORIES = [RadarRules::CATEGORY_FUEL, RadarRules::CATEGORY_CONNECTIVITY];
+
+    public const HIDDEN_SUBJECTS = ['trailer', 'device'];
+
+    protected function withoutHiddenCategories(array $built, Carbon $now): array
+    {
+        $items = array_values(array_filter(
+            $built['items'],
+            fn ($item) => !in_array($item['category'] ?? null, self::HIDDEN_CATEGORIES, true) && !in_array($item['subject']['type'] ?? null, self::HIDDEN_SUBJECTS, true)
+        ));
+        $open = array_values(array_filter($items, fn ($item) => RadarRules::isOpen($item, $now)));
+
+        return ['items' => $items, 'counts' => RadarRules::counts($open), 'summary' => RadarRules::summary($items, $now)] + $built;
+    }
+
     protected function buildItems(?string $company, Carbon $now, bool $reconcile): array
     {
         $errors  = [];
@@ -457,7 +477,7 @@ class RadarController extends Controller
             $errors['states']  = $e->getMessage();
         }
 
-        $built            = RadarRules::build($sources, $now);
+        $built            = $this->withoutHiddenCategories(RadarRules::build($sources, $now), $now);
         $built['sources'] = $sources;
 
         if ($reconcile && empty($errors)) {
@@ -488,10 +508,7 @@ class RadarController extends Controller
             'drivers'               => fn ($company, $now) => $this->loadDrivers($company, $now),
             'shifts'                => fn ($company, $now, $sources) => $this->loadShifts($company, $now, $sources['drivers'] ?? []),
             'vehicles'              => fn ($company, $now) => $this->loadVehicles($company, $now),
-            'trailers'              => fn ($company, $now) => $this->loadTrailers($company, $now),
-            'devices'               => fn ($company, $now) => $this->loadDevices($company, $now),
             'parts'                 => fn ($company, $now) => $this->loadParts($company, $now),
-            'fuelTransactions'      => fn ($company, $now, $sources) => $this->loadFuelTransactions($company, $now, $sources['vehicles'] ?? []),
             'inspectionSubmissions' => fn ($company, $now) => $this->loadInspectionSubmissions($company, $now),
             'inspectionLinks'       => fn ($company, $now) => $this->loadInspectionLinks($company, $now),
             'notices'               => fn ($company) => $this->notices($company),

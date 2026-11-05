@@ -252,8 +252,6 @@ test('items, briefing and agenda load every source from the database', function 
     expect($payload['sources'])->toBe([])
         ->and($keys)->toContain(
             'maintenance_overdue:schedule_oil',
-            'inspection_due:schedule_trailer',
-            'maintenance_due_soon:schedule_device',
             'maintenance_due_soon:schedule_part',
             'maintenance_due_soon:schedule_equipment',
             'work_order_overdue:work_order_2041',
@@ -263,23 +261,25 @@ test('items, briefing and agenda load every source from the database', function 
             'driver_without_vehicle:driver_nair',
             'vehicle_without_driver:vehicle_042',
             'lease_expiring:vehicle_042',
-            'lease_expiring:trailer_019',
-            'device_unattached:device_477',
             'part_low_stock:part_pads',
-            'fuel_unmatched:fuel_provider_transaction_1',
             'inspection_failed:inspection_submission_failed',
             'inspection_failed:inspection_submission_plain',
             'inspection_draft:inspection_submission_draft',
             'inspection_link_pending:inspection_link_1',
         )
+        ->and($keys)->not->toContain(
+            'inspection_due:schedule_trailer',
+            'maintenance_due_soon:schedule_device',
+            'lease_expiring:trailer_019',
+            'device_unattached:device_477',
+            'fuel_unmatched:fuel_provider_transaction_1',
+        )
+        ->and(array_filter($payload['items'], fn ($item) => in_array($item['category'], ['fuel', 'connectivity'], true)))->toBe([])
         ->and($byKey['maintenance_overdue:schedule_oil']['subject'])->toMatchArray(['type' => 'vehicle', 'label' => 'TRK-118'])
-        ->and($byKey['inspection_due:schedule_trailer']['subject']['type'])->toBe('trailer')
-        ->and($byKey['maintenance_due_soon:schedule_device']['subject']['type'])->toBe('device')
         ->and($byKey['maintenance_due_soon:schedule_part']['subject']['type'])->toBe('part')
         ->and($byKey['maintenance_due_soon:schedule_equipment']['subject']['type'])->toBe('equipment')
         ->and($byKey['issue_open:issue_1']['subject']['label'])->toBe('TRK-118')
         ->and($byKey['shift_handover:driver_ortega']['subject'])->toMatchArray(['label' => 'Luis Ortega', 'phone' => '+15550001'])
-        ->and($byKey['fuel_unmatched:fuel_provider_transaction_1']['source']['suggested_vehicle']['public_id'])->toBe('vehicle_118')
         ->and($byKey['inspection_failed:inspection_submission_failed']['severity'])->toBe('critical')
         ->and(array_column($byKey['inspection_failed:inspection_submission_failed']['details']['failed_items'], 'label'))->toBe(['Brakes', 'Wipers'])
         ->and($byKey['inspection_failed:inspection_submission_plain']['severity'])->toBe('warning')

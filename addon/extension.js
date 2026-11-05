@@ -50,12 +50,6 @@ export default {
                     route: 'console.fleet-ops.management.vehicles',
                 },
                 {
-                    title: intlService.t('menu.trailers'),
-                    description: intlService.t('trailer.navigation-description'),
-                    icon: 'trailer',
-                    route: 'console.fleet-ops.management.trailers',
-                },
-                {
                     title: 'Fleets',
                     description: 'Organise drivers and vehicles into operational fleets.',
                     icon: 'layer-group',
@@ -66,12 +60,6 @@ export default {
                     description: 'Configure pricing rules and service rate cards.',
                     icon: 'tags',
                     route: 'console.fleet-ops.operations.service-rates',
-                },
-                {
-                    title: 'Devices',
-                    description: 'Manage connected telematics devices and their sensor data.',
-                    icon: 'microchip',
-                    route: 'console.fleet-ops.connectivity.devices',
                 },
                 {
                     title: 'Reports',

@@ -81,16 +81,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                 children: this.maintenanceItems,
             }),
             this.createBranch({
-                id: 'connectivity',
-                label: this.intl.t('menu.connectivity'),
-                icon: 'satellite-dish',
-                route: 'connectivity',
-                defaultRoute: 'connectivity.telematics',
-                requiresVisibleChildren: true,
-                keywords: ['telematics', 'fuel integrations', 'devices', 'sensors'],
-                children: this.connectivityItems,
-            }),
-            this.createBranch({
                 id: 'analytics',
                 label: this.intl.t('menu.analytics'),
                 icon: 'chart-line',
@@ -167,13 +157,11 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
             ]),
             this.createItem('menu.drivers', 'id-card', 'management.drivers', 'fleet-ops list driver', 'fleet-ops see driver', ['driver', 'online drivers']),
             this.createItem('menu.vehicles', 'truck', 'management.vehicles', 'fleet-ops list vehicle', 'fleet-ops see vehicle', ['vehicle', 'track vehicles', 'online vehicles']),
-            this.createItem('menu.trailers', 'trailer', 'management.trailers', 'fleet-ops list trailer', 'fleet-ops see trailer', ['trailer', 'towed asset', 'reefer', 'flatbed']),
             this.createItem('menu.fleets', 'user-group', 'management.fleets', 'fleet-ops list fleet', 'fleet-ops see fleet', ['fleet', 'teams']),
             this.createItem('menu.vendors', 'warehouse', 'management.vendors', 'fleet-ops list vendor', 'fleet-ops see vendor'),
             this.createItem('menu.contacts', 'address-book', 'management.contacts', 'fleet-ops list contact', 'fleet-ops see contact'),
             this.createItem('menu.places', 'location-dot', 'management.places', 'fleet-ops list place', 'fleet-ops see place'),
             this.createItem('menu.fuel-reports', 'gas-pump', 'management.fuel-reports', 'fleet-ops list fuel-report', 'fleet-ops see fuel-report'),
-            this.createItem('menu.fuel-transactions', 'credit-card', 'management.fuel-transactions', 'fleet-ops list fuel-report', 'fleet-ops see fuel-report'),
             this.createItem('menu.issues', 'triangle-exclamation', 'management.issues', 'fleet-ops list issue', 'fleet-ops see issue'),
             ...(this.websiteRequestCounts.canList
                 ? [
@@ -211,16 +199,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
             this.createItem('menu.maintenances', 'history', 'maintenance.maintenances', 'fleet-ops list maintenance', 'fleet-ops see maintenance'),
             this.createItem('menu.equipment', 'trailer', 'maintenance.equipment', 'fleet-ops list equipment', 'fleet-ops see equipment'),
             this.createItem('menu.parts', 'cog', 'maintenance.parts', 'fleet-ops list part', 'fleet-ops see part'),
-        ]);
-    }
-
-    get connectivityItems() {
-        return this.withRegistryItems('connectivity', [
-            this.createHubItem(this.intl.t('menu.telematics'), 'satellite-dish', 'connectivity.telematics', 'fleet-ops list telematic', 'fleet-ops see telematic', ['connectivity hub']),
-            this.createItem('menu.fuel-providers', 'gas-pump', 'connectivity.fuel-providers', 'fleet-ops list fuel-report', 'fleet-ops see fuel-report', ['fuel integrations']),
-            this.createItem('menu.devices', 'hard-drive', 'connectivity.devices', 'fleet-ops list device', 'fleet-ops see device'),
-            this.createItem('menu.sensors', 'temperature-full', 'connectivity.sensors', 'fleet-ops list sensor', 'fleet-ops see sensor'),
-            this.createItem('menu.events', 'stream', 'connectivity.events', 'fleet-ops list device-event', 'fleet-ops see device-event'),
         ]);
     }
 
