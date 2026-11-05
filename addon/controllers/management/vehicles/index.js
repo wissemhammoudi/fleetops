@@ -211,19 +211,6 @@ export default class ManagementVehiclesIndexController extends Controller {
                 resizable: true,
             },
             {
-                label: this.intl.t('resource.trailers'),
-                valuePath: 'trailers',
-                cellComponent: 'cell/resource-list',
-                resourceType: 'trailer',
-                hidden: true,
-                filterable: true,
-                filterComponent: 'filter/model-multiple',
-                filterComponentPlaceholder: this.intl.t('common.select-resource-filter-by', { resource: this.intl.t('resource.trailer') }),
-                filterParam: 'trailer',
-                model: 'trailer',
-                modelNamePath: 'displayName',
-            },
-            {
                 label: this.intl.t('resource.devices'),
                 valuePath: 'devices',
                 cellComponent: 'cell/resource-list',
@@ -328,16 +315,6 @@ export default class ManagementVehiclesIndexController extends Controller {
                 filterComponent: 'filter/date',
             },
             // Filter-only entries omit a column label so the visible-column picker excludes them.
-            {
-                filterLabel: this.intl.t('vehicle.filters.has-trailer'),
-                valuePath: 'has_trailer',
-                hidden: true,
-                filterable: true,
-                filterComponent: 'filter/radio',
-                filterComponentPlaceholder: this.intl.t('vehicle.filters.any'),
-                filterOptions: this.presenceOptions('attached'),
-                filterParam: 'has_trailer',
-            },
             {
                 filterLabel: this.intl.t('vehicle.filters.has-driver'),
                 valuePath: 'has_driver',

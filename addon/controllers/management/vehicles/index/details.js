@@ -27,16 +27,6 @@ export default class ManagementVehiclesIndexDetailsController extends Controller
                 label: 'Devices',
             },
             {
-                id: 'trailers',
-                route: 'management.vehicles.index.details.trailers',
-                label: this.intl.t('resource.trailers'),
-            },
-            {
-                id: 'equipment',
-                route: 'management.vehicles.index.details.equipment',
-                label: this.intl.t('resource.equipment'),
-            },
-            {
                 id: 'schedules',
                 route: 'management.vehicles.index.details.schedules',
                 label: 'Schedules',

@@ -45,16 +45,6 @@ export default class VehicleActionsService extends ResourceActionService {
                 component: 'device/manager',
             },
             {
-                key: 'trailers',
-                label: this.intl.t('resource.trailers'),
-                component: 'vehicle/details/trailers',
-            },
-            {
-                key: 'equipment',
-                label: this.intl.t('resource.equipment'),
-                component: 'vehicle/details/equipment',
-            },
-            {
                 key: 'schedules',
                 label: 'Schedules',
                 component: 'vehicle/details/schedules',

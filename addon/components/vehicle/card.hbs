@@ -7,7 +7,13 @@
             <div class="font-semibold flex-1 truncate">{{or @resource.name @resource.yearMakeModel}}</div>
             <FaIcon @icon="circle" @size="xs" class="fleetops-card-title-indicator {{if @resource.online 'text-green-500' 'text-gray-400'}}" />
         </div>
-        <div class="text-gray-400 dark:text-gray-500 text-sm w-full truncate">{{or @resource.plate_number @resource.vin @resource.serial_number @resource.call_sign @resource.public_id}}</div>
+        <div class="text-gray-400 dark:text-gray-500 text-sm w-full truncate">{{or
+                @resource.plate_number
+                @resource.vin
+                @resource.serial_number
+                @resource.call_sign
+                @resource.public_id
+            }}</div>
         {{#if (has-block "header")}}
             {{yield to="header"}}
         {{/if}}
@@ -16,7 +22,12 @@
         </RegistryYield>
     </Card.header>
     <Card.body class="{{@bodyClass}} h-40 overflow-hidden">
-        <Image src={{resource-image @resource.photo_url "vehicle"}} @fallbackSrc={{(placeholder-image "vehicle")}} alt={{or @resource.name @resource.yearMakeModel}} class="fleetops-card-image fleetops-card-image--cover" />
+        <Image
+            src={{resource-image @resource.photo_url "vehicle"}}
+            @fallbackSrc={{(placeholder-image "vehicle")}}
+            alt={{or @resource.name @resource.yearMakeModel}}
+            class="fleetops-card-image fleetops-card-image--cover"
+        />
         {{#if (has-block "body")}}
             {{yield to="body"}}
         {{/if}}
@@ -49,16 +60,6 @@
                     {{else}}
                         {{t "common.no-driver-assigned"}}
                     {{/if}}
-                </span>
-            </div>
-            <div class="fleetops-card-meta">
-                <FaIcon @icon="trailer" @prefix="fas" />
-                <span class="fleetops-card-meta-value">
-                    {{#each @resource.trailers as |trailer|}}
-                        <SelectOption::Trailer @option={{trailer}} @compact={{true}} />
-                    {{else}}
-                        {{t "vehicle.empty.trailers"}}
-                    {{/each}}
                 </span>
             </div>
             <div class="fleetops-card-meta">{{t "common.last-modified"}}: {{@resource.updatedAt}}</div>

@@ -55,23 +55,6 @@
             </div>
 
             <div class="field-info-container">
-                <div class="field-name">{{t "resource.trailer"}}</div>
-                <div class="field-value">
-                    {{#let (resource-relation @resource "trailers") as |trailers|}}
-                        {{#if trailers.length}}
-                            <div class="flex flex-col gap-1">
-                                {{#each trailers as |trailer|}}
-                                    <Trailer::Pill @trailer={{trailer}} />
-                                {{/each}}
-                            </div>
-                        {{else}}
-                            {{n-a null}}
-                        {{/if}}
-                    {{/let}}
-                </div>
-            </div>
-
-            <div class="field-info-container">
                 <div class="field-name">{{t "common.status"}}</div>
                 <div class="field-value">{{n-a (smart-humanize @resource.status)}}</div>
             </div>
