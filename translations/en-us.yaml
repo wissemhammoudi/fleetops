@@ -957,6 +957,46 @@ customer:
         upload-new-photo: Upload New Photo
         user-account: User Account
         user-account-help-text: Each customer profile needs to be connected to a specific user account. This association is essential for handling the authentication process, ensuring that each customer can securely access and manage their profile and other services.
+        customer-type: Customer type
+        individual: Individual
+        company: Company
+        not-specified: Not specified
+        cin-number: CIN number
+        cin-help-text: Tunisian national identity card number (8 digits).
+        legal-name: Legal name
+        tax-id: Tax ID (matricule fiscal)
+        legal-form: Legal form
+        select-legal-form: Select legal form
+        rne-id: RNE number
+        representative-name: Legal representative
+        activity: Activity
+        upload-document: Upload
+        replace-document: Replace
+        view-document: View
+        document-uploaded: Uploaded
+        document-missing: Not uploaded yet
+        document-formats: PDF, JPG or PNG, up to 5 MB. Documents are stored privately.
+        identity-verification: Identity & verification
+        verify-customer: Verify customer
+        revoke-verification: Revoke verification
+        verified-by: Verified by {name} on {date}
+        verified-success: Customer verified.
+        missing-before-verification: Complete these before verifying
+    legal-forms:
+        individual_business: Individual business
+        suarl: SUARL
+        sarl: SARL
+        sa: SA
+        other: Other
+    documents:
+        cin_front: CIN - front
+        cin_back: CIN - back
+        tax_card: Tax card / patente
+        rne_extract: RNE extract
+    verification:
+        verified: Verified
+        unverified: Not verified
+        outdated: Changed since verification
 
 custom-entity:
     fields:

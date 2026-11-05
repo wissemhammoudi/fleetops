@@ -102,6 +102,135 @@
                     />
                 </div>
             {{/if}}
+            <div class="col-span-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700" data-test-customer-identity>
+                <label class="block mb-1.5">{{t "customer.fields.customer-type"}}</label>
+                <div class="flex flex-row space-x-1 mb-3">
+                    <Button
+                        @type={{if (eq this.identityKind "individual") "primary" "default"}}
+                        @size="xs"
+                        @icon="user"
+                        @text={{t "customer.fields.individual"}}
+                        @onClick={{fn this.setIdentityKind "individual"}}
+                        @disabled={{cannot-write @resource}}
+                    />
+                    <Button
+                        @type={{if (eq this.identityKind "company") "primary" "default"}}
+                        @size="xs"
+                        @icon="building"
+                        @text={{t "customer.fields.company"}}
+                        @onClick={{fn this.setIdentityKind "company"}}
+                        @disabled={{cannot-write @resource}}
+                    />
+                </div>
+                {{#if this.identityKind}}
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                        {{#if (eq this.identityKind "individual")}}
+                            <InputGroup @name={{t "customer.fields.cin-number"}} @helpText={{t "customer.fields.cin-help-text"}}>
+                                <input
+                                    value={{this.identity.cin}}
+                                    type="text"
+                                    inputmode="numeric"
+                                    maxlength="8"
+                                    class="w-full form-input"
+                                    placeholder="12345678"
+                                    disabled={{cannot-write @resource}}
+                                    {{on "input" (fn this.setIdentityField "cin")}}
+                                />
+                            </InputGroup>
+                        {{else}}
+                            <InputGroup @name={{t "customer.fields.legal-name"}}>
+                                <input
+                                    value={{this.identity.legal_name}}
+                                    type="text"
+                                    class="w-full form-input"
+                                    placeholder={{t "customer.fields.legal-name"}}
+                                    disabled={{cannot-write @resource}}
+                                    {{on "input" (fn this.setIdentityField "legal_name")}}
+                                />
+                            </InputGroup>
+                            <InputGroup @name={{t "customer.fields.tax-id"}}>
+                                <input
+                                    value={{this.identity.tax_id}}
+                                    type="text"
+                                    class="w-full form-input"
+                                    placeholder="1234567ABC000"
+                                    disabled={{cannot-write @resource}}
+                                    {{on "input" (fn this.setIdentityField "tax_id")}}
+                                />
+                            </InputGroup>
+                            <InputGroup @name={{t "customer.fields.legal-form"}}>
+                                <select class="w-full form-select form-input" disabled={{cannot-write @resource}} {{on "change" (fn this.setIdentityField "legal_form")}}>
+                                    <option value="" selected={{not this.identity.legal_form}}>{{t "customer.fields.select-legal-form"}}</option>
+                                    {{#each this.legalForms as |form|}}
+                                        <option value={{form}} selected={{eq form this.identity.legal_form}}>{{t (concat "customer.legal-forms." form)}}</option>
+                                    {{/each}}
+                                </select>
+                            </InputGroup>
+                            <InputGroup @name={{t "customer.fields.rne-id"}}>
+                                <input
+                                    value={{this.identity.rne_id}}
+                                    type="text"
+                                    class="w-full form-input"
+                                    placeholder={{t "customer.fields.rne-id"}}
+                                    disabled={{cannot-write @resource}}
+                                    {{on "input" (fn this.setIdentityField "rne_id")}}
+                                />
+                            </InputGroup>
+                            <InputGroup @name={{t "customer.fields.representative-name"}}>
+                                <input
+                                    value={{this.identity.representative_name}}
+                                    type="text"
+                                    class="w-full form-input"
+                                    placeholder={{t "customer.fields.representative-name"}}
+                                    disabled={{cannot-write @resource}}
+                                    {{on "input" (fn this.setIdentityField "representative_name")}}
+                                />
+                            </InputGroup>
+                            <InputGroup @name={{t "customer.fields.activity"}}>
+                                <input
+                                    value={{this.identity.activity}}
+                                    type="text"
+                                    class="w-full form-input"
+                                    placeholder={{t "customer.fields.activity"}}
+                                    disabled={{cannot-write @resource}}
+                                    {{on "input" (fn this.setIdentityField "activity")}}
+                                />
+                            </InputGroup>
+                        {{/if}}
+                    </div>
+                    <div class="mt-2 space-y-2">
+                        {{#each this.identityDocuments as |document|}}
+                            <div class="flex items-center justify-between rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2" data-test-identity-document={{document.kind}}>
+                                <div>
+                                    <div class="font-semibold dark:text-gray-100">{{t (concat "customer.documents." document.kind)}}</div>
+                                    <div class="text-gray-500 dark:text-gray-400">
+                                        {{#if document.uuid}}
+                                            <FaIcon @icon="circle-check" class="text-green-500 mr-1" />{{t "customer.fields.document-uploaded"}}
+                                        {{else}}
+                                            {{t "customer.fields.document-missing"}}
+                                        {{/if}}
+                                    </div>
+                                </div>
+                                <div class="flex flex-row items-center space-x-1">
+                                    {{#if document.uuid}}
+                                        <Button @type="default" @size="xs" @icon="eye" @text={{t "customer.fields.view-document"}} @onClick={{fn this.viewIdentityDocument document.uuid}} />
+                                    {{/if}}
+                                    <UploadButton
+                                        @name={{concat "identity-" document.kind}}
+                                        @accept="application/pdf,image/jpeg,image/png"
+                                        @onFileAdded={{perform this.uploadIdentityDocument document.kind}}
+                                        @icon="upload"
+                                        @size="xs"
+                                        @buttonText={{if document.uuid (t "customer.fields.replace-document") (t "customer.fields.upload-document")}}
+                                        @disabled={{or (cannot-write @resource) this.uploadIdentityDocument.isRunning}}
+                                    />
+                                </div>
+                            </div>
+                        {{/each}}
+                        <div class="text-gray-400 dark:text-gray-500">{{t "customer.fields.document-formats"}}</div>
+                    </div>
+                {{/if}}
+            </div>
             <RegistryYield @registry="fleet-ops:component:customer:form:details" as |RegistryComponent|>
                 <RegistryComponent @resource={{@resource}} @controller={{@controller}} @permission={{get-write-permission @resource}} />
             </RegistryYield>

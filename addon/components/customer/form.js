@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
+import { IDENTITY_DOCUMENTS, IDENTITY_NAMESPACE, LEGAL_FORMS, openIdentityDocument } from '../../utils/customer-identity';
 
 export default class CustomerFormComponent extends Component {
     @service customerActions;
@@ -9,6 +10,56 @@ export default class CustomerFormComponent extends Component {
     @service currentUser;
     @service notifications;
     @service('universe/extension-manager') extensionManager;
+
+    legalForms = LEGAL_FORMS;
+
+    get identity() {
+        return this.args.resource?.meta?.identity ?? {};
+    }
+
+    get identityKind() {
+        return this.identity.kind ?? null;
+    }
+
+    get identityDocuments() {
+        const documents = this.identity.documents ?? {};
+        return (IDENTITY_DOCUMENTS[this.identityKind] ?? []).map((kind) => ({ kind, uuid: documents[kind] ?? null }));
+    }
+
+    updateIdentity(changes) {
+        const meta = this.args.resource.meta ?? {};
+        this.args.resource.set('meta', { ...meta, identity: { ...this.identity, ...changes } });
+    }
+
+    @action setIdentityKind(kind) {
+        if (this.identityKind !== kind) {
+            this.updateIdentity({ kind, documents: {} });
+        }
+    }
+
+    @action setIdentityField(field, event) {
+        this.updateIdentity({ [field]: event.target.value });
+    }
+
+    @action viewIdentityDocument(uuid) {
+        openIdentityDocument(this.fetch, uuid).catch((error) => this.notifications.serverError(error));
+    }
+
+    @task *uploadIdentityDocument(kind, file) {
+        try {
+            const body = new FormData();
+            body.append('file', file.file);
+            body.append('kind', kind);
+            const headers = this.fetch.getHeaders();
+            delete headers['Content-Type'];
+            const result = yield this.fetch.request('customer-identities/documents', 'POST', { body, headers }, { namespace: IDENTITY_NAMESPACE });
+            this.updateIdentity({ documents: { ...(this.identity.documents ?? {}), [kind]: result.document.uuid } });
+        } catch (error) {
+            this.notifications.serverError(error);
+        } finally {
+            file.queue?.remove(file);
+        }
+    }
 
     get showWelcomeEmailOption() {
         return this.args.resource?.isNew && this.extensionManager.isInstalled('@fleetbase/customer-portal-engine');

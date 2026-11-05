@@ -506,6 +506,46 @@ customer:
       spécifique. Cette association est essentielle pour gérer le processus d'authentification,
       garantissant que chaque client peut accéder et gérer en toute sécurité son profil
       et d'autres services.
+    customer-type: Type de client
+    individual: Particulier
+    company: Société
+    not-specified: Non précisé
+    cin-number: Numéro CIN
+    cin-help-text: Numéro de la carte d'identité nationale tunisienne (8 chiffres).
+    legal-name: Raison sociale
+    tax-id: Matricule fiscal
+    legal-form: Forme juridique
+    select-legal-form: Choisir la forme juridique
+    rne-id: Numéro RNE
+    representative-name: Représentant légal
+    activity: Activité
+    upload-document: Téléverser
+    replace-document: Remplacer
+    view-document: Voir
+    document-uploaded: Téléversé
+    document-missing: Pas encore téléversé
+    document-formats: PDF, JPG ou PNG, 5 Mo maximum. Les documents sont stockés de façon privée.
+    identity-verification: Identité et vérification
+    verify-customer: Vérifier le client
+    revoke-verification: Annuler la vérification
+    verified-by: Vérifié par {name} le {date}
+    verified-success: Client vérifié.
+    missing-before-verification: À compléter avant la vérification
+  legal-forms:
+    individual_business: Entreprise individuelle
+    suarl: SUARL
+    sarl: SARL
+    sa: SA
+    other: Autre
+  documents:
+    cin_front: CIN - recto
+    cin_back: CIN - verso
+    tax_card: Carte fiscale / patente
+    rne_extract: Extrait RNE
+  verification:
+    verified: Vérifié
+    unverified: Non vérifié
+    outdated: Modifié depuis la vérification
 custom-entity:
   fields:
     description: Description

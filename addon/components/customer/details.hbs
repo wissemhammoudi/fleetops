@@ -31,6 +31,103 @@
             </div>
         </div>
     </ContentPanel>
+    <ContentPanel @title={{t "customer.fields.identity-verification"}} @open={{true}} @wrapperClass="bordered-top">
+        <div class="text-xs dark:text-gray-100" data-test-customer-verification>
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                    {{#if this.verification}}
+                        <Badge @status={{this.statusBadge}}>{{t (concat "customer.verification." this.verification.status)}}</Badge>
+                        {{#if (eq this.verification.status "verified")}}
+                            <span class="text-gray-500 dark:text-gray-400">
+                                {{t "customer.fields.verified-by" name=(n-a this.verification.verified_by) date=this.verifiedAt}}
+                            </span>
+                        {{/if}}
+                    {{else if this.loadVerification.isRunning}}
+                        <Spinner />
+                    {{/if}}
+                </div>
+                <div class="flex flex-row space-x-1">
+                    {{#if (and this.verification.can_verify (eq this.verification.status "verified"))}}
+                        <Button
+                            @type="danger"
+                            @size="xs"
+                            @icon="ban"
+                            @text={{t "customer.fields.revoke-verification"}}
+                            @onClick={{perform this.revoke}}
+                            @isLoading={{this.revoke.isRunning}}
+                        />
+                    {{else if this.verification.can_verify}}
+                        <Button
+                            @type="primary"
+                            @size="xs"
+                            @icon="user-check"
+                            @text={{t "customer.fields.verify-customer"}}
+                            @onClick={{perform this.verify}}
+                            @isLoading={{this.verify.isRunning}}
+                            @disabled={{not this.canVerify}}
+                        />
+                    {{/if}}
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div class="field-info-container">
+                    <div class="field-name">{{t "customer.fields.customer-type"}}</div>
+                    <div class="field-value">{{if this.identity.kind (t (concat "customer.fields." this.identity.kind)) (t "customer.fields.not-specified")}}</div>
+                </div>
+                {{#if (eq this.identity.kind "individual")}}
+                    <div class="field-info-container">
+                        <div class="field-name">{{t "customer.fields.cin-number"}}</div>
+                        <div class="field-value">{{n-a this.identity.cin}}</div>
+                    </div>
+                {{else if (eq this.identity.kind "company")}}
+                    <div class="field-info-container">
+                        <div class="field-name">{{t "customer.fields.legal-name"}}</div>
+                        <div class="field-value">{{n-a this.identity.legal_name}}</div>
+                    </div>
+                    <div class="field-info-container">
+                        <div class="field-name">{{t "customer.fields.tax-id"}}</div>
+                        <div class="field-value">{{n-a this.identity.tax_id}}</div>
+                    </div>
+                    <div class="field-info-container">
+                        <div class="field-name">{{t "customer.fields.legal-form"}}</div>
+                        <div class="field-value">{{if this.identity.legal_form (t (concat "customer.legal-forms." this.identity.legal_form)) "-"}}</div>
+                    </div>
+                    <div class="field-info-container">
+                        <div class="field-name">{{t "customer.fields.rne-id"}}</div>
+                        <div class="field-value">{{n-a this.identity.rne_id}}</div>
+                    </div>
+                    <div class="field-info-container">
+                        <div class="field-name">{{t "customer.fields.representative-name"}}</div>
+                        <div class="field-value">{{n-a this.identity.representative_name}}</div>
+                    </div>
+                    <div class="field-info-container">
+                        <div class="field-name">{{t "customer.fields.activity"}}</div>
+                        <div class="field-value">{{n-a this.identity.activity}}</div>
+                    </div>
+                {{/if}}
+            </div>
+            {{#if this.verification.documents.length}}
+                <div class="mt-3 space-y-2">
+                    {{#each this.verification.documents as |document|}}
+                        <div class="flex items-center justify-between rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2">
+                            <span class="font-semibold">{{t (concat "customer.documents." document.kind)}}</span>
+                            <Button @type="default" @size="xs" @icon="eye" @text={{t "customer.fields.view-document"}} @onClick={{fn this.viewDocument document.uuid}} />
+                        </div>
+                    {{/each}}
+                </div>
+            {{/if}}
+            {{#if (and this.problems.length (not-eq this.verification.status "verified"))}}
+                <div class="mt-3 rounded-md border border-yellow-300 bg-yellow-50 dark:border-yellow-700 dark:bg-yellow-900/20 px-3 py-2 text-yellow-800 dark:text-yellow-200">
+                    <div class="font-semibold mb-1">{{t "customer.fields.missing-before-verification"}}</div>
+                    <ul class="list-disc pl-4">
+                        {{#each this.problems as |problem|}}
+                            <li>{{problem}}</li>
+                        {{/each}}
+                    </ul>
+                </div>
+            {{/if}}
+        </div>
+    </ContentPanel>
     <ContentPanel @title={{t "customer.fields.addresses"}} @open={{true}} @wrapperClass="bordered-top">
         {{#if @resource.places.length}}
             <div class="space-y-2 text-xs dark:text-gray-100">
