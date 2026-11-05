@@ -7,7 +7,6 @@ export default buildRoutes(function () {
         this.route('collection-rounds');
         this.route('customer-wallets');
         this.route('website-inbox');
-        this.route('email-campaigns');
         this.route('order-config', function () {});
         this.route('service-rates', function () {
             this.route('index', { path: '/' }, function () {
