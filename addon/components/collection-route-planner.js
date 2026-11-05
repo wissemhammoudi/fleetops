@@ -144,6 +144,7 @@ export default class CollectionRoutePlannerComponent extends Component {
 
     @action setField(field, event) {
         this[field] = event.target.value;
+        if (field === 'date') this.keepDepartureAhead();
         this.invalidate();
     }
 
@@ -154,7 +155,18 @@ export default class CollectionRoutePlannerComponent extends Component {
 
     @action setDate(value) {
         this.date = value;
+        this.keepDepartureAhead();
         this.invalidate();
+    }
+
+    keepDepartureAhead() {
+        const now = new Date();
+        if (this.date !== localDate(now)) return;
+        const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        if (this.startTime > current) return;
+        const nextHour = Math.min(now.getHours() + 1, 23);
+        this.startTime = `${String(nextHour).padStart(2, '0')}:00`;
+        if (this.endTime <= this.startTime) this.endTime = '23:59';
     }
 
     @action toggleDriver(driver, event) {

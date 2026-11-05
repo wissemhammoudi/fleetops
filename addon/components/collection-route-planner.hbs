@@ -133,16 +133,19 @@
                             {{/each}}
                         </div>
                         <div class="grid grid-cols-2 gap-2">
-                            {{#if (eq this.kind "delivery")}}
-                                <label class="text-xs font-medium text-gray-600 dark:text-gray-300">{{t "planning.optimizer.start"}}
-                                    <input class="form-input form-input-sm w-full mt-0.5" type="time" value={{this.startTime}} {{on "change" (fn this.setField "startTime")}} />
-                                </label>
-                            {{/if}}
+                            <label class="text-xs font-medium text-gray-600 dark:text-gray-300">{{t "planning.optimizer.start"}}
+                                <input
+                                    class="form-input form-input-sm w-full mt-0.5"
+                                    type="time"
+                                    value={{this.startTime}}
+                                    {{on "change" (fn this.setField "startTime")}}
+                                    data-test-route-start
+                                />
+                            </label>
                             <label class="text-xs font-medium text-gray-600 dark:text-gray-300">{{t "planning.optimizer.end"}}
                                 <input class="form-input form-input-sm w-full mt-0.5" type="time" value={{this.endTime}} {{on "change" (fn this.setField "endTime")}} />
                             </label>
                         </div>
-                        {{#if (eq this.kind "pickup")}}<p class="text-xs text-gray-400">{{t "planning.optimizer.pickup-departure"}}</p>{{/if}}
                     </div>
 
                     {{! Drivers — legacy resource panel rows }}

@@ -74,9 +74,8 @@ planning:
         help: Select ready pickups or fully received depot orders from the list, then choose drivers and a working window. Routes return to the depot. Multi-pickup, multi-recipient and return orders require manual whole-order planning.
         required: Select orders, a date and at least one driver before orchestrating.
         date: Route date (company timezone)
-        start: Delivery departure
+        start: Departure time
         end: Latest depot return
-        pickup-departure: Pickups depart at the configured company collection departure time.
         orchestrate: Orchestrate and preview
         expires: Proposal expires
         save: Confirm and save routes

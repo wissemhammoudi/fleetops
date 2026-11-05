@@ -162,7 +162,7 @@ class CollectionRounds
                 }
             } elseif ($action === 'release') {
                 abort_unless($round->status === 'draft' && $round->driver_uuid && $round->depot && count($round->stops), 409, 'Assign a driver and depot to a nonempty draft before release.');
-                self::assertCalendar($company, $round->scheduled_at, data_get(self::orders($round)->first()?->meta, 'collection_workflow.pickup_window.end'));
+                self::assertCalendar($company, $round->scheduled_at, data_get(self::orders($round)->first()?->meta, 'collection_workflow.pickup_window.end'), (bool) data_get($round->routing, 'plan_uuid'));
                 $driver = Driver::where('uuid', $round->driver_uuid)->where('company_uuid', $company)->lockForUpdate()->first();
                 abort_unless($driver, 409, 'The assigned driver is no longer available.');
                 CollectionCapacity::assertAssignment($round, $driver, CollectionSchedule::forCompany($company));
@@ -234,7 +234,7 @@ class CollectionRounds
                 }
                 self::revision($round, $input);
                 abort_unless($round->status === 'released' && now()->greaterThanOrEqualTo($round->scheduled_at), 409, 'The round is not released or its departure time has not arrived.');
-                self::assertCalendar($company, $round->scheduled_at, data_get(self::orders($round)->first()?->meta, 'collection_workflow.pickup_window.end'));
+                self::assertCalendar($company, $round->scheduled_at, data_get(self::orders($round)->first()?->meta, 'collection_workflow.pickup_window.end'), (bool) data_get($round->routing, 'plan_uuid'));
                 foreach (self::orders($round) as $order) {
                     self::assertContract($order, $round);
                     $order->recordCollectionRound($round->uuid, 'pickup_in_progress');
@@ -342,7 +342,7 @@ class CollectionRounds
 
     private static function assertContract(Order $order, CollectionRound $round): void
     {
-        self::assertCalendar($round->company_uuid, $round->scheduled_at, data_get($order->meta, 'collection_workflow.pickup_window.end'));
+        self::assertCalendar($round->company_uuid, $round->scheduled_at, data_get($order->meta, 'collection_workflow.pickup_window.end'), (bool) data_get($round->routing, 'plan_uuid'));
         abort_if(data_get($order->meta, 'collection_workflow.pickup_window.end')
             && now()->greaterThanOrEqualTo(Carbon::parse(data_get($order->meta, 'collection_workflow.pickup_window.end'))),
             409, 'The legacy pickup window has expired. Recall this unstarted round, then ask the customer to withdraw and reconfirm readiness for Dispatcher planning.');
@@ -358,10 +358,12 @@ class CollectionRounds
         abort_unless($round->revision === (int) $input['revision'], 409, 'The round changed. Refresh before continuing.');
     }
 
-    private static function assertCalendar(string $company, \Carbon\CarbonInterface $planned, ?string $end = null): void
+    private static function assertCalendar(string $company, \Carbon\CarbonInterface $planned, ?string $end = null, bool $routed = false): void
     {
         $calendar = CollectionSchedule::forCompany($company);
-        abort_unless(CollectionSchedule::containsPickup($planned, $calendar, $end), 409,
+        // Route-planner rounds carry a dispatcher-chosen departure time, so only the operating day is enforced.
+        $valid = $routed && $end === null ? CollectionSchedule::operatesOn($planned, $calendar) : CollectionSchedule::containsPickup($planned, $calendar, $end);
+        abort_unless($valid, 409,
             'The collection calendar changed. Recall any unstarted round, then ask the customer to withdraw and reconfirm readiness for Dispatcher planning.');
     }
 

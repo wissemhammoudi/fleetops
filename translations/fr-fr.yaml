@@ -71,9 +71,8 @@ planning:
         help: Sélectionnez les collectes prêtes ou les commandes entièrement reçues au dépôt, puis les chauffeurs et un créneau de travail. Les tournées reviennent au dépôt. Les commandes multi-collectes, multi-destinataires et les retours nécessitent une planification manuelle sans fractionner les commandes.
         required: Sélectionnez des commandes, une date et au moins un chauffeur.
         date: Date du trajet (fuseau de la société)
-        start: Départ des livraisons
+        start: Heure de départ
         end: Retour au dépôt au plus tard
-        pickup-departure: Les collectes partent à l'heure de départ configurée pour la société.
         orchestrate: Orchestrer et prévisualiser
         expires: Expiration de la proposition
         save: Enregistrer les trajets vérifiés en brouillon

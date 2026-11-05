@@ -126,6 +126,13 @@ class CollectionSchedule
         ], $schedule['pickup_windows'] ?? []);
     }
 
+    public static function operatesOn(CarbonInterface $planned, array $schedule): bool
+    {
+        $day = CarbonImmutable::instance($planned)->setTimezone($schedule['timezone'])->startOfDay();
+
+        return self::operatingDate($day, $schedule)->equalTo($day);
+    }
+
     public static function containsPickup(CarbonInterface $planned, array $schedule, ?string $end = null): bool
     {
         $local = CarbonImmutable::instance($planned)->setTimezone($schedule['timezone']);
