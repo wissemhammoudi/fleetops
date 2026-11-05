@@ -3798,3 +3798,44 @@ resource-summary:
         work-order: Work order
         zone: Zone
         zones: Zones
+driver-identity:
+  title: "Driver type & identity"
+  verification-title: "Identity verification"
+  driver-type: "Driver type"
+  not-specified: "Not specified"
+  kinds:
+    team: "Team member"
+    freelance: "Freelancer"
+  fields:
+    cin: "CIN number"
+    cin-help: "8 digits on the national identity card"
+    brand-name: "Brand / trade name"
+    tax-id: "Tax ID (matricule fiscal)"
+    rne-id: "RNE number"
+    tax-regime: "Tax regime"
+    select-tax-regime: "Select tax regime"
+    rib: "RIB"
+    rib-help: "20 digits bank account number"
+  tax-regimes:
+    forfaitaire: "Forfaitaire"
+    reel: "Réel"
+  documents:
+    cin_front: "CIN (front)"
+    cin_back: "CIN (back)"
+    contract: "Signed contract (PDF)"
+    patente: "Patente"
+    rne_extract: "RNE extract"
+  document-uploaded: "Uploaded"
+  document-missing: "Missing"
+  view-document: "View"
+  upload-document: "Upload"
+  replace-document: "Replace"
+  status:
+    verified: "Verified"
+    outdated: "Changed since verification"
+    unverified: "Not verified"
+  verify: "Verify driver"
+  revoke: "Revoke verification"
+  verified-by: "by {name} on {date}"
+  verified-success: "Driver verified"
+  missing-before-verification: "Needed before verification"

@@ -29,6 +29,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 
 class DriverController extends FleetOpsController
@@ -77,6 +78,14 @@ class DriverController extends FleetOpsController
             return $createDriverRequest->responseWithErrors($validator);
         }
 
+        // Identity is checked before the login account or driver is created, so an invalid identity never leaves partial records.
+        $identityGate = $this->driverIdentityGate();
+        try {
+            $identity = $identityGate?->validate($input['identity'] ?? null, null, true);
+        } catch (ValidationException $e) {
+            return response()->error(collect($e->errors())->flatten()->values()->all(), 422);
+        }
+
         try {
             $record = $this->model->createRecordFromRequest(
                 $request,
@@ -107,7 +116,7 @@ class DriverController extends FleetOpsController
 
                     // Prepare input
                     $input = $input
-                            ->except(['name', 'password', 'email', 'phone', 'meta', 'avatar_uuid', 'photo_uuid', 'status', 'user_uuid', 'user'])
+                            ->except(['name', 'password', 'email', 'phone', 'meta', 'avatar_uuid', 'photo_uuid', 'status', 'user_uuid', 'user', 'identity'])
                             ->filter()
                             ->toArray();
 
@@ -120,8 +129,11 @@ class DriverController extends FleetOpsController
                         $input['location'] = new Point(0, 0);
                     }
                 },
-                function ($request, &$driver) {
+                function ($request, &$driver) use ($identityGate, $identity) {
                     $driver->load(['user']);
+                    if ($identity) {
+                        $identityGate->save($driver, $identity);
+                    }
                     $customFieldValues = $request->array('driver.custom_field_values');
                     if ($customFieldValues) {
                         $driver->syncCustomFieldValues($customFieldValues);
@@ -164,6 +176,17 @@ class DriverController extends FleetOpsController
             return $updateDriverRequest->responseWithErrors($validator);
         }
 
+        $identityGate = $this->driverIdentityGate();
+        $identity     = null;
+        if ($identityGate && isset($input['identity'])) {
+            $existing = Driver::where('company_uuid', session('company'))->where(fn ($query) => $query->where('uuid', $id)->orWhere('public_id', $id))->first();
+            try {
+                $identity = $identityGate->validate($input['identity'], $existing, true);
+            } catch (ValidationException $e) {
+                return response()->error(collect($e->errors())->flatten()->values()->all(), 422);
+            }
+        }
+
         try {
             $record = $this->model->updateRecordFromRequest(
                 $request,
@@ -176,7 +199,7 @@ class DriverController extends FleetOpsController
                     if (isset($input['photo_uuid']) && Str::isUuid($input['photo_uuid'])) {
                         $userInput['avatar_uuid'] = $input['photo_uuid'];
                     }
-                    $input     = $input->except(['name', 'password', 'email', 'phone', 'meta', 'avatar_uuid', 'photo_uuid', 'user_uuid', 'user'])->toArray();
+                    $input     = $input->except(['name', 'password', 'email', 'phone', 'meta', 'avatar_uuid', 'photo_uuid', 'user_uuid', 'user', 'identity'])->toArray();
 
                     // Update the driver's login account through its proxy fields
                     ProfileAccountManager::syncProxyFields($driver->getUser(), $userInput);
@@ -184,8 +207,11 @@ class DriverController extends FleetOpsController
                     // Flush cache
                     $driver->flushAttributesCache();
                 },
-                function ($request, &$driver) {
+                function ($request, &$driver) use ($identityGate, $identity) {
                     $driver->load(['user']);
+                    if ($identity) {
+                        $identityGate->save($driver, $identity);
+                    }
                     if ($driver->user) {
                         $driver->user->setHidden(['driver']);
                     }
@@ -743,6 +769,15 @@ class DriverController extends FleetOpsController
         }
 
         return $phone;
+    }
+
+    /**
+     * Optional host-application hook that validates (`validate($raw, ?Driver, bool $required): ?array`)
+     * and stores (`save(Driver, array)`) the driver's team/freelance identity.
+     */
+    protected function driverIdentityGate(): ?object
+    {
+        return app()->bound('fleetops.driver-identity') ? app('fleetops.driver-identity') : null;
     }
 
     protected function normalizeDriverVehicleInput(Request $request, ?array &$input): void

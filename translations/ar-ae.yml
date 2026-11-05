@@ -2144,3 +2144,44 @@ common:
   "no": لا
 collection-rounds:
   choose-depot: "اختر عنوان المستودع"
+driver-identity:
+  title: "نوع السائق والهوية"
+  verification-title: "التحقق من الهوية"
+  driver-type: "نوع السائق"
+  not-specified: "غير محدد"
+  kinds:
+    team: "عضو في الفريق"
+    freelance: "مستقل"
+  fields:
+    cin: "رقم بطاقة التعريف"
+    cin-help: "8 أرقام في بطاقة التعريف الوطنية"
+    brand-name: "العلامة / الاسم التجاري"
+    tax-id: "المعرف الجبائي"
+    rne-id: "رقم السجل الوطني للمؤسسات"
+    tax-regime: "النظام الجبائي"
+    select-tax-regime: "اختر النظام الجبائي"
+    rib: "RIB"
+    rib-help: "20 رقمًا للحساب البنكي"
+  tax-regimes:
+    forfaitaire: "تقديري"
+    reel: "حقيقي"
+  documents:
+    cin_front: "بطاقة التعريف (الوجه)"
+    cin_back: "بطاقة التعريف (الظهر)"
+    contract: "العقد الموقع (PDF)"
+    patente: "الباتيندا"
+    rne_extract: "مضمون السجل الوطني"
+  document-uploaded: "تم الرفع"
+  document-missing: "مفقود"
+  view-document: "عرض"
+  upload-document: "رفع"
+  replace-document: "استبدال"
+  status:
+    verified: "تم التحقق"
+    outdated: "تغير منذ التحقق"
+    unverified: "غير متحقق"
+  verify: "تحقق من السائق"
+  revoke: "إلغاء التحقق"
+  verified-by: "بواسطة {name} في {date}"
+  verified-success: "تم التحقق من السائق"
+  missing-before-verification: "مطلوب قبل التحقق"

@@ -2597,3 +2597,44 @@ trailer:
     dolly: Dolly
     specialty: Spécialisée
     other: Autre
+driver-identity:
+  title: "Type de chauffeur et identité"
+  verification-title: "Vérification d'identité"
+  driver-type: "Type de chauffeur"
+  not-specified: "Non précisé"
+  kinds:
+    team: "Membre de l'équipe"
+    freelance: "Freelance"
+  fields:
+    cin: "Numéro CIN"
+    cin-help: "8 chiffres de la carte d'identité nationale"
+    brand-name: "Marque / nom commercial"
+    tax-id: "Matricule fiscal"
+    rne-id: "Numéro RNE"
+    tax-regime: "Régime fiscal"
+    select-tax-regime: "Choisir le régime fiscal"
+    rib: "RIB"
+    rib-help: "20 chiffres du compte bancaire"
+  tax-regimes:
+    forfaitaire: "Forfaitaire"
+    reel: "Réel"
+  documents:
+    cin_front: "CIN (recto)"
+    cin_back: "CIN (verso)"
+    contract: "Contrat signé (PDF)"
+    patente: "Patente"
+    rne_extract: "Extrait RNE"
+  document-uploaded: "Téléversé"
+  document-missing: "Manquant"
+  view-document: "Voir"
+  upload-document: "Téléverser"
+  replace-document: "Remplacer"
+  status:
+    verified: "Vérifié"
+    outdated: "Modifié depuis la vérification"
+    unverified: "Non vérifié"
+  verify: "Vérifier le chauffeur"
+  revoke: "Révoquer la vérification"
+  verified-by: "par {name} le {date}"
+  verified-success: "Chauffeur vérifié"
+  missing-before-verification: "À compléter avant vérification"
