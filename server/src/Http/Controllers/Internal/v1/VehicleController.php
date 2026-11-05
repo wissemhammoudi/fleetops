@@ -13,6 +13,7 @@ use Fleetbase\FleetOps\Models\Driver;
 use Fleetbase\FleetOps\Models\Equipment;
 use Fleetbase\FleetOps\Models\Order;
 use Fleetbase\FleetOps\Models\Vehicle;
+use Fleetbase\FleetOps\Support\VehiclePapers;
 use Fleetbase\Http\Requests\ExportRequest;
 use Fleetbase\Http\Requests\ImportRequest;
 use Fleetbase\Support\Resolve;
@@ -21,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -46,6 +48,40 @@ class VehicleController extends FleetOpsController
      * @var string
      */
     public $resource = 'vehicle';
+
+    /**
+     * Capacity lives on the vehicle and drives planning, so console create and
+     * edit require parcels, weight and volume, plus well-formed Tunisian papers.
+     */
+    public function createRecord(Request $request)
+    {
+        return $this->vehicleInputErrors($request) ?? parent::createRecord($request);
+    }
+
+    public function updateRecord(Request $request, string $id)
+    {
+        return $this->vehicleInputErrors($request) ?? parent::updateRecord($request, $id);
+    }
+
+    protected function vehicleInputErrors(Request $request): ?JsonResponse
+    {
+        $input = $request->input('vehicle');
+        $input = is_array($input) ? $input : $request->all();
+        $validator = Validator::make($input, [
+            'payload_capacity_parcels' => ['required', 'integer', 'min:1', 'max:100000'],
+            'payload_capacity'         => ['required', 'numeric', 'gt:0', 'max:100000'],
+            'payload_capacity_volume'  => ['required', 'numeric', 'gt:0', 'max:1000'],
+            'meta'                     => ['nullable', 'array'],
+            'meta.papers'              => ['nullable', 'array'],
+        ] + VehiclePapers::rules(), [
+            'payload_capacity_parcels.*' => 'Set the vehicle capacity in parcels (at least 1).',
+            'payload_capacity.*'         => 'Set the vehicle max weight in kg (greater than 0).',
+            'payload_capacity_volume.*'  => 'Set the vehicle volume in m³ (greater than 0).',
+            'meta.papers.*.date_format'  => 'Paper expiry dates must be valid dates.',
+        ]);
+
+        return $validator->fails() ? response()->error($validator->errors()->all(), 422) : null;
+    }
 
     /**
      * Handle post save transactions.

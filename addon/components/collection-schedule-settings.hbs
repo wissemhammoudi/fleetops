@@ -36,7 +36,6 @@
             <legend>{{t "settings.collection.capacity-planning"}}</legend>
             <label><input type="checkbox" checked={{this.capacityPlanning}} {{on "change" this.toggleCapacity}} />{{t "settings.collection.enable-capacity"}}</label>
             <p>{{t "settings.collection.capacity-help"}}</p>
-            <label>{{t "settings.collection.fallback-capacity"}} <input type="number" min="1" value={{this.fallbackCapacity}} {{on "input" (fn this.editCapacity "fallbackCapacity")}} /></label>
             <label>{{t "settings.collection.max-stops"}} <input type="number" min="1" value={{this.maxStops}} {{on "input" (fn this.editCapacity "maxStops")}} /></label>
         </fieldset>
         <InputGroup @name={{t "settings.collection.closed-dates"}} @helpText={{t "settings.collection.closed-dates-help"}}>
@@ -53,11 +52,6 @@
             data-test-collection-save
         />
     {{else}}
-        <Button
-            @text={{t "settings.collection.reload"}}
-            @onClick={{perform this.loadSettings}}
-            @isLoading={{this.loadSettings.isRunning}}
-            @disabled={{this.loadSettings.isRunning}}
-        />
+        <Button @text={{t "settings.collection.reload"}} @onClick={{perform this.loadSettings}} @isLoading={{this.loadSettings.isRunning}} @disabled={{this.loadSettings.isRunning}} />
     {{/if}}
 </ContentPanel>

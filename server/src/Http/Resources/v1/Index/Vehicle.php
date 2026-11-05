@@ -5,6 +5,7 @@ namespace Fleetbase\FleetOps\Http\Resources\v1\Index;
 use Fleetbase\FleetOps\Models\Order;
 use Fleetbase\FleetOps\Support\TrailerSummary;
 use Fleetbase\FleetOps\Support\Utils;
+use Fleetbase\FleetOps\Support\VehiclePapers;
 use Fleetbase\Http\Resources\FleetbaseResource;
 use Fleetbase\Support\Http;
 
@@ -40,6 +41,11 @@ class Vehicle extends FleetbaseResource
             'make'                  => $this->make,
             'model'                 => $this->model,
             'year'                  => $this->year,
+            'type'                  => $this->type,
+            'payload_capacity_parcels' => $this->payload_capacity_parcels,
+            'payload_capacity'         => $this->payload_capacity,
+            'payload_capacity_volume'  => $this->payload_capacity_volume,
+            'paper_status'             => $this->when($isInternal, VehiclePapers::status($this->resource)),
             'photo_url'             => $this->photo_url,
             'status'                => $this->status,
             'location'              => Utils::castPoint($this->location),

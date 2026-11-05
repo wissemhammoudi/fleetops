@@ -92,6 +92,25 @@
                 </ModelSelect>
             </InputGroup>
 
+            <InputGroup @name={{t "vehicle-tn.capacity-from-vehicle"}}>
+                <div class="form-input w-full bg-gray-50 dark:bg-gray-800 text-xs" data-test-driver-vehicle-capacity>
+                    {{#if @resource.vehicle.id}}
+                        {{#if (and @resource.vehicle.payload_capacity_parcels @resource.vehicle.payload_capacity @resource.vehicle.payload_capacity_volume)}}
+                            {{t
+                                "vehicle-tn.capacity-summary"
+                                parcels=@resource.vehicle.payload_capacity_parcels
+                                weight=@resource.vehicle.payload_capacity
+                                volume=@resource.vehicle.payload_capacity_volume
+                            }}
+                        {{else}}
+                            <span class="text-yellow-700 dark:text-yellow-300"><FaIcon @icon="triangle-exclamation" class="mr-1" />{{t "vehicle-tn.no-capacity"}}</span>
+                        {{/if}}
+                    {{else}}
+                        <span class="text-yellow-700 dark:text-yellow-300"><FaIcon @icon="triangle-exclamation" class="mr-1" />{{t "vehicle-tn.no-vehicle"}}</span>
+                    {{/if}}
+                </div>
+            </InputGroup>
+
             <InputGroup @name={{t "common.city"}}>
                 <Input @value={{@resource.city}} @type="text" class="w-full form-input" placeholder={{t "common.city"}} disabled={{cannot-write @resource}} />
             </InputGroup>

@@ -2995,7 +2995,7 @@ settings:
         remove-window: Remove window
         capacity-planning: Capacity-aware pickup planning
         enable-capacity: Enable capacity-aware round suggestions
-        capacity-help: "Use the vehicle parcel capacity; supply a fallback for missing values. Weight, volume and route suitability still need staff review."
+        capacity-help: "Uses the parcel capacity of each driver's vehicle. Drivers whose vehicle has no capacity are not planned."
         fallback-capacity: Fallback parcel capacity
         max-stops: Maximum pickup stops per round
         rollout-notice: "Configure the collection calendar here. This does not activate the new Transport workflow. Activation remains disabled until customer readiness, pickup rounds and depot handover are released. Existing orders and Returns are unchanged."
@@ -3839,3 +3839,71 @@ driver-identity:
   verified-by: "by {name} on {date}"
   verified-success: "Driver verified"
   missing-before-verification: "Needed before verification"
+vehicle-tn:
+  sections:
+    vehicle: "Vehicle"
+    capacity: "Capacity"
+    papers: "Tunisian papers"
+    planning: "Planning"
+  fields:
+    type: "Vehicle type"
+    color: "Color"
+    fuel: "Fuel"
+    ownership: "Ownership"
+    odometer: "Current odometer (km)"
+    parcels: "Parcels"
+    weight: "Max weight (kg)"
+    volume: "Volume (m³)"
+    carte_grise_number: "Carte grise number"
+    insurance_expires_at: "Insurance expires on"
+    visite_technique_expires_at: "Visite technique expires on"
+    vignette_expires_at: "Vignette expires on"
+    skills: "Skills"
+    available_from: "Available from"
+    available_until: "Available until"
+    max_tasks: "Max stops per route"
+  help:
+    plate: "Tunisian format, e.g. 123 TU 4567"
+    type: "Choosing a type pre-fills the capacity; you can adjust it."
+    capacity: "Required. The planner uses these limits for every driver of this vehicle."
+    papers: "Insurance and visite technique show an alert 30 days before they expire."
+    skills: "Special capabilities used when matching orders (e.g. refrigerated)."
+    max_tasks: "Leave empty for no limit."
+  types:
+    motorcycle: "Motorcycle"
+    car: "Car"
+    small_van: "Small van (Partner, Kangoo)"
+    large_van: "Large van (Master, Sprinter)"
+    small_truck: "Small truck (3.5 t)"
+  fuels:
+    petrol: "Petrol (essence)"
+    diesel: "Diesel (gasoil)"
+    lpg: "LPG (GPL)"
+    hybrid: "Hybrid"
+    electric: "Electric"
+  ownerships:
+    company_owned: "Company"
+    driver_owned: "Driver owned"
+    leased: "Leasing"
+  documents:
+    carte_grise: "Carte grise scan"
+    insurance: "Insurance certificate"
+  paper-status:
+    missing: "Missing"
+    expired: "Expired"
+    expiring: "Expires soon"
+    valid: "Valid"
+  columns:
+    capacity: "Capacity"
+    papers: "Papers"
+  document-uploaded: "Uploaded"
+  document-missing: "Missing"
+  view-document: "View"
+  upload-document: "Upload"
+  replace-document: "Replace"
+  capacity-summary: "{parcels} parcels · {weight} kg · {volume} m³"
+  capacity-missing: "No capacity"
+  capacity-from-vehicle: "Capacity (from vehicle)"
+  no-vehicle: "No vehicle — this driver can't be planned"
+  no-capacity: "Vehicle capacity not set — this driver can't be planned"
+  papers-alert: "Vehicle papers to renew"

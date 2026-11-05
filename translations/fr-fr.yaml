@@ -2199,7 +2199,7 @@ settings:
     remove-window: Retirer le creneau
     capacity-planning: Planification selon la capacite
     enable-capacity: Activer les suggestions selon la capacite
-    capacity-help: "Utiliser la capacite en colis du vehicule ou une limite manuelle si elle manque. Verifier aussi le poids, le volume et l'itineraire."
+    capacity-help: "Utilise la capacit? en colis du v?hicule de chaque chauffeur. Les chauffeurs sans capacit? ne sont pas planifi?s."
     fallback-capacity: Capacite manuelle en colis
     max-stops: Nombre maximum d'arrets par tournee
   custom-fields: Champs personnalisés
@@ -2638,3 +2638,71 @@ driver-identity:
   verified-by: "par {name} le {date}"
   verified-success: "Chauffeur vérifié"
   missing-before-verification: "À compléter avant vérification"
+vehicle-tn:
+  sections:
+    vehicle: "Véhicule"
+    capacity: "Capacité"
+    papers: "Papiers (Tunisie)"
+    planning: "Planification"
+  fields:
+    type: "Type de véhicule"
+    color: "Couleur"
+    fuel: "Carburant"
+    ownership: "Propriété"
+    odometer: "Kilométrage actuel (km)"
+    parcels: "Colis"
+    weight: "Poids max (kg)"
+    volume: "Volume (m³)"
+    carte_grise_number: "Numéro de carte grise"
+    insurance_expires_at: "Fin de l'assurance"
+    visite_technique_expires_at: "Fin de la visite technique"
+    vignette_expires_at: "Fin de la vignette"
+    skills: "Compétences"
+    available_from: "Disponible de"
+    available_until: "Disponible jusqu'à"
+    max_tasks: "Arrêts max par tournée"
+  help:
+    plate: "Format tunisien, ex. 123 TU 4567"
+    type: "Le type pré-remplit la capacité ; vous pouvez l'ajuster."
+    capacity: "Obligatoire. Le planificateur utilise ces limites pour chaque chauffeur de ce véhicule."
+    papers: "L'assurance et la visite technique déclenchent une alerte 30 jours avant l'échéance."
+    skills: "Capacités spéciales utilisées pour l'affectation (ex. réfrigéré)."
+    max_tasks: "Laisser vide pour aucune limite."
+  types:
+    motorcycle: "Moto"
+    car: "Voiture"
+    small_van: "Camionnette (Partner, Kangoo)"
+    large_van: "Fourgon (Master, Sprinter)"
+    small_truck: "Petit camion (3,5 t)"
+  fuels:
+    petrol: "Essence"
+    diesel: "Gasoil"
+    lpg: "GPL"
+    hybrid: "Hybride"
+    electric: "Électrique"
+  ownerships:
+    company_owned: "Société"
+    driver_owned: "Propriété du chauffeur"
+    leased: "Leasing"
+  documents:
+    carte_grise: "Scan de la carte grise"
+    insurance: "Attestation d'assurance"
+  paper-status:
+    missing: "Manquant"
+    expired: "Expiré"
+    expiring: "Expire bientôt"
+    valid: "Valide"
+  columns:
+    capacity: "Capacité"
+    papers: "Papiers"
+  document-uploaded: "Téléversé"
+  document-missing: "Manquant"
+  view-document: "Voir"
+  upload-document: "Téléverser"
+  replace-document: "Remplacer"
+  capacity-summary: "{parcels} colis · {weight} kg · {volume} m³"
+  capacity-missing: "Capacité manquante"
+  capacity-from-vehicle: "Capacité (du véhicule)"
+  no-vehicle: "Aucun véhicule — ce chauffeur ne peut pas être planifié"
+  no-capacity: "Capacité du véhicule non définie — ce chauffeur ne peut pas être planifié"
+  papers-alert: "Papiers du véhicule à renouveler"

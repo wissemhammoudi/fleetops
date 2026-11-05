@@ -199,6 +199,18 @@ export default class ManagementVehiclesIndexController extends Controller {
                 model: 'driver',
             },
             {
+                label: this.intl.t('vehicle-tn.columns.capacity'),
+                valuePath: 'payload_capacity_parcels',
+                cellComponent: 'cell/vehicle-capacity',
+                resizable: true,
+            },
+            {
+                label: this.intl.t('vehicle-tn.columns.papers'),
+                valuePath: 'paper_status',
+                cellComponent: 'cell/vehicle-papers',
+                resizable: true,
+            },
+            {
                 label: this.intl.t('resource.trailers'),
                 valuePath: 'trailers',
                 cellComponent: 'cell/resource-list',

@@ -16,7 +16,6 @@ export default class CollectionScheduleSettingsComponent extends Component {
     @tracked loaded = false;
     @tracked pickupWindows = [];
     @tracked capacityPlanning = false;
-    @tracked fallbackCapacity = '';
     @tracked maxStops = '';
 
     @action toggleCapacity(event) {
@@ -36,7 +35,7 @@ export default class CollectionScheduleSettingsComponent extends Component {
     }
 
     @action editWindow(index, field, event) {
-        this.pickupWindows = this.pickupWindows.map((window, position) => position === index ? { ...window, [field]: event.target.value } : window);
+        this.pickupWindows = this.pickupWindows.map((window, position) => (position === index ? { ...window, [field]: event.target.value } : window));
     }
 
     constructor() {
@@ -60,7 +59,7 @@ export default class CollectionScheduleSettingsComponent extends Component {
             departure_time: this.departureTime,
             pickup_windows: this.pickupWindows,
             capacity_planning: this.capacityPlanning,
-            fallback_parcel_capacity: this.fallbackCapacity === '' ? null : Number(this.fallbackCapacity),
+            fallback_parcel_capacity: null,
             max_pickup_stops: this.maxStops === '' ? null : Number(this.maxStops),
             closed_dates: this.closedDates
                 .split(/\r?\n/)
@@ -84,7 +83,6 @@ export default class CollectionScheduleSettingsComponent extends Component {
             this.closedDates = settings.closed_dates.join('\n');
             this.pickupWindows = settings.pickup_windows ?? [];
             this.capacityPlanning = settings.capacity_planning ?? false;
-            this.fallbackCapacity = String(settings.fallback_parcel_capacity ?? '');
             this.maxStops = String(settings.max_pickup_stops ?? '');
             this.loaded = true;
         } catch (error) {

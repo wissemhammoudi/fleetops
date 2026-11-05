@@ -337,9 +337,20 @@
                                         <span class="truncate">{{if driver.vehicleLabel driver.vehicleLabel (t "planning.orchestrator.assigned-vehicle")}}</span>
                                     </div>
                                     {{#if driver.parcel_capacity}}
-                                        <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                        <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" data-test-driver-capacity={{driver.uuid}}>
                                             <FaIcon @icon="box" @size="xs" class="w-3 flex-shrink-0" />
-                                            <span>{{t "planning.orchestrator.capacity" count=driver.parcel_capacity}}</span>
+                                            <span>{{t "vehicle-tn.capacity-summary" parcels=driver.parcel_capacity weight=(or driver.weight_kg "-") volume=(or driver.volume_m3 "-")}}</span>
+                                        </div>
+                                    {{else}}
+                                        <div class="flex items-center gap-1 text-xs text-yellow-700 dark:text-yellow-300">
+                                            <FaIcon @icon="triangle-exclamation" @size="xs" class="w-3 flex-shrink-0" />
+                                            <span>{{t "vehicle-tn.no-capacity"}}</span>
+                                        </div>
+                                    {{/if}}
+                                    {{#if driver.paper_alerts.length}}
+                                        <div class="flex items-center gap-1 text-xs text-red-600 dark:text-red-300" data-test-driver-paper-alert={{driver.uuid}}>
+                                            <FaIcon @icon="triangle-exclamation" @size="xs" class="w-3 flex-shrink-0" />
+                                            <span>{{t "vehicle-tn.papers-alert"}}</span>
                                         </div>
                                     {{/if}}
                                 </div>

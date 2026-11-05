@@ -24,7 +24,7 @@ export default class ManagementVehiclesIndexEditRoute extends Route {
     }
 
     model({ public_id }) {
-        return this.store.findRecord('vehicle', public_id);
+        return this.store.findRecord('vehicle', public_id, { reload: true });
     }
 
     afterModel(model) {

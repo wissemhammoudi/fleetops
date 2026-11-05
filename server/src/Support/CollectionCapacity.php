@@ -18,13 +18,11 @@ class CollectionCapacity
         return array_sum($orders);
     }
 
-    public static function driverLimit(Driver $driver, array $schedule): ?int
+    /** Capacity always comes from the driver's vehicle; a driver without a vehicle capacity can't be planned. */
+    public static function driverLimit(Driver $driver, array $schedule = []): ?int
     {
         $vehicle = $driver->vehicle_uuid ? Vehicle::where('company_uuid', $driver->company_uuid)->where('uuid', $driver->vehicle_uuid)->first() : null;
         $limit = $vehicle?->payload_capacity_parcels;
-        if ($limit === null || $limit <= 0) {
-            $limit = $schedule['fallback_parcel_capacity'] ?? null;
-        }
 
         return $limit !== null && $limit > 0 ? (int) $limit : null;
     }
@@ -48,7 +46,7 @@ class CollectionCapacity
             return;
         }
         $capacity = self::driverLimit($driver, $schedule);
-        abort_unless($capacity, 422, 'Set the vehicle parcel capacity or a staff fallback capacity before assigning this driver.');
+        abort_unless($capacity, 422, 'Set the parcel capacity on this driver\'s vehicle before assigning this driver.');
         abort_unless(self::parcels($round->stops) <= $capacity && count($round->stops) <= $schedule['max_pickup_stops'],
             422, 'This round exceeds the driver parcel capacity or pickup-stop limit. Re-plan before assigning.');
     }

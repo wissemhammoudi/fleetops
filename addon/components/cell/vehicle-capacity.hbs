@@ -1,0 +1,10 @@
+{{#if (and @row.payload_capacity_parcels @row.payload_capacity @row.payload_capacity_volume)}}
+    <span class="whitespace-nowrap" data-test-vehicle-capacity-cell ...attributes>{{t
+            "vehicle-tn.capacity-summary"
+            parcels=@row.payload_capacity_parcels
+            weight=@row.payload_capacity
+            volume=@row.payload_capacity_volume
+        }}</span>
+{{else}}
+    <Badge @status="warning" @icon="triangle-exclamation" @text={{t "vehicle-tn.capacity-missing"}} @disableHumanize={{true}} ...attributes />
+{{/if}}
