@@ -1,0 +1,7 @@
+{{#if (eq @row.meta.identity.kind "company")}}
+    <Badge @status="info" @icon="building" @text={{t "customer.fields.company"}} @disableHumanize={{true}} ...attributes />
+{{else if (eq @row.meta.identity.kind "individual")}}
+    <Badge @status="default" @icon="user" @text={{t "customer.fields.individual"}} @disableHumanize={{true}} ...attributes />
+{{else}}
+    <span class="text-gray-400 dark:text-gray-500" ...attributes>{{t "customer.fields.not-specified"}}</span>
+{{/if}}

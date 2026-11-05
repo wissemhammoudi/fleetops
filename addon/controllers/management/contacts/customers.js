@@ -63,6 +63,14 @@ export default class ManagementContactsCustomersController extends ManagementCon
                 filterComponent: 'filter/string',
             },
             {
+                label: this.intl.t('customer.fields.customer-type'),
+                valuePath: 'meta.identity.kind',
+                cellComponent: 'cell/customer-kind',
+                resizable: true,
+                sortable: false,
+                filterable: false,
+            },
+            {
                 label: this.intl.t('column.email'),
                 valuePath: 'email',
                 cellComponent: 'click-to-copy',
