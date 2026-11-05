@@ -126,7 +126,12 @@ class CollectionRoutePlans
             422, 'Choose an operating date.');
         $departure = $date->setTimeFromTimeString($input['kind'] === 'pickup' ? $calendar['departure_time'] : $input['start_time'])->utc();
         $end = $date->setTimeFromTimeString($input['end_time'])->utc();
-        abort_unless($departure->greaterThan(now()) && $end->greaterThan($departure), 422, 'Choose a future departure and a later same-day route end.');
+        $localDeparture = $departure->setTimezone($calendar['timezone'])->format('Y-m-d H:i');
+        abort_unless($departure->greaterThan(now()), 422, $input['kind'] === 'pickup'
+            ? "The pickup departure ({$localDeparture}, from Settings > Collection schedule) has already passed. Choose a later date."
+            : "The delivery departure ({$localDeparture}) has already passed. Choose a later date or start time.");
+        abort_unless($end->greaterThan($departure), 422,
+            "The latest depot return ({$input['end_time']}) must be after the departure ({$localDeparture}) on the same day.");
         if ($input['kind'] === 'pickup') {
             abort_unless(in_array($input['date'], CollectionSchedule::pickupDates(now(), $calendar), true), 422, 'Choose an available pickup operating date.');
         }
