@@ -11,13 +11,7 @@
                     <h2 class="text-2xl font-semibold tracking-tight">{{t "planning.workspace"}}</h2>
                     <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">{{t "planning.unified-help"}}</p>
                 </div>
-                <Button
-                    @icon="rotate"
-                    @text={{t "collection-rounds.refresh"}}
-                    @onClick={{perform this.load}}
-                    @disabled={{or this.load.isRunning this.createPickups.isRunning}}
-                    data-test-planning-refresh
-                />
+                <Button @icon="rotate" @text={{t "collection-rounds.refresh"}} @onClick={{perform this.load}} @disabled={{this.load.isRunning}} data-test-planning-refresh />
             </div>
             <nav class="grid grid-cols-1 md:grid-cols-5 gap-2 mt-6" aria-label={{t "planning.design.lifecycle"}}>
                 {{#each this.workflowStages as |stage|}}
@@ -40,35 +34,48 @@
         {{#if this.error}}<div class="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900 p-4 text-sm" role="alert">{{this.error}}</div>{{/if}}
         {{#if this.load.isRunning}}<p role="status" class="text-sm text-gray-500">{{t "planning.design.loading"}}</p>{{/if}}
         {{#if this.data}}
-            <section class="grid grid-cols-1 lg:grid-cols-3 gap-4" aria-label={{t "planning.design.overview"}}>
-                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-                    <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{{t "planning.design.results"}}</p>
-                    <p class="text-3xl font-semibold mt-2">{{this.data.total}}</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{t "planning.design.results-help"}}</p>
-                </div>
-                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-                    <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{{t "planning.design.selection"}}</p>
-                    <p class="text-3xl font-semibold mt-2">{{this.selected.size}}</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{t "planning.design.selection-help"}}</p>
-                </div>
-                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 space-y-2">
-                    <label class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 block" for="planning-route-depot">{{t "planning.design.route-depot"}}</label>
-                    <select
-                        id="planning-route-depot"
-                        class="form-select w-full"
-                        {{on "change" this.selectDepot}}
-                        disabled={{or this.load.isRunning this.createPickups.isRunning}}
-                        data-test-planning-depot
+            <section class="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label={{t "planning.design.overview"}} data-test-planning-counts>
+                {{#each this.counts as |card|}}
+                    <button
+                        type="button"
+                        class="group rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={{this.load.isRunning}}
+                        {{on "click" (fn this.chooseStage card.stage)}}
+                        data-test-planning-count={{card.key}}
                     >
+                        <span class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            <span
+                                class="w-2.5 h-2.5 rounded-full
+                                    {{if (eq card.tone 'emerald') 'bg-emerald-500'}}{{if (eq card.tone 'blue') 'bg-blue-500'}}{{if (eq card.tone 'violet') 'bg-violet-500'}}{{if
+                                        (eq card.tone 'red')
+                                        'bg-red-500'
+                                    }}"
+                            ></span>
+                            {{card.label}}
+                        </span>
+                        <span class="block text-3xl font-semibold mt-2">{{card.value}}</span>
+                    </button>
+                {{/each}}
+            </section>
+
+            <section
+                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-4 flex flex-wrap items-center gap-4"
+                aria-label={{t "planning.design.route-depot"}}
+            >
+                <span class="flex items-center justify-center w-10 h-10 rounded-full bg-violet-50 dark:bg-violet-900 text-violet-700 dark:text-violet-200"><FaIcon @icon="warehouse" /></span>
+                <label class="text-sm font-medium flex-1 min-w-[16rem]" for="planning-route-depot">{{t "planning.design.route-depot"}}
+                    <select id="planning-route-depot" class="form-select w-full mt-1" {{on "change" this.selectDepot}} disabled={{this.load.isRunning}} data-test-planning-depot>
                         <option value="">{{t "collection-rounds.choose-depot"}}</option>
                         {{#each this.depots as |depot|}}<option value={{depot.uuid}} selected={{eq depot.uuid this.depot}}>{{depot.name}} - {{depot.street1}}</option>{{/each}}
                     </select>
-                    {{#if this.defaultDepot}}<p class="text-xs text-gray-500 dark:text-gray-400" data-test-default-depot>{{t "planning.default-depot"}}: {{this.defaultDepot.name}}</p>{{/if}}
-                    {{#unless this.selectedDepot}}<p class="text-sm text-amber-700 dark:text-amber-300" role="alert">{{t "planning.design.no-depot"}}</p>{{/unless}}
-                    <a href="/account/organizations" class="inline-flex text-sm font-medium text-blue-600 dark:text-blue-300 hover:underline" data-test-manage-organization-depots>{{t
+                </label>
+                <div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                    {{#if this.defaultDepot}}<p data-test-default-depot>{{t "planning.default-depot"}}: {{this.defaultDepot.name}}</p>{{/if}}
+                    <a href="/account/organizations" class="inline-flex font-medium text-blue-600 dark:text-blue-300 hover:underline" data-test-manage-organization-depots>{{t
                             "planning.design.manage-depots"
                         }}</a>
                 </div>
+                {{#unless this.selectedDepot}}<p class="w-full text-sm text-amber-700 dark:text-amber-300" role="alert">{{t "planning.design.no-depot"}}</p>{{/unless}}
             </section>
 
             <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden" aria-label={{t "planning.design.order-queue"}}>
@@ -91,36 +98,59 @@
                         </label>
                         <Button @text={{t "planning.search"}} @onClick={{this.find}} @disabled={{this.load.isRunning}} />
                     </form>
+                    <p class="w-full text-xs text-gray-500 dark:text-gray-400">{{t "planning.orchestrator.select-help"}}</p>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm" data-test-planning-table>
                         <thead class="bg-gray-50 dark:bg-gray-900 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            <tr><th class="p-4">{{t "planning.select"}}</th><th class="p-4">{{t "planning.order"}}</th><th class="p-4">{{t "planning.route-type"}}</th><th class="p-4">{{t
-                                        "planning.stage"
-                                    }}</th><th class="p-4">{{t "planning.pickup-place"}}</th><th class="p-4">{{t "planning.recipient"}}</th><th class="p-4">{{t "planning.actions"}}</th></tr>
+                            <tr>
+                                <th class="p-4 w-10"><input
+                                        type="checkbox"
+                                        class="form-checkbox"
+                                        checked={{this.allSelected}}
+                                        disabled={{or (not this.selectableForAll.length) this.load.isRunning}}
+                                        aria-label={{t "planning.orchestrator.select-all"}}
+                                        title={{t "planning.orchestrator.select-all"}}
+                                        {{on "change" this.toggleAll}}
+                                        data-test-select-all
+                                    /></th>
+                                <th class="p-4">{{t "planning.order"}}</th>
+                                <th class="p-4">{{t "planning.stage"}}</th>
+                                <th class="p-4">{{t "planning.pickup-place"}}</th>
+                                <th class="p-4">{{t "planning.recipient"}}</th>
+                                <th class="p-4">{{t "planning.route-type"}}</th>
+                                <th class="p-4">{{t "planning.actions"}}</th>
+                            </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             {{#each this.rows as |order|}}
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {{if order.selected 'bg-blue-50 dark:bg-blue-900'}}" data-test-unified-order={{order.uuid}}>
+                                <tr
+                                    class="transition-colors
+                                        {{if order.selected 'bg-blue-50 dark:bg-blue-950' 'hover:bg-gray-50 dark:hover:bg-gray-700'}}
+                                        {{unless order.kind 'text-gray-600 dark:text-gray-300'}}"
+                                    data-test-unified-order={{order.uuid}}
+                                >
                                     <td class="p-4"><input
                                             type="checkbox"
                                             class="form-checkbox"
                                             checked={{order.selected}}
-                                            disabled={{or (not order.selectable) this.load.isRunning this.createPickups.isRunning}}
+                                            disabled={{or (not order.selectable) this.load.isRunning}}
                                             aria-label={{order.order_id}}
                                             {{on "change" (fn this.toggle order)}}
                                         /></td>
                                     <td class="p-4 font-semibold whitespace-nowrap">{{order.order_id}}</td>
-                                    <td class="p-4 text-gray-500 dark:text-gray-400">{{t (if (eq order.route_type "collection") "planning.collection-route" "planning.direct-route")}}</td>
                                     <td class="p-4"><span
-                                            class="inline-flex rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap {{order.stateClass}}"
-                                        >{{order.stateLabel}}</span></td>
+                                            class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ring-1 ring-inset {{order.stateClass}}"
+                                        ><span class="w-1.5 h-1.5 rounded-full bg-current"></span>{{order.stateLabel}}</span></td>
                                     <td class="p-4"><span class="block font-medium">{{order.pickup.name}}</span><span
                                             class="text-gray-500 dark:text-gray-400"
                                         >{{order.pickup.street1}}</span></td>
                                     <td class="p-4"><span class="block font-medium">{{order.dropoff.name}}</span><span
                                             class="text-gray-500 dark:text-gray-400"
                                         >{{order.dropoff.street1}}</span></td>
+                                    <td class="p-4 text-gray-500 dark:text-gray-400 whitespace-nowrap">{{t
+                                            (if (eq order.route_type "collection") "planning.collection-route" "planning.direct-route")
+                                        }}</td>
                                     <td class="p-4">{{#if order.canOpenRound}}<Button
                                                 @size="xs"
                                                 @text={{t "planning.round-details"}}
@@ -145,46 +175,63 @@
                 </div>
             </section>
 
-            <section class="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-gray-800 p-4 lg:p-5 space-y-4">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div><h3 class="font-semibold">{{t "planning.design.plan-selection"}}</h3><p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{t
-                                "planning.design.selection-help"
-                            }}</p></div>
-                    {{#if this.selected.size}}<Button @size="xs" @text={{t "planning.design.clear-selection"}} @onClick={{this.clearSelection}} />{{/if}}
-                </div>
-                {{#if this.data.permissions.plan_pickup}}
-                    <div class="flex flex-wrap items-end gap-3">
-                        <label class="text-sm">{{t "planning.pickup-date"}}
-                            <select class="form-select block mt-1" {{on "change" this.selectDate}} data-test-planning-date>
-                                <option value="">{{t "planning.choose-date"}}</option>
-                                {{#each this.collectionPlanning.pickupDates as |date|}}<option value={{date}} selected={{eq date this.pickupDate}}>{{date}}</option>{{/each}}
-                            </select>
-                        </label>
-                        <Button
-                            @text={{t "planning.create-draft"}}
-                            @onClick={{this.reviewPickups}}
-                            @disabled={{or (not this.selected.size) (not this.pickupDate) (not this.selectedDepot) this.load.isRunning this.createPickups.isRunning}}
-                            data-test-planning-create
-                        />
+            {{#if this.selected.size}}
+                <div
+                    class="sticky bottom-4 z-20 mx-auto w-full max-w-4xl rounded-2xl border border-blue-200 dark:border-blue-800 bg-white/95 dark:bg-gray-800/95 backdrop-blur shadow-xl px-4 py-3 flex flex-wrap items-center gap-3"
+                    role="region"
+                    aria-label={{t "planning.design.plan-selection"}}
+                    data-test-selection-bar
+                >
+                    <span class="flex items-center justify-center min-w-[2.25rem] h-9 px-2 rounded-full bg-blue-600 text-white font-semibold">{{this.selected.size}}</span>
+                    <div class="flex-1 min-w-[12rem]">
+                        <p class="font-semibold">{{t "planning.orchestrator.selected" count=this.selected.size}}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">{{t
+                                (if (eq this.selectionKind "delivery") "planning.orchestrator.delivery-hint" "planning.orchestrator.pickup-hint")
+                            }}</p>
                     </div>
-                {{/if}}
-                {{#if this.data.permissions.collection}}{{#each this.collectionPlanning.warnings as |warning|}}<p
-                            class="text-sm text-amber-700 dark:text-amber-300"
-                            role="alert"
-                        >{{warning.order_uuid}}: {{warning.message}}</p>{{/each}}{{/if}}
-            </section>
-            {{#if (and (not this.showDirectPlanner) (or this.data.permissions.optimize_pickup this.data.permissions.optimize_delivery))}}
+                    {{#if (eq this.selectionKind "pickup")}}
+                        <Button
+                            @type="primary"
+                            @icon="truck-pickup"
+                            @text={{t "planning.orchestrator.plan-pickup"}}
+                            @onClick={{fn this.openPlanner "pickup"}}
+                            @disabled={{or (not this.canPlanPickup) (not this.selectedDepot)}}
+                            data-test-plan-pickup
+                        />
+                    {{/if}}
+                    {{#if (eq this.selectionKind "delivery")}}
+                        <Button
+                            @type="primary"
+                            @icon="truck-fast"
+                            @text={{t "planning.orchestrator.plan-delivery"}}
+                            @onClick={{fn this.openPlanner "delivery"}}
+                            @disabled={{or (not this.canPlanDelivery) (not this.selectedDepot)}}
+                            data-test-plan-delivery
+                        />
+                    {{/if}}
+                    <Button @text={{t "planning.design.clear-selection"}} @onClick={{this.clearSelection}} data-test-clear-selection />
+                </div>
+            {{/if}}
+
+            {{#if (and this.plannerKind (not this.showDirectPlanner))}}
                 <CollectionRoutePlanner
+                    @kind={{this.plannerKind}}
                     @selection={{this.selected}}
                     @depotUuid={{this.depot}}
+                    @depotName={{this.selectedDepot.name}}
                     @places={{this.places}}
                     @drivers={{this.data.route_drivers}}
                     @permissions={{this.data.permissions}}
                     @savedRoutes={{this.savedRoutes}}
                     @onPreviewChange={{this.previewChanged}}
-                    @onSaved={{perform this.load}}
+                    @onSaved={{this.plannerSaved}}
+                    @onClose={{this.closePlanner}}
                 />
             {{/if}}
+            {{#if this.data.permissions.collection}}{{#each this.collectionPlanning.warnings as |warning|}}<p
+                        class="text-sm text-amber-700 dark:text-amber-300"
+                        role="alert"
+                    >{{warning.order_uuid}}: {{warning.message}}</p>{{/each}}{{/if}}
             {{#if this.data.permissions.direct}}
                 <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
                     <Button @text={{t "planning.direct-tools"}} @onClick={{this.toggleDirectPlanner}} data-test-planning-direct />

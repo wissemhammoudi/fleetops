@@ -56,6 +56,7 @@ class FleetOpsServiceProvider extends CoreServiceProvider
      */
     public $commands = [
         \Fleetbase\FleetOps\Console\Commands\PlanCollectionRounds::class,
+        \Fleetbase\FleetOps\Console\Commands\ReleaseAutomaticPickupDrafts::class,
         \Fleetbase\FleetOps\Console\Commands\DispatchAdhocOrders::class,
         \Fleetbase\FleetOps\Console\Commands\DispatchOrders::class,
         \Fleetbase\FleetOps\Console\Commands\TrackOrderDistanceAndTime::class,
@@ -145,7 +146,7 @@ class FleetOpsServiceProvider extends CoreServiceProvider
         $this->registerCommands();
         $this->scheduleCommands(function ($schedule) {
             $schedule->command('fleetops:dispatch-orders')->everyMinute()->withoutOverlapping()->storeOutputInDb();
-            $schedule->command('fleetops:plan-collection-rounds')->everyFiveMinutes()->withoutOverlapping()->storeOutputInDb();
+            // Pickup planning is done by the dispatcher in the planning workspace; fleetops:plan-collection-rounds is manual only.
             $schedule->command('fleetops:dispatch-adhoc')->everyMinute()->withoutOverlapping()->storeOutputInDb();
             $schedule->command('fleetops:update-estimations')->everyTenMinutes()->withoutOverlapping();
             $schedule->command('fleetops:purge-service-quotes')->daily()->withoutOverlapping();

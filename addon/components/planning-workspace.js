@@ -2,7 +2,22 @@ import Component from '@glimmer/component';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import { restartableTask, dropTask } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
+
+const DEFAULT_STATE_CLASS = 'bg-gray-100 text-gray-700 ring-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600';
+const STATE_CLASSES = {
+    awaiting_preparation: 'bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-900 dark:text-amber-200 dark:ring-amber-700',
+    ready_for_pickup: 'bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-900 dark:text-emerald-200 dark:ring-emerald-700',
+    pickup_scheduled: 'bg-blue-50 text-blue-800 ring-blue-200 dark:bg-blue-900 dark:text-blue-200 dark:ring-blue-700',
+    pickup_in_progress: 'bg-sky-50 text-sky-800 ring-sky-200 dark:bg-sky-900 dark:text-sky-200 dark:ring-sky-700',
+    collected: 'bg-indigo-50 text-indigo-800 ring-indigo-200 dark:bg-indigo-900 dark:text-indigo-200 dark:ring-indigo-700',
+    received_at_depot: 'bg-violet-50 text-violet-800 ring-violet-200 dark:bg-violet-900 dark:text-violet-200 dark:ring-violet-700',
+    ready_for_delivery_dispatch: 'bg-purple-50 text-purple-800 ring-purple-200 dark:bg-purple-900 dark:text-purple-200 dark:ring-purple-700',
+    out_for_delivery: 'bg-cyan-50 text-cyan-800 ring-cyan-200 dark:bg-cyan-900 dark:text-cyan-200 dark:ring-cyan-700',
+    delivered: 'bg-green-50 text-green-800 ring-green-200 dark:bg-green-900 dark:text-green-200 dark:ring-green-700',
+    pickup_exception: 'bg-red-50 text-red-800 ring-red-200 dark:bg-red-900 dark:text-red-200 dark:ring-red-700',
+    depot_hold: 'bg-red-50 text-red-800 ring-red-200 dark:bg-red-900 dark:text-red-200 dark:ring-red-700',
+};
 
 export default class PlanningWorkspaceComponent extends Component {
     @service collectionPlanning;
@@ -17,8 +32,8 @@ export default class PlanningWorkspaceComponent extends Component {
     @tracked search = '';
     @tracked page = 1;
     @tracked depot = '';
-    @tracked pickupDate = '';
     @tracked selected = new Set();
+    @tracked plannerKind = null;
     @tracked roundId = null;
     @tracked showDirectPlanner = false;
     @tracked hasCollectionPreview = false;
@@ -28,22 +43,67 @@ export default class PlanningWorkspaceComponent extends Component {
         this.load.perform();
     }
 
+    get selectionKind() {
+        const states = (this.data?.orders ?? []).filter((order) => this.selected.has(order.uuid)).map((order) => order.state);
+        if (!states.length) return null;
+        return states.every((state) => state === 'ready_for_pickup') ? 'pickup' : states.every((state) => state === 'received_at_depot') ? 'delivery' : 'mixed';
+    }
+
+    kindOf(order) {
+        if (order.route_type !== 'collection') return null;
+        if (this.data.permissions.plan_pickup && order.state === 'ready_for_pickup') return 'pickup';
+        if (this.data.permissions.optimize_delivery && order.state === 'received_at_depot') return 'delivery';
+        return null;
+    }
+
     get rows() {
-        return (this.data?.orders ?? []).map((order) => ({
-            ...order,
-            selected: this.selected.has(order.uuid),
-            selectable:
-                order.route_type === 'collection' &&
-                ((this.data.permissions.plan_pickup && order.state === 'ready_for_pickup') || (this.data.permissions.optimize_delivery && order.state === 'received_at_depot')),
-            canOpenRound: this.data.permissions.collection && this.collectionPlanning.rounds.some((round) => round.uuid === order.round_uuid),
-            stateLabel: this.intl.exists(`planning.states.${order.state}`) ? this.intl.t(`planning.states.${order.state}`) : order.state,
-            stateClass:
-                order.stage === 'attention'
-                    ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                    : order.stage === 'complete'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-        }));
+        const current = this.selectionKind;
+        return (this.data?.orders ?? []).map((order) => {
+            const kind = this.kindOf(order);
+            return {
+                ...order,
+                kind,
+                selected: this.selected.has(order.uuid),
+                // Pickups and depot deliveries are planned separately, so a selection never mixes both.
+                selectable: Boolean(kind) && (!current || current === kind || this.selected.has(order.uuid)),
+                canOpenRound: this.data.permissions.collection && this.collectionPlanning.rounds.some((round) => round.uuid === order.round_uuid),
+                stateLabel: this.intl.exists(`planning.states.${order.state}`) ? this.intl.t(`planning.states.${order.state}`) : order.state,
+                stateClass: STATE_CLASSES[order.state] ?? (order.stage === 'attention' ? STATE_CLASSES.pickup_exception : DEFAULT_STATE_CLASS),
+            };
+        });
+    }
+
+    get selectAllKind() {
+        if (this.selectionKind === 'pickup' || this.selectionKind === 'delivery') return this.selectionKind;
+        const rows = this.data?.orders ?? [];
+        return rows.some((order) => this.kindOf(order) === 'pickup') ? 'pickup' : rows.some((order) => this.kindOf(order) === 'delivery') ? 'delivery' : null;
+    }
+
+    get selectableForAll() {
+        const kind = this.selectAllKind;
+        return kind ? (this.data?.orders ?? []).filter((order) => this.kindOf(order) === kind) : [];
+    }
+
+    get allSelected() {
+        return this.selectableForAll.length > 0 && this.selectableForAll.every((order) => this.selected.has(order.uuid));
+    }
+
+    get counts() {
+        const counts = this.data?.counts ?? {};
+        return [
+            { key: 'ready_for_pickup', stage: 'pickup', value: counts.ready_for_pickup ?? 0, tone: 'emerald' },
+            { key: 'pickup_planned', stage: 'pickup', value: counts.pickup_planned ?? 0, tone: 'blue' },
+            { key: 'at_depot', stage: 'depot', value: counts.at_depot ?? 0, tone: 'violet' },
+            { key: 'attention', stage: 'attention', value: counts.attention ?? 0, tone: 'red' },
+        ].map((card) => ({ ...card, label: this.intl.t(`planning.orchestrator.counts.${card.key}`) }));
+    }
+
+    get canPlanPickup() {
+        return this.selectionKind === 'pickup' && this.data?.permissions.optimize_pickup;
+    }
+
+    get canPlanDelivery() {
+        return this.selectionKind === 'delivery' && this.data?.permissions.optimize_delivery;
     }
 
     get stages() {
@@ -100,7 +160,7 @@ export default class PlanningWorkspaceComponent extends Component {
         this.roundId = null;
         this.showDirectPlanner = false;
         this.hasCollectionPreview = false;
-        this.pickupDate = '';
+        this.plannerKind = null;
         this.stage = 'all';
         this.search = '';
         this.load.perform(1);
@@ -110,6 +170,7 @@ export default class PlanningWorkspaceComponent extends Component {
         const company = this.currentUser.companyId;
         this.error = null;
         this.selected = new Set();
+        this.plannerKind = null;
         try {
             const result = yield this.fetch.get('fleet-ops/planning', { page, stage: this.stage, search: this.search });
             if (company !== this.currentUser.companyId) return;
@@ -151,6 +212,29 @@ export default class PlanningWorkspaceComponent extends Component {
 
     @action clearSelection() {
         this.selected = new Set();
+        this.plannerKind = null;
+    }
+
+    @action toggleAll(event) {
+        this.selected = event.target.checked ? new Set(this.selectableForAll.map((order) => order.uuid)) : new Set();
+        if (!this.selected.size) this.plannerKind = null;
+    }
+
+    @action openPlanner(kind) {
+        this.plannerKind = kind;
+        this.showDirectPlanner = false;
+        // Wait for the planner to render before scrolling it into view.
+        requestAnimationFrame(() => document.querySelector('[data-test-route-optimizer]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+
+    @action closePlanner() {
+        this.plannerKind = null;
+        this.hasCollectionPreview = false;
+    }
+
+    @action async plannerSaved() {
+        this.plannerKind = null;
+        return this.load.perform();
     }
 
     @action setSearch(event) {
@@ -166,15 +250,12 @@ export default class PlanningWorkspaceComponent extends Component {
         this.depot = event.target.value;
     }
 
-    @action selectDate(event) {
-        this.pickupDate = event.target.value;
-    }
-
     @action toggle(order, event) {
         const selected = new Set(this.selected);
         if (event.target.checked) selected.add(order.uuid);
         else selected.delete(order.uuid);
         this.selected = selected;
+        if (!selected.size) this.plannerKind = null;
     }
 
     @action pageBy(offset) {
@@ -214,33 +295,6 @@ export default class PlanningWorkspaceComponent extends Component {
             });
         } else {
             this.showDirectPlanner = true;
-        }
-    }
-
-    @action reviewPickups() {
-        if (!this.selected.size || !this.pickupDate || !this.selectedDepot || this.rows.some((order) => order.selected && order.state !== 'ready_for_pickup')) {
-            this.notifications.warning(this.intl.t('planning.pickup-required'));
-            return;
-        }
-        const company = this.currentUser.companyId;
-        const input = { order_uuids: [...this.selected], pickup_date: this.pickupDate };
-        this.modalsManager.confirm({
-            title: this.intl.t('planning.create-draft'),
-            body: this.intl.t('planning.review-plan', { count: input.order_uuids.length, date: input.pickup_date }),
-            confirm: () => this.createPickups.perform(company, input),
-        });
-    }
-
-    @dropTask *createPickups(company, input) {
-        if (company !== this.currentUser.companyId) {
-            this.notifications.warning(this.intl.t('planning.company-changed'));
-            return;
-        }
-        try {
-            yield this.collectionPlanning.plan(input);
-            yield this.load.perform();
-        } catch (error) {
-            if (company === this.currentUser.companyId) this.notifications.serverError(error);
         }
     }
 }

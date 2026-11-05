@@ -1,4 +1,37 @@
 planning:
+    orchestrator:
+        select-all: "Sélectionner toutes les commandes planifiables ensemble"
+        select-help: "Cochez les commandes prêtes à collecter pour planifier une tournée de collecte, ou les commandes reçues au dépôt pour planifier une tournée de livraison."
+        selected: "{count, plural, one {# commande sélectionnée} other {# commandes sélectionnées}}"
+        pickup-hint: "Planifiez une tournée de collecte optimisée qui ramène ces colis au dépôt."
+        delivery-hint: "Planifiez la tournée de livraison depuis le dépôt et affectez les chauffeurs avec leur véhicule."
+        plan-pickup: "Planifier la collecte"
+        plan-delivery: "Planifier la livraison"
+        pickup-title: "Planifier la tournée de collecte"
+        delivery-title: "Planifier la tournée de livraison"
+        to-depot: "retour à {depot}"
+        from-depot: "depuis {depot}"
+        close: "Fermer"
+        steps: "Étapes de planification"
+        step-team: "Date et chauffeurs"
+        step-optimize: "Optimiser les tournées"
+        step-confirm: "Vérifier et confirmer"
+        today: "Aujourd'hui"
+        tomorrow: "Demain"
+        choose-drivers: "Choisir les chauffeurs (chacun conduit son véhicule affecté)"
+        team-summary: "{drivers} chauffeurs sélectionnés · capacité {capacity} colis"
+        assigned-vehicle: "Véhicule affecté"
+        capacity: "Jusqu'à {count} colis"
+        no-drivers: "Aucun chauffeur n'a de véhicule affecté. Affectez un véhicule à un chauffeur dans Fleet-Ops > Chauffeurs, puis actualisez."
+        routes: "Tournées"
+        stops: "Arrêts"
+        distance: "Distance"
+        drive-time: "Temps de conduite"
+        counts:
+            ready_for_pickup: "Prêtes à collecter"
+            pickup_planned: "Collecte planifiée"
+            at_depot: "Au dépôt"
+            attention: "À traiter"
     design:
         eyebrow: Centre de contrôle des opérations
         lifecycle: Parcours des commandes

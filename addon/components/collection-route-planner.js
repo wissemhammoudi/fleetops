@@ -5,6 +5,12 @@ import { action } from '@ember/object';
 import { dropTask } from 'ember-concurrency';
 import polyline from '@fleetbase/ember-core/utils/polyline';
 
+const COLORS = ['#2563eb', '#dc2626', '#0d9488', '#9333ea', '#ea580c', '#0891b2'];
+
+function localDate(date) {
+    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+}
+
 export default class CollectionRoutePlannerComponent extends Component {
     @service fetch;
     @service currentUser;
@@ -12,7 +18,7 @@ export default class CollectionRoutePlannerComponent extends Component {
     @service intl;
     @service modalsManager;
     @service mapSettings;
-    @tracked kind = 'pickup';
+    @tracked chosenKind = 'pickup';
     @tracked date = '';
     @tracked startTime = '09:00';
     @tracked endTime = '18:00';
@@ -24,7 +30,42 @@ export default class CollectionRoutePlannerComponent extends Component {
 
     constructor() {
         super(...arguments);
-        if (!this.args.permissions?.optimize_pickup && this.args.permissions?.optimize_delivery) this.kind = 'delivery';
+        if (!this.args.permissions?.optimize_pickup && this.args.permissions?.optimize_delivery) this.chosenKind = 'delivery';
+    }
+
+    get kind() {
+        return this.args.kind ?? this.chosenKind;
+    }
+
+    get quickDates() {
+        const today = new Date();
+        const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        return [
+            { value: localDate(today), label: this.intl.t('planning.orchestrator.today') },
+            { value: localDate(tomorrow), label: this.intl.t('planning.orchestrator.tomorrow') },
+        ].map((date) => ({ ...date, active: date.value === this.date }));
+    }
+
+    get selectedDriverCount() {
+        return Object.keys(this.drivers).length;
+    }
+
+    get selectedCapacity() {
+        return (this.args.drivers ?? []).filter((driver) => this.drivers[driver.uuid]).reduce((sum, driver) => sum + (driver.parcel_capacity ?? 0), 0);
+    }
+
+    get stepOneDone() {
+        return Boolean(this.date && this.selectedDriverCount);
+    }
+
+    get totals() {
+        const routes = this.proposal?.routes ?? [];
+        return {
+            routes: routes.length,
+            stops: routes.reduce((sum, route) => sum + route.stops.length, 0),
+            kilometers: (routes.reduce((sum, route) => sum + route.distance_meters, 0) / 1000).toFixed(1),
+            minutes: Math.ceil(routes.reduce((sum, route) => sum + route.duration_seconds, 0) / 60),
+        };
     }
 
     get permitted() {
@@ -36,6 +77,7 @@ export default class CollectionRoutePlannerComponent extends Component {
             ...driver,
             checked: Boolean(this.drivers[driver.uuid]),
             origin: this.drivers[driver.uuid]?.start_place_uuid ?? this.args.depotUuid,
+            vehicleLabel: [driver.vehicle_name, driver.plate_number].filter(Boolean).join(' - '),
         }));
     }
 
@@ -44,7 +86,8 @@ export default class CollectionRoutePlannerComponent extends Component {
             .filter((route) => this.proposal || !this.date || route.date === this.date)
             .map((route, index) => ({
                 ...route,
-                color: ['#2563eb', '#dc2626', '#0d9488', '#9333ea'][index % 4],
+                color: COLORS[index % COLORS.length],
+                stops: (route.stops ?? []).map((stop) => ({ ...stop, time: this.formatTime(stop.arrival_at) })),
                 coordinates: route.geometry ? polyline.decode(route.geometry) : [],
                 kilometers: (route.distance_meters / 1000).toFixed(1),
                 minutes: Math.ceil(route.duration_seconds / 60),
@@ -53,6 +96,16 @@ export default class CollectionRoutePlannerComponent extends Component {
 
     get mapCenter() {
         return this.routes[0]?.origin?.location ?? { lat: 36.8, lng: 10.18 };
+    }
+
+    formatTime(value) {
+        const date = value ? new Date(value) : null;
+        if (!date || Number.isNaN(date.getTime())) return value ?? '';
+        try {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: this.currentUser.company?.timezone || undefined });
+        } catch {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
     }
 
     get busy() {
@@ -75,6 +128,16 @@ export default class CollectionRoutePlannerComponent extends Component {
 
     @action setField(field, event) {
         this[field] = event.target.value;
+        this.invalidate();
+    }
+
+    @action setKind(event) {
+        this.chosenKind = event.target.value;
+        this.invalidate();
+    }
+
+    @action setDate(value) {
+        this.date = value;
         this.invalidate();
     }
 

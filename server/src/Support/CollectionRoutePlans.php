@@ -48,6 +48,12 @@ class CollectionRoutePlans
             abort_unless(hash_equals($plan->fingerprint, $context['fingerprint']), 409, 'Orders, vehicles, depot or availability changed. Orchestrate and review again.');
             $proposal = json_decode($plan->proposal, true, 512, JSON_THROW_ON_ERROR);
             $receipt = ['plan_uuid' => $id, 'rounds' => [], 'deliveries' => [], 'dispatch' => false];
+            if ($input['kind'] === 'delivery') {
+                $routed = collect($proposal['routes'])->pluck('order_uuids')->flatten()->all();
+                foreach (array_intersect_key($context['moves'], array_flip($routed)) as $orderId => $roundId) {
+                    self::moveDeliveryDate($company, $context['orders'][$orderId], $roundId, $input['date'], $context['calendar']['timezone']);
+                }
+            }
             foreach ($proposal['routes'] as $route) {
                 $routing = $route + ['plan_uuid' => $id, 'actor_uuid' => session('user'), 'recorded_at' => now()->toISOString()];
                 if ($input['kind'] === 'pickup') {
@@ -100,6 +106,18 @@ class CollectionRoutePlans
         }, 3);
     }
 
+    private static function moveDeliveryDate(string $company, Order $order, string $roundId, string $date, string $timezone): void
+    {
+        $order->recordCollectionPlanDate('delivery', $date, $timezone);
+        $order->save();
+        $round = CollectionRound::where('company_uuid', $company)->where('uuid', $roundId)->lockForUpdate()->firstOrFail();
+        $custody = $round->custody;
+        $custody['receipts'][$order->uuid]['delivery_date'] = $date;
+        $round->custody = $custody;
+        $round->revision++;
+        $round->save();
+    }
+
     private static function context(string $company, array $input, bool $lock = false): array
     {
         $calendar = CollectionSchedule::forCompany($company);
@@ -132,6 +150,7 @@ class CollectionRoutePlans
         $warnings = [];
         $fingerprints = [];
         $legs = [];
+        $moves = [];
         foreach ($orders as $order) {
             abort_unless(CollectionWorkflow::applies($order) && !$order->dispatched && !$order->started && !$order->driver_assigned_uuid,
                 409, 'Select unstarted collection orders only.');
@@ -157,7 +176,12 @@ class CollectionRoutePlans
                 abort_unless(data_get($round->depot, 'uuid') === $depot['uuid'], 409, 'Selected deliveries must belong to this depot.');
                 CollectionDelivery::assertReceipt($order, $round);
                 $deliveryDate = data_get($order->meta, 'collection_workflow.planned_delivery_date');
-                abort_unless($deliveryDate === $input['date'], 409, 'Move the unstaged handover to the reviewed delivery date before orchestrating.');
+                if ($deliveryDate !== $input['date']) {
+                    // The reviewed route date becomes the delivery date on commit, never earlier than depot eligibility.
+                    $earliest = CollectionSchedule::deliveryDate(\Illuminate\Support\Carbon::parse(data_get($round->custody, 'receipts.' . $order->uuid . '.at')), $calendar);
+                    abort_unless($input['date'] >= $earliest, 409, "Order {$order->public_id} can be delivered from {$earliest}. Choose that date or later.");
+                    $moves[$order->uuid] = $round->uuid;
+                }
                 $legQuery = CollectionDeliveryLeg::where('company_uuid', $company)->where('order_uuid', $order->uuid);
                 $leg = ($lock ? $legQuery->lockForUpdate() : $legQuery)->first();
                 abort_unless(!$leg || $leg->status === 'recalled'
@@ -273,7 +297,7 @@ class CollectionRoutePlans
         $fingerprint = hash('sha256', json_encode([$fingerprints, $calendar, $depot, $resources, $tasks], JSON_THROW_ON_ERROR));
 
         return ['payload' => ['jobs' => $jobs, 'vehicles' => $vehicles, 'options' => ['g' => true]],
-            'tasks' => $tasks, 'resources' => $resources, 'warnings' => $warnings, 'orders' => $orders, 'legs' => $legs,
+            'tasks' => $tasks, 'resources' => $resources, 'warnings' => $warnings, 'orders' => $orders, 'legs' => $legs, 'moves' => $moves,
             'fingerprint' => $fingerprint, 'calendar' => $calendar, 'departure' => $departure, 'end' => $end,
             'depot_legacy' => $depotLegacy];
     }

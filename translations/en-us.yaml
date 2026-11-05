@@ -2,6 +2,39 @@ fleet-ops:
     extension-name: Fleet-Ops
 
 planning:
+    orchestrator:
+        select-all: "Select all orders that can be planned together"
+        select-help: "Tick ready-for-pickup orders to plan a pickup route, or orders received at the depot to plan a delivery route."
+        selected: "{count, plural, one {# order selected} other {# orders selected}}"
+        pickup-hint: "Plan one optimized pickup run that brings these parcels to the depot."
+        delivery-hint: "Plan the delivery run from the depot and assign drivers with their cars."
+        plan-pickup: "Plan pickup"
+        plan-delivery: "Plan delivery"
+        pickup-title: "Plan pickup route"
+        delivery-title: "Plan delivery route"
+        to-depot: "back to {depot}"
+        from-depot: "from {depot}"
+        close: "Close"
+        steps: "Planning steps"
+        step-team: "Date & drivers"
+        step-optimize: "Optimize routes"
+        step-confirm: "Review & confirm"
+        today: "Today"
+        tomorrow: "Tomorrow"
+        choose-drivers: "Choose drivers (each drives their assigned car)"
+        team-summary: "{drivers} drivers selected · capacity {capacity} parcels"
+        assigned-vehicle: "Assigned vehicle"
+        capacity: "Up to {count} parcels"
+        no-drivers: "No driver has an assigned vehicle yet. Assign a vehicle to a driver in Fleet-Ops > Drivers, then refresh."
+        routes: "Routes"
+        stops: "Stops"
+        distance: "Distance"
+        drive-time: "Drive time"
+        counts:
+            ready_for_pickup: "Ready for pickup"
+            pickup_planned: "Pickup planned"
+            at_depot: "At depot"
+            attention: "Needs attention"
     design:
         eyebrow: Operations control center
         lifecycle: Order journey
@@ -32,10 +65,10 @@ planning:
         pickup-departure: Pickups depart at the configured company collection departure time.
         orchestrate: Orchestrate and preview
         expires: Proposal expires
-        save: Save reviewed route drafts
+        save: Confirm and save routes
         confirm: Save these exact routes and driver assignments? This does not release pickups or dispatch deliveries. Unassigned orders will remain unchanged.
         saved: Route drafts saved. Review pickup release or depot loading and driver acceptance before departure.
-        draft-only: Draft only. Pickup release remains separate. Depot deliveries still require every parcel loaded and the assigned driver to accept each manifest.
+        draft-only: Saving assigns these drivers and stop orders. Pickups are released separately; depot deliveries still require every parcel loaded and the driver to accept each manifest.
         no-geometry: Road geometry was not supplied by the solver. Markers show the reviewed stop sequence, not a road trace.
     unified-help: One order journey, from merchant pickup through depot receipt to recipient delivery. Direct and legacy orders remain visible without changing their workflow.
     default-depot: Default depot

@@ -1,4 +1,37 @@
 planning:
+  orchestrator:
+    select-all: "تحديد كل الطلبات التي يمكن تخطيطها معاً"
+    select-help: "حدد الطلبات الجاهزة للاستلام لتخطيط جولة استلام، أو الطلبات المستلمة في المستودع لتخطيط جولة توصيل."
+    selected: "{count, plural, one {طلب واحد محدد} other {# طلبات محددة}}"
+    pickup-hint: "خطط جولة استلام محسنة تعيد هذه الطرود إلى المستودع."
+    delivery-hint: "خطط جولة التوصيل من المستودع وعيّن السائقين مع سياراتهم."
+    plan-pickup: "تخطيط الاستلام"
+    plan-delivery: "تخطيط التوصيل"
+    pickup-title: "تخطيط جولة الاستلام"
+    delivery-title: "تخطيط جولة التوصيل"
+    to-depot: "العودة إلى {depot}"
+    from-depot: "من {depot}"
+    close: "إغلاق"
+    steps: "خطوات التخطيط"
+    step-team: "التاريخ والسائقون"
+    step-optimize: "تحسين المسارات"
+    step-confirm: "المراجعة والتأكيد"
+    today: "اليوم"
+    tomorrow: "غداً"
+    choose-drivers: "اختر السائقين (كل سائق يقود سيارته المعيّنة)"
+    team-summary: "{drivers} سائقين محددين · السعة {capacity} طرود"
+    assigned-vehicle: "السيارة المعيّنة"
+    capacity: "حتى {count} طرود"
+    no-drivers: "لا يوجد سائق لديه سيارة معيّنة. عيّن سيارة لسائق في Fleet-Ops > السائقون ثم حدّث الصفحة."
+    routes: "المسارات"
+    stops: "التوقفات"
+    distance: "المسافة"
+    drive-time: "مدة القيادة"
+    counts:
+      ready_for_pickup: "جاهزة للاستلام"
+      pickup_planned: "استلام مخطط"
+      at_depot: "في المستودع"
+      attention: "تحتاج متابعة"
   workspace: مساحة التخطيط
   pickups: جمع الطرود
   depot: المستودع والتوصيل

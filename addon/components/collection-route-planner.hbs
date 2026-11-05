@@ -1,83 +1,253 @@
 <section
-    class="p-5 lg:p-6 space-y-5 border border-gray-200 rounded-xl bg-white dark:bg-gray-800 dark:border-gray-700 shadow-sm"
+    class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg overflow-hidden scroll-mt-4"
     data-test-route-optimizer
-    {{did-update this.invalidate @selection @depotUuid}}
+    {{did-update this.invalidate @selection @depotUuid @kind}}
     {{did-update this.resetCompany this.currentUser.companyId}}
 >
-    <h3 class="text-lg font-semibold">{{t "planning.optimizer.title"}}</h3>
-    <p class="text-sm text-gray-500 dark:text-gray-400">{{t "planning.optimizer.help"}}</p>
-    <fieldset disabled={{this.busy}} class="flex flex-wrap items-end gap-4">
-        <label>{{t "planning.route-type"}}
-            <select class="form-select" {{on "change" (fn this.setField "kind")}} data-test-route-kind>
-                {{#if @permissions.optimize_pickup}}<option value="pickup" selected={{eq this.kind "pickup"}}>{{t "planning.pickups"}}</option>{{/if}}
-                {{#if @permissions.optimize_delivery}}<option value="delivery" selected={{eq this.kind "delivery"}}>{{t "planning.depot"}}</option>{{/if}}
-            </select>
-        </label>
-        <label>{{t "planning.optimizer.date"}} <input class="form-input" type="date" value={{this.date}} {{on "change" (fn this.setField "date")}} data-test-route-date /></label>
-        {{#if (eq this.kind "delivery")}}
-            <label>{{t "planning.optimizer.start"}} <input class="form-input" type="time" value={{this.startTime}} {{on "change" (fn this.setField "startTime")}} /></label>
-        {{else}}
-            <p>{{t "planning.optimizer.pickup-departure"}}</p>
-        {{/if}}
-        <label>{{t "planning.optimizer.end"}} <input class="form-input" type="time" value={{this.endTime}} {{on "change" (fn this.setField "endTime")}} /></label>
-        {{#each this.driverRows as |driver|}}
-            <div class="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-                <label><input type="checkbox" checked={{driver.checked}} {{on "change" (fn this.toggleDriver driver)}} data-test-route-driver={{driver.uuid}} /> {{driver.name}}</label>
-                {{#if (and driver.checked (eq this.kind "pickup"))}}
-                    <label>{{t "planning.vehicle-start"}}
-                        <select class="form-select" {{on "change" (fn this.setOrigin driver)}} data-test-route-origin={{driver.uuid}}>
-                            {{#each @places as |place|}}<option value={{place.uuid}} selected={{eq driver.origin place.uuid}}>{{place.name}} - {{place.street1}}</option>{{/each}}
-                        </select>
+    <header
+        class="flex flex-wrap items-start justify-between gap-4 p-5 lg:p-6 border-b border-gray-200 dark:border-gray-700
+            {{if (eq this.kind 'delivery') 'bg-violet-50 dark:bg-violet-950' 'bg-emerald-50 dark:bg-emerald-950'}}"
+    >
+        <div class="flex items-start gap-3">
+            <span class="flex items-center justify-center w-11 h-11 rounded-xl text-white shadow {{if (eq this.kind 'delivery') 'bg-violet-600' 'bg-emerald-600'}}"><FaIcon
+                    @icon={{if (eq this.kind "delivery") "truck-fast" "truck-pickup"}}
+                /></span>
+            <div>
+                <h3 class="text-lg font-semibold">{{t (if (eq this.kind "delivery") "planning.orchestrator.delivery-title" "planning.orchestrator.pickup-title")}}</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mt-0.5">
+                    {{t "planning.orchestrator.selected" count=@selection.size}}
+                    {{#if @depotName}}· {{t (if (eq this.kind "delivery") "planning.orchestrator.from-depot" "planning.orchestrator.to-depot") depot=@depotName}}{{/if}}
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            {{#unless @kind}}
+                <select class="form-select" aria-label={{t "planning.route-type"}} {{on "change" this.setKind}} disabled={{this.busy}} data-test-route-kind>
+                    {{#if @permissions.optimize_pickup}}<option value="pickup" selected={{eq this.kind "pickup"}}>{{t "planning.pickups"}}</option>{{/if}}
+                    {{#if @permissions.optimize_delivery}}<option value="delivery" selected={{eq this.kind "delivery"}}>{{t "planning.depot"}}</option>{{/if}}
+                </select>
+            {{/unless}}
+            {{#if @onClose}}<Button @icon="xmark" @text={{t "planning.orchestrator.close"}} @onClick={{@onClose}} @disabled={{this.busy}} data-test-route-close />{{/if}}
+        </div>
+    </header>
+
+    <ol class="grid grid-cols-3 text-xs font-medium border-b border-gray-200 dark:border-gray-700" aria-label={{t "planning.orchestrator.steps"}}>
+        <li class="flex items-center gap-2 px-5 py-3 {{if this.stepOneDone 'text-emerald-700 dark:text-emerald-300' 'text-blue-700 dark:text-blue-300'}}">
+            <span class="flex items-center justify-center w-6 h-6 rounded-full {{if this.stepOneDone 'bg-emerald-600 text-white' 'bg-blue-600 text-white'}}">{{if
+                    this.stepOneDone
+                    "✓"
+                    "1"
+                }}</span>{{t "planning.orchestrator.step-team"}}
+        </li>
+        <li class="flex items-center gap-2 px-5 py-3 {{if this.proposal 'text-emerald-700 dark:text-emerald-300' 'text-gray-500 dark:text-gray-400'}}">
+            <span class="flex items-center justify-center w-6 h-6 rounded-full {{if this.proposal 'bg-emerald-600 text-white' 'bg-gray-200 dark:bg-gray-700'}}">{{if
+                    this.proposal
+                    "✓"
+                    "2"
+                }}</span>{{t "planning.orchestrator.step-optimize"}}
+        </li>
+        <li class="flex items-center gap-2 px-5 py-3 {{if this.proposal 'text-blue-700 dark:text-blue-300' 'text-gray-500 dark:text-gray-400'}}">
+            <span class="flex items-center justify-center w-6 h-6 rounded-full {{if this.proposal 'bg-blue-600 text-white' 'bg-gray-200 dark:bg-gray-700'}}">3</span>{{t
+                "planning.orchestrator.step-confirm"
+            }}
+        </li>
+    </ol>
+
+    <div class="p-5 lg:p-6 space-y-6">
+        <fieldset disabled={{this.busy}} class="space-y-5">
+            <div class="flex flex-wrap items-end gap-4">
+                <label class="text-sm font-medium">{{t "planning.optimizer.date"}}
+                    <input class="form-input block mt-1" type="date" value={{this.date}} {{on "change" (fn this.setField "date")}} data-test-route-date />
+                </label>
+                <div class="flex gap-2 pb-0.5">
+                    {{#each this.quickDates as |date|}}
+                        <button
+                            type="button"
+                            class="rounded-full px-3 py-1.5 text-xs font-medium border transition
+                                {{if date.active 'border-blue-600 bg-blue-600 text-white' 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'}}"
+                            {{on "click" (fn this.setDate date.value)}}
+                            data-test-route-quick-date
+                        >{{date.label}}</button>
+                    {{/each}}
+                </div>
+                {{#if (eq this.kind "delivery")}}
+                    <label class="text-sm font-medium">{{t "planning.optimizer.start"}}
+                        <input class="form-input block mt-1" type="time" value={{this.startTime}} {{on "change" (fn this.setField "startTime")}} />
                     </label>
                 {{/if}}
+                <label class="text-sm font-medium">{{t "planning.optimizer.end"}}
+                    <input class="form-input block mt-1" type="time" value={{this.endTime}} {{on "change" (fn this.setField "endTime")}} />
+                </label>
             </div>
-        {{/each}}
-        <Button
-            @type="primary"
-            @icon="route"
-            @text={{t "planning.optimizer.orchestrate"}}
-            @onClick={{perform this.orchestrate}}
-            @disabled={{or (not this.permitted) this.busy (not @depotUuid) (not @selection.size)}}
-            data-test-route-run
-        />
-    </fieldset>
-    {{#if this.error}}<p role="alert">{{this.error}}</p>{{/if}}
-    {{#if this.proposal}}
-        <p>{{t "planning.optimizer.expires"}}: {{this.proposal.expires_at}}</p>
-        {{#each this.proposal.unassigned as |warning|}}<p role="alert" data-test-route-warning>{{warning.order_uuid}}: {{warning.reason}}</p>{{/each}}
-    {{/if}}
-    {{#if this.routes.length}}
-        {{#unless this.proposal}}<h4>{{t "planning.optimizer.saved-routes"}}</h4>{{/unless}}
-        <div class="fleetbase-leaflet-map-container next-map-container h-96" data-test-route-map>
-            <LeafletMap @lat={{this.mapCenter.lat}} @lng={{this.mapCenter.lng}} @zoom={{11}} class="w-full h-full" as |layers|>
-                <layers.tile @url={{this.mapSettings.leafletTileUrl}} />
-                {{#each this.routes as |route|}}
-                    {{#if route.coordinates.length}}<layers.polyline @locations={{route.coordinates}} @color={{route.color}} />{{/if}}
-                    <layers.marker @lat={{route.origin.location.lat}} @lng={{route.origin.location.lng}} as |marker|>
-                        <marker.tooltip>{{route.driver_name}}: {{route.origin.name}}</marker.tooltip>
-                    </layers.marker>
-                    {{#each route.stops as |stop|}}
-                        <layers.marker @lat={{stop.location.lat}} @lng={{stop.location.lng}} as |marker|>
-                            <marker.tooltip>{{stop.sequence}}. {{stop.order_id}} - {{stop.label}} - {{stop.arrival_at}}</marker.tooltip>
-                        </layers.marker>
+            {{#if (eq this.kind "pickup")}}<p class="text-xs text-gray-500 dark:text-gray-400">{{t "planning.optimizer.pickup-departure"}}</p>{{/if}}
+
+            <div>
+                <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                    <h4 class="text-sm font-semibold">{{t "planning.orchestrator.choose-drivers"}}</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{t "planning.orchestrator.team-summary" drivers=this.selectedDriverCount capacity=this.selectedCapacity}}</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {{#each this.driverRows as |driver|}}
+                        <div
+                            class="rounded-xl border-2 p-4 transition
+                                {{if
+                                    driver.checked
+                                    'border-blue-500 bg-blue-50 dark:bg-blue-950 shadow-sm'
+                                    'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                                }}"
+                        >
+                            <label class="flex items-start gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    class="form-checkbox mt-1"
+                                    checked={{driver.checked}}
+                                    {{on "change" (fn this.toggleDriver driver)}}
+                                    data-test-route-driver={{driver.uuid}}
+                                />
+                                <span class="flex-1 min-w-0">
+                                    <span class="block font-semibold truncate">{{driver.name}}</span>
+                                    <span class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 mt-1">
+                                        <FaIcon @icon="car-side" class="text-gray-400" />
+                                        {{if driver.vehicleLabel driver.vehicleLabel (t "planning.orchestrator.assigned-vehicle")}}
+                                    </span>
+                                    {{#if driver.parcel_capacity}}
+                                        <span class="inline-flex mt-2 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium">{{t
+                                                "planning.orchestrator.capacity"
+                                                count=driver.parcel_capacity
+                                            }}</span>
+                                    {{/if}}
+                                </span>
+                            </label>
+                            {{#if (and driver.checked (eq this.kind "pickup"))}}
+                                <label class="block text-xs font-medium mt-3">{{t "planning.vehicle-start"}}
+                                    <select class="form-select w-full mt-1 text-sm" {{on "change" (fn this.setOrigin driver)}} data-test-route-origin={{driver.uuid}}>
+                                        {{#each @places as |place|}}<option value={{place.uuid}} selected={{eq driver.origin place.uuid}}>{{place.name}} - {{place.street1}}</option>{{/each}}
+                                    </select>
+                                </label>
+                            {{/if}}
+                        </div>
+                    {{else}}
+                        <p
+                            class="md:col-span-2 xl:col-span-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-800 dark:text-amber-200"
+                        >{{t "planning.orchestrator.no-drivers"}}</p>
                     {{/each}}
-                    <layers.marker @lat={{route.destination.location.lat}} @lng={{route.destination.location.lng}} as |marker|>
-                        <marker.tooltip>{{route.destination.name}}</marker.tooltip>
-                    </layers.marker>
-                {{/each}}
-            </LeafletMap>
-        </div>
-        {{#each this.routes as |route|}}
-            <article class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-2" data-test-route-review>
-                <h4>{{route.driver_name}}: {{route.kilometers}} km / {{route.minutes}} min</h4>
-                <p>{{route.origin.name}} &rarr; {{route.destination.name}}</p>
-                {{#unless route.geometry}}<p>{{t "planning.optimizer.no-geometry"}}</p>{{/unless}}
-                <ol>{{#each route.stops as |stop|}}<li>{{stop.sequence}}. {{stop.order_id}} - {{stop.label}} - {{stop.arrival_at}}</li>{{/each}}</ol>
-            </article>
-        {{/each}}
-        <p>{{t "planning.optimizer.draft-only"}}</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+                <Button
+                    @type="primary"
+                    @size="lg"
+                    @icon="route"
+                    @text={{t "planning.optimizer.orchestrate"}}
+                    @onClick={{perform this.orchestrate}}
+                    @isLoading={{this.orchestrate.isRunning}}
+                    @disabled={{or (not this.permitted) this.busy (not @depotUuid) (not @selection.size)}}
+                    data-test-route-run
+                />
+                {{#unless this.stepOneDone}}<span class="text-xs text-gray-500 dark:text-gray-400">{{t "planning.optimizer.required"}}</span>{{/unless}}
+            </div>
+        </fieldset>
+
+        {{#if this.error}}<p
+                class="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 p-3 text-sm text-red-800 dark:text-red-200"
+                role="alert"
+            >{{this.error}}</p>{{/if}}
+
         {{#if this.proposal}}
-            <Button @text={{t "planning.optimizer.save"}} @onClick={{this.reviewSave}} @disabled={{this.busy}} data-test-route-save />
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3" data-test-route-totals>
+                <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3"><p class="text-xs text-gray-500">{{t "planning.orchestrator.routes"}}</p><p
+                        class="text-xl font-semibold"
+                    >{{this.totals.routes}}</p></div>
+                <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3"><p class="text-xs text-gray-500">{{t "planning.orchestrator.stops"}}</p><p
+                        class="text-xl font-semibold"
+                    >{{this.totals.stops}}</p></div>
+                <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3"><p class="text-xs text-gray-500">{{t "planning.orchestrator.distance"}}</p><p
+                        class="text-xl font-semibold"
+                    >{{this.totals.kilometers}} km</p></div>
+                <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3"><p class="text-xs text-gray-500">{{t "planning.orchestrator.drive-time"}}</p><p
+                        class="text-xl font-semibold"
+                    >{{this.totals.minutes}} min</p></div>
+            </div>
+            {{#each this.proposal.unassigned as |warning|}}<p
+                    class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200"
+                    role="alert"
+                    data-test-route-warning
+                >{{warning.order_uuid}}: {{warning.reason}}</p>{{/each}}
         {{/if}}
-    {{/if}}
+
+        {{#if this.routes.length}}
+            {{#unless this.proposal}}<h4 class="text-sm font-semibold">{{t "planning.optimizer.saved-routes"}}</h4>{{/unless}}
+            <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+                <div class="xl:col-span-3 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                    <div class="fleetbase-leaflet-map-container next-map-container h-[28rem]" data-test-route-map>
+                        <LeafletMap @lat={{this.mapCenter.lat}} @lng={{this.mapCenter.lng}} @zoom={{11}} class="w-full h-full" as |layers|>
+                            <layers.tile @url={{this.mapSettings.leafletTileUrl}} />
+                            {{#each this.routes as |route|}}
+                                {{#if route.coordinates.length}}<layers.polyline @locations={{route.coordinates}} @color={{route.color}} @weight={{5}} />{{/if}}
+                                <layers.marker @lat={{route.origin.location.lat}} @lng={{route.origin.location.lng}} as |marker|>
+                                    <marker.tooltip>{{route.driver_name}}: {{route.origin.name}}</marker.tooltip>
+                                </layers.marker>
+                                {{#each route.stops as |stop|}}
+                                    <layers.marker @lat={{stop.location.lat}} @lng={{stop.location.lng}} as |marker|>
+                                        <marker.tooltip>{{stop.sequence}}. {{stop.order_id}} - {{stop.label}} - {{stop.time}}</marker.tooltip>
+                                    </layers.marker>
+                                {{/each}}
+                                <layers.marker @lat={{route.destination.location.lat}} @lng={{route.destination.location.lng}} as |marker|>
+                                    <marker.tooltip>{{route.destination.name}}</marker.tooltip>
+                                </layers.marker>
+                            {{/each}}
+                        </LeafletMap>
+                    </div>
+                </div>
+                <div class="xl:col-span-2 space-y-3 max-h-[28rem] overflow-y-auto pr-1">
+                    {{#each this.routes as |route|}}
+                        <article
+                            class="rounded-xl border border-gray-200 dark:border-gray-700 border-l-4 p-4 space-y-3"
+                            style={{html-safe (concat "border-left-color: " route.color)}}
+                            data-test-route-review
+                        >
+                            <div class="flex items-start justify-between gap-2">
+                                <h4 class="font-semibold">{{route.driver_name}}</h4>
+                                <span class="text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">{{route.kilometers}} km / {{route.minutes}} min</span>
+                            </div>
+                            <ol class="relative border-l border-gray-200 dark:border-gray-700 ml-2 space-y-2 text-sm">
+                                <li class="pl-4 text-xs text-gray-500 dark:text-gray-400">{{route.origin.name}}</li>
+                                {{#each route.stops as |stop|}}
+                                    <li class="pl-4 relative">
+                                        <span
+                                            class="absolute -left-3 top-0 flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold text-white"
+                                            style={{html-safe (concat "background-color: " route.color)}}
+                                        >{{stop.sequence}}</span>
+                                        <span class="block font-medium pl-2">{{stop.order_id}} <span class="text-xs text-gray-500">{{stop.time}}</span></span>
+                                        <span class="block text-xs text-gray-500 dark:text-gray-400 pl-2">{{stop.label}}</span>
+                                    </li>
+                                {{/each}}
+                                <li class="pl-4 text-xs text-gray-500 dark:text-gray-400">{{route.destination.name}}</li>
+                            </ol>
+                            {{#unless route.geometry}}<p class="text-xs text-amber-700 dark:text-amber-300">{{t "planning.optimizer.no-geometry"}}</p>{{/unless}}
+                        </article>
+                    {{/each}}
+                </div>
+            </div>
+            {{#if this.proposal}}
+                <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4">
+                    <div class="text-sm">
+                        <p class="font-medium">{{t "planning.optimizer.draft-only"}}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{t "planning.optimizer.expires"}}: {{this.proposal.expires_at}}</p>
+                    </div>
+                    <Button
+                        @type="primary"
+                        @size="lg"
+                        @icon="check"
+                        @text={{t "planning.optimizer.save"}}
+                        @onClick={{this.reviewSave}}
+                        @isLoading={{this.save.isRunning}}
+                        @disabled={{this.busy}}
+                        data-test-route-save
+                    />
+                </div>
+            {{/if}}
+        {{/if}}
+    </div>
 </section>

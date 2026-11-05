@@ -287,6 +287,45 @@ class CollectionRounds
         });
     }
 
+    /**
+     * Return orders that the former automatic planner placed in unassigned, unoptimized drafts to "ready for pickup".
+     * Customer readiness is kept, so the dispatcher can select and optimize them again.
+     */
+    public static function releaseAutomaticDrafts(string $company): array
+    {
+        return self::transaction($company, function () use ($company) {
+            $released = [];
+            $rounds = CollectionRound::where('company_uuid', $company)->where('status', 'draft')
+                ->whereNull('driver_uuid')->whereNull('routing')->orderBy('uuid')->lockForUpdate()->get();
+            foreach ($rounds as $round) {
+                if (!$round->stops) {
+                    continue;
+                }
+                foreach (self::orders($round) as $order) {
+                    if (data_get($order->meta, 'collection_workflow.collection_round_uuid') !== $round->uuid
+                        || data_get($order->meta, 'collection_workflow.state') !== 'pickup_scheduled') {
+                        continue;
+                    }
+                    $order->recordCollectionRound($round->uuid, 'ready_for_pickup');
+                    if (data_get($order->meta, 'collection_workflow.scheduling_mode') === 'dispatcher') {
+                        $meta = $order->meta;
+                        $meta['collection_workflow']['planned_collection_at'] = null;
+                        $order->meta = $meta;
+                    }
+                    $order->save();
+                    $released[] = $order->uuid;
+                }
+                self::audit($round, 'released_automatic_draft', ['stops' => $round->stops]);
+                $round->stops = [];
+                $round->depot = null;
+                $round->custody = null;
+                $round->save();
+            }
+
+            return $released;
+        });
+    }
+
     private static function find(string $company, string $id): CollectionRound
     {
         return CollectionRound::where('company_uuid', $company)->where('uuid', $id)->lockForUpdate()->firstOrFail();
