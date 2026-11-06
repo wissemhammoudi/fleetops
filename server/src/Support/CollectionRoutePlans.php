@@ -255,16 +255,27 @@ class CollectionRoutePlans
                 abort_if($reserved, 409, 'A selected vehicle or driver is already reserved by a direct-order manifest.');
             }
             if (self::db()->getSchemaBuilder()->hasTable('schedule_items')) {
-                $shiftsQuery = $driver->scheduleItems()->where('company_uuid', $company)->whereIn('status', Driver::LIVE_SHIFT_STATUSES)
+                // Match by driver uuid so shifts saved under the core or Fleet-Ops driver type both count.
+                $shiftsQuery = self::db()->table('schedule_items')->where('company_uuid', $company)->where('assignee_uuid', $driver->uuid)
+                    ->whereNull('deleted_at')->whereIn('status', Driver::LIVE_SHIFT_STATUSES)
                     ->where('start_at', '<', $end)->where('end_at', '>', $departure);
                 $shifts = ($lock ? $shiftsQuery->lockForUpdate() : $shiftsQuery)->get();
-                abort_unless($shifts->contains(fn ($shift) => CarbonImmutable::parse($shift->start_at)->lessThanOrEqualTo($departure)
-                    && CarbonImmutable::parse($shift->end_at)->greaterThanOrEqualTo($end)), 409, 'The selected route window must fit a scheduled driver shift.');
+                if (!$shifts->contains(fn ($shift) => CarbonImmutable::parse($shift->start_at, 'UTC')->lessThanOrEqualTo($departure)
+                    && CarbonImmutable::parse($shift->end_at, 'UTC')->greaterThanOrEqualTo($end))) {
+                    $local = fn ($value) => CarbonImmutable::parse($value, 'UTC')->setTimezone($calendar['timezone'])->format('H:i');
+                    $dayShifts = self::db()->table('schedule_items')->where('company_uuid', $company)->where('assignee_uuid', $driver->uuid)
+                        ->whereNull('deleted_at')->whereIn('status', Driver::LIVE_SHIFT_STATUSES)
+                        ->where('start_at', '<', $date->endOfDay()->utc())->where('end_at', '>', $date->startOfDay()->utc())
+                        ->orderBy('start_at')->get()->map(fn ($shift) => $local($shift->start_at) . '-' . $local($shift->end_at))->implode(', ');
+                    abort(409, $dayShifts
+                        ? "{$driver->name}'s shift on {$input['date']} is {$dayShifts}. Set the departure ({$input['start_time']}) and latest return ({$input['end_time']}) inside that shift, or extend the shift."
+                        : "{$driver->name} has no scheduled shift on {$input['date']}. Add a shift covering {$input['start_time']}-{$input['end_time']} in Drivers > {$driver->name} > Schedule.");
+                }
                 abort_if($shifts->contains(fn ($shift) => $shift->break_start_at && $shift->break_end_at
-                    && CarbonImmutable::parse($shift->break_start_at)->lessThan($end)
-                    && CarbonImmutable::parse($shift->break_end_at)->greaterThan($departure)),
+                    && CarbonImmutable::parse($shift->break_start_at, 'UTC')->lessThan($end)
+                    && CarbonImmutable::parse($shift->break_end_at, 'UTC')->greaterThan($departure)),
                     409, 'Choose a route window outside the scheduled break.');
-                $fingerprints['shifts'][$driver->uuid] = hash('sha256', serialize($shifts->map->getAttributes()->all()));
+                $fingerprints['shifts'][$driver->uuid] = hash('sha256', serialize($shifts->map(fn ($shift) => (array) $shift)->all()));
             }
             if (self::db()->getSchemaBuilder()->hasTable('schedule_availability')) {
                 $unavailable = $driver->availabilities()->where('is_available', false)->where('start_at', '<', $end)
