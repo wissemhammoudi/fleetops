@@ -3,7 +3,7 @@
         <div class="grid grid-cols-1 gap-4 text-xs dark:text-gray-100">
 
             {{! ── Driver selector (only in global scheduler context) ─────────────── }}
-            {{#if this.hasManyDrivers}}
+            {{#if this.showDriverPicker}}
                 <div class="input-group">
                     <label>{{t "resource.driver"}}</label>
                     <ModelSelect

@@ -176,25 +176,7 @@ export default class DriverScheduleComponent extends Component {
      */
     @task *loadDriverSchedule() {
         try {
-            // 1. Find or create the driver's primary schedule
-            const schedules = yield this.store.query('schedule', {
-                subject_type: 'fleet-ops:driver',
-                subject_uuid: this.args.resource.id,
-                limit: 1,
-            });
-
-            if (schedules.length > 0) {
-                this.schedule = schedules.firstObject;
-            } else {
-                const newSchedule = this.store.createRecord('schedule', {
-                    subject_type: 'fleet-ops:driver',
-                    subject_uuid: this.args.resource.id,
-                    name: `${this.args.resource.name} Schedule`,
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                    status: 'draft',
-                });
-                this.schedule = yield newSchedule.save();
-            }
+            this.schedule = yield this.ensureSchedule();
 
             // 2. Load materialised schedule items within the 4-week window
             // Use _gte/_lte operator suffixes so the API applies range filtering
@@ -216,6 +198,28 @@ export default class DriverScheduleComponent extends Component {
         } catch (error) {
             this.notifications.serverError(error);
         }
+    }
+
+    async ensureSchedule() {
+        if (this.schedule?.id) return this.schedule;
+        const driver = this.args.resource;
+        if (!driver?.id) throw new Error(this.intl.t('scheduler.select-driver'));
+        const schedules = await this.store.query('schedule', { subject_type: 'fleet-ops:driver', subject_uuid: driver.id, limit: 1 });
+        if (schedules.length > 0) {
+            this.schedule = schedules.firstObject;
+        } else {
+            this.schedule = await this.store
+                .createRecord('schedule', {
+                    subject_type: 'fleet-ops:driver',
+                    subject_uuid: driver.id,
+                    name: `${driver.name} Schedule`,
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    status: 'draft',
+                })
+                .save();
+        }
+        if (!this.schedule?.id) throw new Error('The driver schedule could not be created. Refresh and try again.');
+        return this.schedule;
     }
 
     /**
@@ -254,6 +258,7 @@ export default class DriverScheduleComponent extends Component {
                 const options = modal.getOptions();
 
                 try {
+                    const schedule = await this.ensureSchedule();
                     if (options.isRecurring) {
                         // Recurring mode: create a ScheduleTemplate then apply it
                         const template = this.store.createRecord('schedule-template', {
@@ -270,7 +275,7 @@ export default class DriverScheduleComponent extends Component {
                         await this.fetch.post(`schedule-templates/${savedTemplate.id}/apply`, {
                             subject_type: 'fleet-ops:driver',
                             subject_uuid: this.args.resource.id,
-                            schedule_uuid: this.schedule.id,
+                            schedule_uuid: schedule.id,
                             effective_from: options.recurrenceStartDate || new Date().toISOString(),
                             effective_until: options.recurrenceEndDate || null,
                         });
@@ -279,7 +284,7 @@ export default class DriverScheduleComponent extends Component {
                     } else {
                         // Single shift mode: create a ScheduleItem directly
                         const scheduleItem = this.store.createRecord('schedule-item', {
-                            schedule_uuid: this.schedule.id,
+                            schedule_uuid: schedule.id,
                             assignee_type: 'fleet-ops:driver',
                             assignee_uuid: this.args.resource.id,
                             title: options.title || null,
@@ -379,8 +384,9 @@ export default class DriverScheduleComponent extends Component {
                 modal.startLoading();
                 const options = modal.getOptions();
                 try {
+                    const schedule = await this.ensureSchedule();
                     const exception = this.store.createRecord('schedule-exception', {
-                        schedule_uuid: this.schedule?.id,
+                        schedule_uuid: schedule.id,
                         subject_type: 'fleet-ops:driver',
                         subject_uuid: this.args.resource.id,
                         type: 'time_off',

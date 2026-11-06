@@ -55,7 +55,11 @@ export default class ModalsAddDriverShiftComponent extends Component {
         opts.recurrenceEndDate = opts.recurrenceEndDate ?? null;
         opts.isRecurring = true;
 
-        this.selectedDriver = opts.selectedDriver ?? null;
+        const preset = opts.selectedDriver ?? null;
+        // Opened from a driver's own page: the driver is fixed, so no picker is needed.
+        this.driverLocked = Boolean(preset) && this.drivers.length <= 1;
+        this.selectedDriver = preset ?? (this.drivers.length === 1 ? this.drivers[0] : null);
+        opts.selectedDriver = this.selectedDriver;
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
@@ -63,8 +67,8 @@ export default class ModalsAddDriverShiftComponent extends Component {
         return this.args.options?.drivers ?? [];
     }
 
-    get hasManyDrivers() {
-        return this.drivers.length > 1;
+    get showDriverPicker() {
+        return !this.driverLocked;
     }
 
     get dayOptions() {

@@ -710,10 +710,15 @@ export default class OperationsSchedulerIndexController extends Controller {
                 modalsManager.startLoading();
                 const options = modalsManager.getOptions();
                 const targetDriver = options.selectedDriver;
+                if (!targetDriver?.id) {
+                    this.notifications.warning(this.intl.t('scheduler.select-driver'));
+                    modalsManager.stopLoading();
+                    return;
+                }
                 try {
                     if (options.isRecurring) {
                         const template = this.store.createRecord('schedule-template', {
-                            name: options.templateName || `${targetDriver?.name} Recurring Schedule`,
+                            name: options.templateName || `${targetDriver.name} Recurring Schedule`,
                             rrule: options.rrule,
                             start_time: options.shiftStartTime,
                             end_time: options.shiftEndTime,
@@ -722,14 +727,14 @@ export default class OperationsSchedulerIndexController extends Controller {
                             color: options.templateColor || '#6366f1',
                         });
                         const savedTemplate = await template.save();
-                        const schedules = await this.store.query('schedule', { subject_type: 'driver', subject_uuid: targetDriver.id, limit: 1 });
+                        const schedules = await this.store.query('schedule', { subject_type: 'fleet-ops:driver', subject_uuid: targetDriver.id, limit: 1 });
                         let schedule;
                         if (schedules.length > 0) {
                             schedule = schedules.firstObject;
                         } else {
                             schedule = await this.store
                                 .createRecord('schedule', {
-                                    subject_type: 'driver',
+                                    subject_type: 'fleet-ops:driver',
                                     subject_uuid: targetDriver.id,
                                     name: `${targetDriver.name} Schedule`,
                                     timezone: this.companyTimezone,
@@ -738,7 +743,7 @@ export default class OperationsSchedulerIndexController extends Controller {
                                 .save();
                         }
                         await this.fetch.post(`schedule-templates/${savedTemplate.id}/apply`, {
-                            subject_type: 'driver',
+                            subject_type: 'fleet-ops:driver',
                             subject_uuid: targetDriver.id,
                             schedule_uuid: schedule.id,
                             effective_from: options.recurrenceStartDate || new Date().toISOString(),
@@ -747,8 +752,8 @@ export default class OperationsSchedulerIndexController extends Controller {
                         this.notifications.success(this.intl.t('scheduler.recurring-schedule-created'));
                     } else {
                         const scheduleItem = this.store.createRecord('schedule-item', {
-                            assignee_type: 'driver',
-                            assignee_uuid: targetDriver?.id,
+                            assignee_type: 'fleet-ops:driver',
+                            assignee_uuid: targetDriver.id,
                             title: options.title || null,
                             start_at: options.startAt,
                             end_at: options.endAt,

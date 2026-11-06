@@ -242,6 +242,11 @@ export default class OperationsSchedulerFleetScheduleController extends Controll
                 modal.startLoading();
                 const options = modal.getOptions();
                 const targetDriver = options.selectedDriver || driver;
+                if (!targetDriver?.id) {
+                    this.notifications.warning(this.intl.t('scheduler.select-driver'));
+                    modal.stopLoading();
+                    return;
+                }
 
                 try {
                     if (options.isRecurring) {
