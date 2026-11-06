@@ -3918,3 +3918,23 @@ vehicle-tn:
   no-vehicle: "No vehicle — this driver can't be planned"
   no-capacity: "Vehicle capacity not set — this driver can't be planned"
   papers-alert: "Vehicle papers to renew"
+pickup-details:
+  title: Pickup route overview
+  driver: Assigned driver
+  progress: Pickups processed
+  connection: Driver connection
+  activity: Driver activity
+  call-driver: Call driver
+  auto-refresh: Updates every 10 seconds
+  updated: Last refresh
+  unknown: Not available
+  unassigned: No driver information
+  online: Online
+  offline: Offline
+  position-live: Recent driver GPS position
+  position-unavailable: Live GPS unavailable or older than 2 minutes
+  last-position: Last GPS observation
+  itinerary: Route itinerary
+  estimates: Route and arrival times are saved planning estimates, not live traffic predictions.
+  map-unavailable: Map coordinates are unavailable. The stop itinerary is shown below.
+  load-error: Unable to refresh driver and pickup status. Retry.

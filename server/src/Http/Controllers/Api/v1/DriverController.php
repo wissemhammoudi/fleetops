@@ -306,6 +306,7 @@ class DriverController extends Controller
      */
     public function track(string $id, Request $request)
     {
+        $request->validate(['timestamp' => ['sometimes', 'nullable', 'date']]);
         $latitude  = (float) $request->input('latitude');
         $longitude = (float) $request->input('longitude');
         $altitude  = $request->input('altitude');
@@ -343,7 +344,9 @@ class DriverController extends Controller
             }
         }
 
-        $driver->updateQuietly($positionData);
+        $driverMeta = (array) $driver->meta;
+        $driverMeta['navigator_position_at'] = $request->filled('timestamp') ? Carbon::parse($request->input('timestamp'))->utc()->toISOString() : null;
+        $driver->updateQuietly($positionData + ['meta' => $driverMeta]);
         $driver->createPosition($positionData);
 
         $driver->loadMissing('vehicle');

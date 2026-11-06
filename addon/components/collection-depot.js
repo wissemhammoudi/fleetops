@@ -13,7 +13,6 @@ export default class CollectionDepotComponent extends Component {
     @tracked reason = '';
     @tracked condition = 'good';
     @tracked depot = '';
-    @tracked labels = [];
     retry = null;
 
     get receiving() {
@@ -49,21 +48,14 @@ export default class CollectionDepotComponent extends Component {
                 this.retry = { hash, id: crypto.randomUUID() };
             }
             yield this.fetch.post(`fleet-ops/collection-rounds/${encodeURIComponent(this.args.round.uuid)}/depot`, {
-                ...payload, revision: this.args.round.revision, request_id: this.retry.id,
+                ...payload,
+                revision: this.args.round.revision,
+                request_id: this.retry.id,
             });
             this.retry = null;
             this.barcode = '';
             this.reason = '';
             yield this.args.onChanged();
-        } catch (error) {
-            this.notifications.serverError(error);
-        }
-    }
-
-    @dropTask *loadLabels() {
-        try {
-            const response = yield this.fetch.get(`fleet-ops/collection-rounds/${encodeURIComponent(this.args.round.uuid)}/labels`);
-            this.labels = response.labels;
         } catch (error) {
             this.notifications.serverError(error);
         }

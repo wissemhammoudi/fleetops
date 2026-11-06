@@ -1,6 +1,16 @@
 <div class="orchestrator-map-container fleetbase-leaflet-map-container next-map-container relative w-full h-full" data-test-route-map>
-    <LeafletMap @lat={{this.center.lat}} @lng={{this.center.lng}} @zoom={{11}} class="w-full h-full" as |layers|>
+    <LeafletMap @lat={{this.center.lat}} @lng={{this.center.lng}} @zoom={{11}} @onLoad={{this.fitRoute}} class="w-full h-full" as |layers|>
         <layers.tile @url={{this.mapSettings.leafletTileUrl}} />
+        {{#if this.driver}}
+            <layers.marker
+                @lat={{this.driver.location.lat}}
+                @lng={{this.driver.location.lng}}
+                @icon={{div-icon html=(this.icon "D" "#2563EB") className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16)}}
+                as |marker|
+            >
+                <marker.tooltip>{{this.driver.name}}</marker.tooltip>
+            </layers.marker>
+        {{/if}}
 
         {{#if this.depot}}
             <layers.marker
@@ -34,14 +44,14 @@
 
         {{#each this.routes as |route|}}
             {{#if route.coordinates.length}}<layers.polyline @locations={{route.coordinates}} @color={{route.color}} @weight={{5}} @opacity={{0.85}} />{{/if}}
-            <layers.marker
-                @lat={{route.origin.location.lat}}
-                @lng={{route.origin.location.lng}}
-                @icon={{div-icon html=(this.icon "S" route.color) className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16) popupAnchor=(array 0 -20)}}
-                as |marker|
-            >
-                <marker.tooltip>{{route.driver_name}}: {{route.origin.name}}</marker.tooltip>
-            </layers.marker>
+            {{#if route.origin.location}}<layers.marker
+                    @lat={{route.origin.location.lat}}
+                    @lng={{route.origin.location.lng}}
+                    @icon={{div-icon html=(this.icon "S" route.color) className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16) popupAnchor=(array 0 -20)}}
+                    as |marker|
+                >
+                    <marker.tooltip>{{route.driver_name}}: {{route.origin.name}}</marker.tooltip>
+                </layers.marker>{{/if}}
             {{#each route.stops as |stop|}}
                 <layers.marker
                     @lat={{stop.location.lat}}
@@ -65,14 +75,14 @@
                     </marker.tooltip>
                 </layers.marker>
             {{/each}}
-            <layers.marker
-                @lat={{route.destination.location.lat}}
-                @lng={{route.destination.location.lng}}
-                @icon={{div-icon html=(this.icon "H" this.depotColor) className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16) popupAnchor=(array 0 -20)}}
-                as |marker|
-            >
-                <marker.tooltip>{{route.destination.name}}</marker.tooltip>
-            </layers.marker>
+            {{#if route.destination.location}}<layers.marker
+                    @lat={{route.destination.location.lat}}
+                    @lng={{route.destination.location.lng}}
+                    @icon={{div-icon html=(this.icon "H" this.depotColor) className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16) popupAnchor=(array 0 -20)}}
+                    as |marker|
+                >
+                    <marker.tooltip>{{route.destination.name}}</marker.tooltip>
+                </layers.marker>{{/if}}
         {{/each}}
     </LeafletMap>
 

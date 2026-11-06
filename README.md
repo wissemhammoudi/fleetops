@@ -48,6 +48,21 @@ Fleet-Ops is included with Fleetbase Cloud and self-hosted Fleetbase installatio
 
 ## Features
 
+### Scheduler pickup details
+
+Pickup details show the saved route map and ordered itinerary, pickup progress,
+assigned driver connection/activity, and customer handover status. The
+company-scoped `collection-rounds/{id}/monitor` endpoint is polled every 10 seconds
+while the details are open. Closing the panel stops polling. A failed refresh
+is explicit; previously loaded data is not presented as a fresh live position.
+GPS markers require an online driver and an observation no older than two
+minutes. Navigator tracking records the source timestamp in driver metadata;
+older/missing observations remain unavailable until the next timestamped update.
+Route geometry and arrival times remain planning estimates, not live traffic.
+Parcel QR-label previews are removed from pickup/depot details; existing physical
+barcode scans, parcel identities and depot reconciliation remain unchanged.
+Deploy the backend and rebuild Console together; no migration is required.
+
 ### Operations
 
 - Create, import, schedule, dispatch, start, cancel, and complete delivery orders.

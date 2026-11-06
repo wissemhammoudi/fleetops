@@ -1,16 +1,6 @@
 <div class="border-t pt-4 space-y-3">
     <h3 class="font-semibold">{{t "collection-depot.title"}}</h3>
     <p>{{t "collection-depot.help"}}</p>
-    {{#if @permissions.labels}}
-        <Button @text={{t "collection-depot.labels"}} @onClick={{perform this.loadLabels}} @disabled={{or this.save.isRunning this.loadLabels.isRunning}} data-test-depot-labels />
-    {{/if}}
-    {{#each this.labels as |label|}}
-        <div class="inline-block border p-3 m-2 text-center">
-            <p>{{label.order_id}} - {{label.name}} - {{label.number}} / {{label.quantity}}</p>
-            <img src={{concat "data:image/png;base64," label.image}} alt={{label.barcode}} width="120" height="120" />
-            <p class="font-mono text-xs">{{label.barcode}}</p>
-        </div>
-    {{/each}}
     {{#each this.units as |unit|}}
         <p>{{unit.order_id}} - {{unit.name}} - {{unit.number}} / {{unit.quantity}} - {{unit.barcode}} - {{unit.condition}}</p>
     {{/each}}

@@ -19,6 +19,11 @@ use Milon\Barcode\Facades\DNS2DFacade as DNS2D;
 
 class CollectionRoundController extends Controller
 {
+    public function monitor(string $id)
+    {
+        return response()->json(\Fleetbase\FleetOps\Support\CollectionRoundMonitor::read($id))->header('Cache-Control', 'no-store');
+    }
+
     public function index()
     {
         $company = CollectionConsoleAccess::authorize('read');

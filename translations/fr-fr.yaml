@@ -2717,3 +2717,23 @@ vehicle-tn:
   no-vehicle: "Aucun véhicule — ce chauffeur ne peut pas être planifié"
   no-capacity: "Capacité du véhicule non définie — ce chauffeur ne peut pas être planifié"
   papers-alert: "Papiers du véhicule à renouveler"
+pickup-details:
+  title: Vue de la tournée de collecte
+  driver: Chauffeur affecté
+  progress: Collectes traitées
+  connection: Connexion du chauffeur
+  activity: Activité du chauffeur
+  call-driver: Appeler le chauffeur
+  auto-refresh: Actualisation toutes les 10 secondes
+  updated: Dernière actualisation
+  unknown: Indisponible
+  unassigned: Informations chauffeur indisponibles
+  online: En ligne
+  offline: Hors ligne
+  position-live: Position GPS récente du chauffeur
+  position-unavailable: GPS en direct indisponible ou datant de plus de 2 minutes
+  last-position: Dernière observation GPS
+  itinerary: Itinéraire de la tournée
+  estimates: Le trajet et les horaires sont des estimations planifiées, pas des prévisions du trafic en direct.
+  map-unavailable: Coordonnées indisponibles. Les étapes sont affichées ci-dessous.
+  load-error: Impossible d’actualiser le chauffeur et la collecte. Réessayez.

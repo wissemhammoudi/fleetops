@@ -769,6 +769,7 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
                                 $router->get('collection-rounds', 'CollectionRoundController@index');
                                 $router->post('collection-rounds/plan', 'CollectionRoundController@plan');
                                 $router->get('collection-rounds/{id}/labels', 'CollectionRoundController@labels');
+                                $router->get('collection-rounds/{id}/monitor', 'CollectionRoundController@monitor');
                                 $router->post('collection-rounds/{id}/depot', 'CollectionRoundController@depot');
                                 $router->post('collection-deliveries/{id}', 'CollectionRoundController@delivery');
                                 $router->post('collection-rounds/{id}', 'CollectionRoundController@update');

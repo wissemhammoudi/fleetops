@@ -31,6 +31,20 @@ export default class PlanningMapComponent extends Component {
         return this.args.routes ?? [];
     }
 
+    get driver() {
+        return located(this.args.driver) ? this.args.driver : null;
+    }
+
+    @action fitRoute({ target: map }) {
+        if (!this.args.fitRoute) return;
+        const points = this.routes.flatMap((route) => [
+            ...(route.coordinates ?? []),
+            ...[route.origin, ...(route.stops ?? []), route.destination].filter(located).map((place) => [place.location.lat, place.location.lng]),
+        ]);
+        if (this.driver) points.push([this.driver.location.lat, this.driver.location.lng]);
+        if (points.length) map.fitBounds(points, { padding: [24, 24], maxZoom: 15 });
+    }
+
     get markers() {
         if (this.routes.length) return [];
         const markers = [];
@@ -51,7 +65,7 @@ export default class PlanningMapComponent extends Component {
     }
 
     get center() {
-        const first = this.routes[0]?.origin?.location ?? this.depot?.location ?? this.markers[0]?.place.location;
+        const first = this.routes[0]?.origin?.location ?? this.routes[0]?.stops?.[0]?.location ?? this.driver?.location ?? this.depot?.location ?? this.markers[0]?.place.location;
         return first ?? TUNIS;
     }
 

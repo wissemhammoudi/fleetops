@@ -87,8 +87,7 @@
         {{#if this.selected}}
             <Layout::Resource::Panel @resource={{this.selected}} @pojoResource={{true}} @headerTitle={{t "planning.round-details"}} @onPressCancel={{this.close}} @width="800px">
                 <div class="p-4 space-y-4" data-test-planning-panel>
-                    <h2>{{this.selected.departure}} ({{this.selected.timezone}})</h2>
-                    <Badge @status={{this.selected.status}} />
+                    <PickupRoundOverview @round={{this.selected}} />
                     <div class="flex gap-2">
                         <Button @text={{t "planning.pickups"}} @onClick={{fn this.tab "review"}} />
                         <Button @text={{t "planning.depot"}} @onClick={{fn this.tab "depot"}} />
@@ -172,22 +171,20 @@
                         {{#if (and this.selected.editable this.permissions.cancel)}}
                             <Button @text={{t "collection-rounds.cancel"}} @onClick={{fn this.confirm this.selected "cancel"}} @disabled={{this.collectionPlanning.busy}} />
                         {{/if}}
-                        {{#if this.selected.routing}}
-                            <p data-test-route-origin>{{t "planning.vehicle-start"}}: {{this.selected.routing.origin.name}} - {{this.selected.routing.origin.street1}}</p>
-                            <p>{{t "collection-rounds.depot"}}: {{this.selected.routing.destination.name}} - {{this.selected.routing.destination.street1}}</p>
-                        {{/if}}
-                        {{#each this.selected.stops as |stop|}}
-                            <div class="border-t py-2">
-                                <p>{{stop.order_id}} - {{stop.contact.name}} - {{stop.contact.street1}} - {{stop.status}} {{stop.reason}}</p>
-                                {{#if stop.handover}}
-                                    <p data-test-dispatch-handover>{{t "pickup-handover.title"}}: {{t (concat "pickup-handover." stop.handover.status)}}</p>
-                                    {{#if stop.handover.reason}}<p role="alert">{{stop.handover.reason}}</p>{{/if}}
-                                {{/if}}
-                                {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{/if}}
-                                <p>{{stop.notes}}</p>
-                                {{#each stop.order_parcels as |parcel|}}<p>{{parcel.name}} x{{parcel.quantity}}</p>{{/each}}
-                            </div>
-                        {{/each}}
+                        <ContentPanel @title={{t "collection-rounds.parcels"}} @open={{false}}>
+                            {{#each this.selected.stops as |stop|}}
+                                <div class="border-t py-2">
+                                    <p>{{stop.order_id}} - {{stop.contact.name}} - {{stop.contact.street1}} - {{stop.status}} {{stop.reason}}</p>
+                                    {{#if stop.handover}}
+                                        <p data-test-dispatch-handover>{{t "pickup-handover.title"}}: {{t (concat "pickup-handover." stop.handover.status)}}</p>
+                                        {{#if stop.handover.reason}}<p role="alert">{{stop.handover.reason}}</p>{{/if}}
+                                    {{/if}}
+                                    {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{/if}}
+                                    <p>{{stop.notes}}</p>
+                                    {{#each stop.order_parcels as |parcel|}}<p>{{parcel.name}} x{{parcel.quantity}}</p>{{/each}}
+                                </div>
+                            {{/each}}
+                        </ContentPanel>
                     {{/if}}
                 </div>
             </Layout::Resource::Panel>
