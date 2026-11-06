@@ -14,7 +14,7 @@ class CollectionPickupTracking
         $roundId = data_get($order->meta, 'collection_workflow.collection_round_uuid');
         $round = $roundId ? CollectionRound::where('company_uuid', $order->company_uuid)->where('uuid', $roundId)->first() : null;
         $ownStops = $round ? collect($round->stops)->where('order_uuid', $order->uuid)->values() : collect();
-        if (!$round || $ownStops->isEmpty() || !in_array($round->status, ['released', 'in_progress', 'awaiting_depot', 'completed'])
+        if (!$round || $ownStops->isEmpty() || !in_array($round->status, ['released', 'in_progress', 'awaiting_depot', 'received_at_depot', 'completed'])
             || in_array($order->status, ['canceled', 'cancelled', 'order_canceled'])) {
             return ['pickups' => [], 'delivery' => ActiveVisitTracking::forOrder($order, 'delivery'), 'observed_at' => now()->toISOString()];
         }
@@ -57,6 +57,8 @@ class CollectionPickupTracking
                 return [
                     'stop_uuid' => $stop['uuid'],
                     'status' => $received ? 'at_depot' : ($stop['status'] === 'pending' ? ($onWay ? 'driver_on_way' : 'scheduled') : $stop['status']),
+                    'depot' => $received ? Arr::only($round->depot ?? [], ['name', 'street1', 'city']) : null,
+                    'ready_for_delivery' => $received && in_array(data_get($order->meta, 'collection_workflow.state'), ['received_at_depot', 'ready_for_delivery_dispatch'], true),
                     'scheduled_at' => $round->scheduled_at,
                     'timezone' => $round->timezone,
                     'contact' => Arr::only($stop['contact'] ?? [], ['name', 'street1', 'street2', 'city']),

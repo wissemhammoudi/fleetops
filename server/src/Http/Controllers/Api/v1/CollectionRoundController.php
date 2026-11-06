@@ -27,11 +27,12 @@ class CollectionRoundController extends Controller
         $driver = $this->driver();
 
         return response()->json(['rounds' => CollectionRound::where('company_uuid', $driver->company_uuid)->where('driver_uuid', $driver->uuid)
-            ->whereIn('status', ['released', 'in_progress', 'awaiting_depot', 'completed'])
-            ->orderByRaw("CASE WHEN status = 'completed' THEN 1 ELSE 0 END")
-            ->orderByRaw("CASE WHEN status = 'completed' THEN scheduled_at END DESC")
+            ->whereIn('status', ['released', 'in_progress', 'awaiting_depot', 'received_at_depot', 'completed'])
+            ->orderByRaw("CASE WHEN status IN ('completed', 'received_at_depot') THEN 1 ELSE 0 END")
+            ->orderByRaw("CASE WHEN status IN ('completed', 'received_at_depot') THEN scheduled_at END DESC")
             ->orderBy('scheduled_at')->limit(100)->get()->map(function ($round) use ($driver) {
                 $data = $round->toArray();
+                $data['depot'] = \Fleetbase\FleetOps\Support\CollectionDepot::destination($round);
                 if (!empty($data['routing']['stops'])) $data['routing'] = CollectionRouteProgress::forDriver($data['routing'], $driver->company_uuid, $driver->uuid);
                 return $data;
             }),
@@ -42,10 +43,12 @@ class CollectionRoundController extends Controller
     {
         $driver = $this->driver();
         $input = $request->validate([
-            'action' => ['required', 'in:start,start_visit,result'],
+            'action' => ['required', 'in:start,start_visit,result,start_depot,receive_depot'],
             'revision' => ['required', 'integer', 'min:1'],
             'stop_uuid' => ['required_if:action,result,start_visit', 'string', 'max:150'],
-            'request_id' => ['required_if:action,result', 'string', 'min:8', 'max:100'],
+            'request_id' => ['required_if:action,result,receive_depot', 'string', 'min:8', 'max:100'],
+            'depot_uuid' => ['required_if:action,receive_depot', 'string', 'max:150'],
+            'manifest_verified' => ['required_if:action,receive_depot', 'boolean'],
             'outcome' => ['required_if:action,result', 'in:collected,not_ready,absent,packaging_refused'],
             'reason' => ['required_if:outcome,not_ready,absent,packaging_refused', 'nullable', 'string', 'max:1000'],
             'checks' => ['sometimes', 'array'],

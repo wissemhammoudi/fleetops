@@ -27,6 +27,13 @@ class DriverNavigation
         if (!is_array($visit) || empty($visit['order_uuid'])) return null;
         $order = Order::where('company_uuid', $driver->company_uuid)->where('uuid', $visit['order_uuid'])->first();
         if (!$order || in_array($order->status, self::TERMINAL_STATUSES)) return null;
+        if (($visit['kind'] ?? null) === 'depot') {
+            $round = CollectionRound::where('company_uuid', $driver->company_uuid)->where('uuid', $visit['round_uuid'])
+                ->where('driver_uuid', $driver->uuid)->where('status', 'awaiting_depot')->first();
+            return $round && !collect($round->stops)->contains('status', 'pending')
+                && collect($round->stops)->contains(fn ($stop) => $stop['order_uuid'] === $order->uuid && $stop['status'] === 'collected')
+                && data_get($order->meta, 'collection_workflow.collection_round_uuid') === $round->uuid ? $visit : null;
+        }
         if (($visit['kind'] ?? null) === 'pickup') {
             $round = CollectionRound::where('company_uuid', $driver->company_uuid)->where('uuid', $visit['round_uuid'])
                 ->where('driver_uuid', $driver->uuid)->where('status', 'in_progress')->first();
@@ -42,8 +49,9 @@ class DriverNavigation
         $locked = Driver::where('company_uuid', $driver->company_uuid)->where('uuid', $driver->uuid)->lockForUpdate()->firstOrFail();
         $active = self::active($locked);
         $same = $active && $active['kind'] === $visit['kind'] && $active['order_uuid'] === $visit['order_uuid']
-            && ($active['stop_uuid'] ?? null) === ($visit['stop_uuid'] ?? null);
-        abort_if($active && !$same, 409, 'Finish the active pickup or delivery before starting another visit.');
+            && ($active['stop_uuid'] ?? null) === ($visit['stop_uuid'] ?? null)
+            && ($active['round_uuid'] ?? null) === ($visit['round_uuid'] ?? null);
+        abort_if($active && !$same, 409, 'Finish the active visit or depot return before starting another visit.');
         $meta = $locked->meta ?? [];
         $meta['navigator_active_visit'] = $same ? $active : $visit + ['started_at' => now()->toISOString()];
         $locked->updateQuietly(['meta' => $meta]);

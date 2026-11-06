@@ -148,7 +148,7 @@ class Order extends Model
         $this->recordingCollectionReadiness = true;
     }
 
-    public function recordDepotReceipt(string $roundUuid, bool $received, ?string $date = null, ?string $timezone = null): void
+    public function recordDepotReceipt(string $roundUuid, bool $received, ?string $date = null, ?string $timezone = null, ?array $depot = null): void
     {
         abort_unless(data_get($this->meta, 'collection_workflow.collection_round_uuid') === $roundUuid, 409, 'This order does not belong to this depot round.');
         $meta = $this->meta;
@@ -157,6 +157,7 @@ class Order extends Model
         $workflow['depot_received_at'] = $received ? now()->toISOString() : null;
         $workflow['planned_delivery_date'] = $received ? $date : null;
         $workflow['delivery_timezone'] = $received ? $timezone : null;
+        if ($received && $depot) $workflow['depot'] = \Illuminate\Support\Arr::only($depot, ['uuid', 'name', 'street1', 'city']);
         $workflow['history'][] = ['state' => $workflow['state'], 'round_uuid' => $roundUuid, 'at' => now()->toISOString(), 'actor_uuid' => session('user')];
         $meta['collection_workflow'] = $workflow;
         $this->meta = $meta;

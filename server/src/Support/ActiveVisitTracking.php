@@ -33,7 +33,14 @@ class ActiveVisitTracking
         $point = $driver->location;
         $fresh = $driver->online && $time && $time->between(now()->subSeconds(120), now()->addSeconds(30)) && self::validPoint($point);
         $options = TrackingOptions::fromArray(['route_cache_ttl_seconds' => 20], $driver->company_uuid);
-        if ($visit['kind'] === 'pickup') {
+        if ($visit['kind'] === 'depot') {
+            $round = CollectionRound::where('company_uuid', $driver->company_uuid)->where('uuid', $visit['round_uuid'])->firstOrFail();
+            $depot = CollectionDepot::destination($round);
+            $place = new Place();
+            $place->forceFill(\Illuminate\Support\Arr::only($depot, ['name', 'street1', 'city', 'phone']));
+            if ($depot['location']) $place->location = new Point($depot['location']['latitude'], $depot['location']['longitude']);
+            $destination = new TrackingStop($round->uuid, null, 'depot', 'pending', $place, sequence: 1);
+        } elseif ($visit['kind'] === 'pickup') {
             $round = CollectionRound::where('company_uuid', $driver->company_uuid)->where('uuid', $visit['round_uuid'])->firstOrFail();
             $stop = collect($round->stops)->firstWhere('uuid', $visit['stop_uuid']);
             $location = $stop['location'] ?? data_get($stop, 'contact.location');
@@ -55,7 +62,7 @@ class ActiveVisitTracking
         $destinationPoint = $destination?->point();
         $validDestination = self::validPoint($destinationPoint);
         $result = [
-            'visit' => $visit, 'order_id' => $order->public_id ?? $order->uuid,
+            'visit' => $visit, 'order_id' => $visit['kind'] === 'depot' ? null : ($order->public_id ?? $order->uuid),
             'destination' => $destination ? [
                 'name' => $destination->place?->name, 'street1' => $destination->place?->street1,
                 'city' => $destination->place?->city, 'phone' => $destination->place?->phone,

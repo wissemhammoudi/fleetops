@@ -228,6 +228,23 @@ class CollectionRounds
         return self::transaction($company, function () use ($company, $driver, $id, $input) {
             $round = self::find($company, $id);
             abort_unless($round->driver_uuid === $driver && $round->status !== 'draft', 404, 'Pickup round not found.');
+            if (in_array($input['action'], ['start_depot', 'receive_depot'], true)) {
+                if ($input['action'] === 'receive_depot') {
+                    return CollectionDepot::receiveByDriver($round, $driver, $input);
+                }
+                CollectionDepot::assertReturnable($round);
+                $assigned = Driver::where('company_uuid', $company)->where('uuid', $driver)->firstOrFail();
+                $active = DriverNavigation::active($assigned);
+                if (($active['kind'] ?? null) === 'depot' && ($active['round_uuid'] ?? null) === $round->uuid) return $round;
+                self::revision($round, $input);
+                $stop = collect($round->stops)->firstWhere('status', 'collected');
+                DriverNavigation::claim($assigned, ['kind' => 'depot', 'order_uuid' => $stop['order_uuid'], 'round_uuid' => $round->uuid]);
+                $routing = $round->routing ?? [];
+                $routing['depot_return_started_at'] = now()->toISOString();
+                $round->routing = $routing;
+                self::audit($round, 'depot_return_started', ['driver_uuid' => $driver]);
+                return $round;
+            }
             $startingRound = $input['action'] === 'start_visit' && $round->status === 'released';
             if ($input['action'] === 'start' || ($input['action'] === 'start_visit' && $round->status === 'released')) {
                 if ($round->status === 'in_progress') {

@@ -10,6 +10,21 @@ use Illuminate\Support\Str;
 
 class CollectionDepot
 {
+    public static function destination(CollectionRound $round): array
+    {
+        $depot = $round->depot ?? [];
+        $location = data_get($round->routing, 'destination.location', $depot['location'] ?? []);
+        $lat = $location['lat'] ?? $location['latitude'] ?? null;
+        $lng = $location['lng'] ?? $location['longitude'] ?? null;
+        if ($lat === null || $lng === null) {
+            [$lng, $lat] = sscanf($depot['location_wkt'] ?? '', 'POINT(%f %f)') ?: [null, null];
+        }
+        $depot['location'] = is_numeric($lat) && is_numeric($lng) && is_finite((float) $lat) && is_finite((float) $lng)
+            && abs((float) $lat) <= 90 && abs((float) $lng) <= 180 && ((float) $lat != 0 || (float) $lng != 0)
+            ? ['latitude' => (float) $lat, 'longitude' => (float) $lng] : null;
+        return $depot;
+    }
+
     public static function prepare(CollectionRound $round, iterable $orders): void
     {
         $units = [];
@@ -99,12 +114,7 @@ class CollectionDepot
                     $order->recordDepotReceipt($round->uuid, false);
                     $order->save();
                 } elseif ($receipt['state'] !== 'received') {
-                    $calendar = CollectionSchedule::forCompany($company);
-                    $date = CollectionSchedule::deliveryDate(now(), $calendar);
-                    $order->recordDepotReceipt($round->uuid, true, $date, $calendar['timezone']);
-                    $order->save();
-                    $receipt = ['order_id' => $receipt['order_id'], 'state' => 'received', 'at' => now()->toISOString(),
-                        'delivery_date' => $date, 'timezone' => $calendar['timezone'], 'actor_uuid' => session('user')];
+                    $receipt = self::receiveOrder($round, $order, $receipt);
                 }
             }
             $custody['receipts'][$orderId] = $receipt;
@@ -122,6 +132,81 @@ class CollectionDepot
 
             return $round;
         }, 3);
+    }
+
+    private static function receiveOrder(CollectionRound $round, Order $order, array $receipt): array
+    {
+        $calendar = CollectionSchedule::forCompany($round->company_uuid);
+        $date = CollectionSchedule::deliveryDate(now(), $calendar);
+        $order->recordDepotReceipt($round->uuid, true, $date, $calendar['timezone'], $round->depot);
+        $order->save();
+        return ['order_id' => $receipt['order_id'], 'state' => 'received', 'at' => now()->toISOString(),
+            'delivery_date' => $date, 'timezone' => $calendar['timezone'], 'actor_uuid' => session('user')];
+    }
+
+    public static function assertReturnable(CollectionRound $round): void
+    {
+        abort_unless($round->status === 'awaiting_depot' && !collect($round->stops)->contains('status', 'pending')
+            && collect($round->stops)->contains('status', 'collected'), 409, 'Finish the pickup visits before returning parcels to the depot.');
+        foreach (data_get($round->routing, 'stops', []) as $visit) {
+            if (($visit['kind'] ?? 'pickup') !== 'delivery') continue;
+            $order = Order::where('company_uuid', $round->company_uuid)->where('uuid', $visit['order_uuid'])->first();
+            abort_unless($order && in_array($order->status, DriverNavigation::TERMINAL_STATUSES), 409, 'Finish the saved delivery visits before returning to the depot.');
+        }
+    }
+
+    // Called only inside CollectionRounds' company/round transaction and assigned-driver guard.
+    public static function receiveByDriver(CollectionRound $round, string $driver, array $input): CollectionRound
+    {
+        abort_unless(($input['depot_uuid'] ?? null) === data_get($round->depot, 'uuid'), 409, 'Confirm the assigned depot, not a different depot.');
+        abort_unless(($input['manifest_verified'] ?? false) === true, 422, 'Confirm every collected parcel is physically at the depot in good condition.');
+        $custody = $round->custody ?? [];
+        $hash = hash('sha256', json_encode(\Illuminate\Support\Arr::except($input, ['revision']), JSON_THROW_ON_ERROR));
+        $previous = $custody['requests'][$input['request_id']] ?? null;
+        if ($previous) {
+            abort_unless(hash_equals($previous, $hash), 409, 'This retry identifier was already used for a different depot action.');
+            return $round;
+        }
+        self::assertReturnable($round);
+        abort_unless($round->revision === (int) $input['revision'], 409, 'The depot manifest changed. Refresh before continuing.');
+        $assigned = \Fleetbase\FleetOps\Models\Driver::where('company_uuid', $round->company_uuid)->where('uuid', $driver)->lockForUpdate()->firstOrFail();
+        $active = DriverNavigation::active($assigned);
+        abort_unless(($active['kind'] ?? null) === 'depot' && ($active['round_uuid'] ?? null) === $round->uuid,
+            409, 'Start the return to this depot before confirming arrival.');
+        $ids = collect($round->stops)->where('status', 'collected')->pluck('order_uuid')->unique()->sort()->values();
+        foreach ($ids as $id) {
+            $order = Order::where('company_uuid', $round->company_uuid)->where('uuid', $id)->lockForUpdate()->firstOrFail();
+            abort_unless(data_get($order->meta, 'collection_workflow.collection_round_uuid') === $round->uuid
+                && data_get($order->meta, 'collection_workflow.state') === 'collected'
+                && !in_array($order->status, DriverNavigation::TERMINAL_STATUSES)
+                && !$order->dispatched && !$order->started && !$order->driver_assigned_uuid
+                && data_get($order->meta, 'collection_workflow.content_fingerprint') === CollectionReadiness::fingerprint($order),
+                409, 'An order is incomplete, held or changed. Operations must review it before depot receipt.');
+            abort_unless(collect($round->stops)->where('order_uuid', $id)->every(fn ($stop) => $stop['status'] === 'collected'),
+                409, 'An order has missing pickups. Operations must reconcile its parcels.');
+            $units = collect($custody['units'] ?? [])->where('order_uuid', $id);
+            $receipt = $custody['receipts'][$id] ?? null;
+            abort_unless($units->isNotEmpty() && $receipt && in_array($receipt['state'], ['pending', 'received'], true)
+                && $units->every(fn ($unit) => in_array($unit['condition'], ['expected', 'good'], true)),
+                409, 'The manifest is missing or parcels are held/damaged. Operations must reconcile them.');
+            foreach ($units as $index => $unit) {
+                $custody['units'][$index] = array_merge($unit, ['condition' => 'good', 'received_at' => now()->toISOString(),
+                    'actor_uuid' => session('user'), 'driver_uuid' => $driver, 'receipt_method' => 'driver_confirmation']);
+            }
+            $custody['receipts'][$id] = self::receiveOrder($round, $order, $receipt) + ['driver_uuid' => $driver, 'receipt_method' => 'driver_confirmation'];
+        }
+        $custody['requests'][$input['request_id']] = $hash;
+        $round->custody = $custody;
+        $round->status = 'received_at_depot';
+        $round->history = [...$round->history, ['event' => 'driver_depot_received', 'driver_uuid' => $driver,
+            'depot_uuid' => $input['depot_uuid'], 'order_uuids' => $ids->all(), 'actor_uuid' => session('user'),
+            'request_id' => $input['request_id'], 'at' => now()->toISOString()]];
+        $round->revision++;
+        $round->save();
+        $meta = $assigned->meta ?? [];
+        unset($meta['navigator_active_visit']);
+        $assigned->updateQuietly(['meta' => $meta]);
+        return $round;
     }
 
     public static function eligible(Order $order): bool
