@@ -228,7 +228,8 @@ class CollectionRounds
         return self::transaction($company, function () use ($company, $driver, $id, $input) {
             $round = self::find($company, $id);
             abort_unless($round->driver_uuid === $driver && $round->status !== 'draft', 404, 'Pickup round not found.');
-            if ($input['action'] === 'start') {
+            $startingRound = $input['action'] === 'start_visit' && $round->status === 'released';
+            if ($input['action'] === 'start' || ($input['action'] === 'start_visit' && $round->status === 'released')) {
                 if ($round->status === 'in_progress') {
                     return $round;
                 }
@@ -243,12 +244,37 @@ class CollectionRounds
                 $round->status = 'in_progress';
                 self::audit($round, 'started', ['driver_uuid' => $driver]);
 
-                return $round;
+                if ($input['action'] === 'start') return $round;
             }
             $stops = $round->stops;
             $index = collect($stops)->search(fn ($stop) => $stop['uuid'] === $input['stop_uuid']);
             abort_if($index === false, 404, 'Pickup stop not found on this round.');
             $stop = $stops[$index];
+            if ($input['action'] === 'start_visit') {
+                abort_unless($round->status === 'in_progress' && $stop['status'] === 'pending', 409, 'This pickup is no longer available to start.');
+                $next = collect($stops)->firstWhere('status', 'pending');
+                foreach (data_get($round->routing, 'stops', []) as $visit) {
+                    if (($visit['kind'] ?? 'pickup') === 'delivery') {
+                        $delivery = Order::where('company_uuid', $company)->where('uuid', $visit['order_uuid'])->first();
+                        abort_unless($delivery && in_array($delivery->status, DriverNavigation::TERMINAL_STATUSES), 409, 'Complete the earlier delivery before starting this pickup.');
+                    } else {
+                        $pending = collect($stops)->first(fn ($item) => $item['order_uuid'] === $visit['order_uuid'] && $item['status'] === 'pending');
+                        if ($pending) { $next = $pending; break; }
+                    }
+                }
+                abort_unless(($next['uuid'] ?? null) === $stop['uuid'], 409, 'Start the next pickup in the saved route order.');
+                $order = Order::where('company_uuid', $company)->where('uuid', $stop['order_uuid'])->firstOrFail();
+                self::assertContract($order, $round);
+                $alreadyStarted = data_get($round->routing, 'active_stop_uuid') === $stop['uuid'];
+                if (!$startingRound && !$alreadyStarted) self::revision($round, $input);
+                DriverNavigation::pickup($round, $stop);
+                if ($alreadyStarted) return $round;
+                $routing = $round->routing ?? [];
+                $routing['active_stop_uuid'] = $stop['uuid'];
+                $round->routing = $routing;
+                self::audit($round, 'visit_started', ['stop_uuid' => $stop['uuid'], 'driver_uuid' => $driver]);
+                return $round;
+            }
             $requestHash = hash('sha256', json_encode(\Illuminate\Support\Arr::except($input, ['revision']), JSON_THROW_ON_ERROR));
             if (($stop['request_id'] ?? null) === $input['request_id']) {
                 abort_unless(($stop['request_hash'] ?? null) === $requestHash, 409, 'This retry identifier was already used with a different pickup result.');
@@ -257,6 +283,10 @@ class CollectionRounds
             }
             self::revision($round, $input);
             abort_unless($round->status === 'in_progress' && $stop['status'] === 'pending', 409, 'This stop is closed or the round is not in progress.');
+            $assignedDriver = Driver::where('company_uuid', $company)->where('uuid', $driver)->firstOrFail();
+            $activeVisit = DriverNavigation::active($assignedDriver);
+            abort_unless(($activeVisit['kind'] ?? null) === 'pickup' && ($activeVisit['round_uuid'] ?? null) === $round->uuid
+                && ($activeVisit['stop_uuid'] ?? null) === $stop['uuid'], 409, 'Press Start pickup for this visit before recording its result.');
             $order = Order::where('company_uuid', $company)->where('uuid', $stop['order_uuid'])->lockForUpdate()->firstOrFail();
             $outcome = $input['outcome'];
             $inspection = null;
@@ -274,6 +304,11 @@ class CollectionRounds
                 $stops[$index] = CollectionHandovers::report($round, $order, $stops[$index]);
             }
             $round->stops = $stops;
+            $routing = $round->routing ?? [];
+            if (($routing['active_stop_uuid'] ?? null) === $stop['uuid']) {
+                unset($routing['active_stop_uuid']);
+                $round->routing = $routing;
+            }
             $orderStops = collect($stops)->where('order_uuid', $order->uuid);
             if (!$orderStops->contains('status', 'pending')) {
                 $collected = $orderStops->where('status', 'collected')->count();

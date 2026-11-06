@@ -35,6 +35,8 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
         */
         $router->group(['prefix' => 'v1', 'middleware' => ['fleetbase.api', Fleetbase\FleetOps\Http\Middleware\TransformLocationMiddleware::class], 'namespace' => 'Api\v1'], function ($router) {
             $router->get('collection-rounds', 'CollectionRoundController@index');
+            $router->get('driver-navigation', 'CollectionRoundController@navigation');
+            $router->post('driver-navigation', 'CollectionRoundController@startDelivery');
             $router->post('collection-rounds/{id}', 'CollectionRoundController@update');
             $router->get('collection-deliveries', 'CollectionRoundController@deliveries');
             $router->post('collection-deliveries/{id}', 'CollectionRoundController@acceptDelivery');

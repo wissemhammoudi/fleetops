@@ -965,6 +965,15 @@ class OrderController extends Controller
      */
     public function startOrder(string $id, Request $request)
     {
+        return \Fleetbase\FleetOps\Support\DriverNavigation::transaction((string) session('company'), function () use ($id, $request) {
+            $response = $this->startNavigationOrder($id, $request);
+            if ($response instanceof \Illuminate\Http\JsonResponse && $response->getStatusCode() >= 400) throw new \Illuminate\Http\Exceptions\HttpResponseException($response);
+            return $response;
+        });
+    }
+
+    protected function startNavigationOrder(string $id, Request $request)
+    {
         $skipDispatch      = $request->or(['skip_dispatch', 'skipDispatch'], false);
         $assignAdhocDriver = $request->input('assign');
 
@@ -986,6 +995,7 @@ class OrderController extends Controller
         // if the order is adhoc and the parameter of `assign` is set with a valid driver id, assign the driver and continue
         if ($order->adhoc && $assignAdhocDriver && Str::startsWith($assignAdhocDriver, 'driver_')) {
             $order->assignDriver($assignAdhocDriver, true);
+            if ($request->boolean('accept_only')) return $this->orderResource($order->fresh());
         }
 
         /** @var \Fleetbase\Models\Driver */
@@ -1016,6 +1026,8 @@ class OrderController extends Controller
         if ($isNotDispatched && !$skipDispatch) {
             return response()->apiError('Order has not been dispatched yet and cannot be started.');
         }
+
+        \Fleetbase\FleetOps\Support\DriverNavigation::delivery($driver, $order);
 
         // set order to started
         $order->started    = true;

@@ -344,9 +344,13 @@ class DriverController extends Controller
             }
         }
 
-        $driverMeta = (array) $driver->meta;
-        $driverMeta['navigator_position_at'] = $request->filled('timestamp') ? Carbon::parse($request->input('timestamp'))->utc()->toISOString() : null;
-        $driver->updateQuietly($positionData + ['meta' => $driverMeta]);
+        $driver = $driver->getConnection()->transaction(function () use ($driver, $request, $positionData) {
+            $locked = Driver::where('uuid', $driver->uuid)->lockForUpdate()->firstOrFail();
+            $driverMeta = (array) $locked->meta;
+            $driverMeta['navigator_position_at'] = $request->filled('timestamp') ? Carbon::parse($request->input('timestamp'))->utc()->toISOString() : null;
+            $locked->updateQuietly($positionData + ['meta' => $driverMeta]);
+            return $locked;
+        });
         $driver->createPosition($positionData);
 
         $driver->loadMissing('vehicle');

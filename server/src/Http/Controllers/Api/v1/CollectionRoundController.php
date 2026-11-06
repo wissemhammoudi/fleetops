@@ -9,6 +9,7 @@ use Fleetbase\FleetOps\Support\CollectionRouteProgress;
 use Fleetbase\FleetOps\Support\CollectionDelivery;
 use Fleetbase\FleetOps\Support\CollectionRounds;
 use Fleetbase\FleetOps\Support\DeliveryOptions;
+use Fleetbase\FleetOps\Support\DriverNavigation;
 use Fleetbase\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
@@ -41,9 +42,9 @@ class CollectionRoundController extends Controller
     {
         $driver = $this->driver();
         $input = $request->validate([
-            'action' => ['required', 'in:start,result'],
+            'action' => ['required', 'in:start,start_visit,result'],
             'revision' => ['required', 'integer', 'min:1'],
-            'stop_uuid' => ['required_if:action,result', 'string', 'max:150'],
+            'stop_uuid' => ['required_if:action,result,start_visit', 'string', 'max:150'],
             'request_id' => ['required_if:action,result', 'string', 'min:8', 'max:100'],
             'outcome' => ['required_if:action,result', 'in:collected,not_ready,absent,packaging_refused'],
             'reason' => ['required_if:outcome,not_ready,absent,packaging_refused', 'nullable', 'string', 'max:1000'],
@@ -76,6 +77,25 @@ class CollectionRoundController extends Controller
 
                 return $data;
             }), 'catalogue' => DeliveryOptions::catalogue()]);
+    }
+
+    public function navigation()
+    {
+        return response()->json(['navigation' => \Fleetbase\FleetOps\Support\ActiveVisitTracking::read($this->driver())])->header('Cache-Control', 'no-store');
+    }
+
+    public function startDelivery(Request $request)
+    {
+        $driver = $this->driver();
+        $input = $request->validate(['order_uuid' => ['required', 'string', 'max:150']]);
+        return \Fleetbase\FleetOps\Support\DriverNavigation::transaction($driver->company_uuid, function () use ($driver, $input) {
+            $order = \Fleetbase\FleetOps\Models\Order::where('company_uuid', $driver->company_uuid)->where('driver_assigned_uuid', $driver->uuid)
+                ->where('uuid', $input['order_uuid'])->firstOrFail();
+            abort_if(in_array($order->status, DriverNavigation::TERMINAL_STATUSES), 409, 'This delivery is closed.');
+            if (!$order->started) return app(OrderController::class)->startOrder($order->public_id, new Request());
+            \Fleetbase\FleetOps\Support\DriverNavigation::delivery($driver, $order);
+            return response()->json(['started' => true]);
+        });
     }
 
     public function acceptDelivery(Request $request, string $id)
