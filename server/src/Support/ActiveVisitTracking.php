@@ -65,7 +65,7 @@ class ActiveVisitTracking
                 'position_at' => $positionAt, 'location' => $fresh ? ['latitude' => $point->getLat(), 'longitude' => $point->getLng()] : null],
             'eta_seconds' => null, 'arrival_at' => null, 'distance_m' => null,
             'geometry' => null, 'traffic' => false, 'provider' => null,
-            'unavailable_reason' => $fresh ? 'missing_destination' : 'stale_location',
+            'unavailable_reason' => !$driver->online ? 'driver_offline' : ($fresh ? 'missing_destination' : 'stale_location'),
             'observed_at' => now()->toISOString(),
         ];
         if (!$fresh || !$validDestination) return $result;

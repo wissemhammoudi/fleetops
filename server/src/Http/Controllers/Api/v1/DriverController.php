@@ -2,6 +2,7 @@
 
 namespace Fleetbase\FleetOps\Http\Controllers\Api\v1;
 
+use Illuminate\Support\Facades\Log;
 use Fleetbase\FleetOps\Events\DriverLocationChanged;
 use Fleetbase\FleetOps\Events\GeofenceEntered;
 use Fleetbase\FleetOps\Events\GeofenceExited;
@@ -335,22 +336,28 @@ class DriverController extends Controller
             'speed'     => $speed,
         ];
 
-        if ($order = $driver->getCurrentOrder()) {
-            $positionData['order_uuid'] = $order->uuid;
-            $destination                = $order->payload?->getPickupOrCurrentWaypoint();
-
-            if ($destination) {
-                $positionData['destination_uuid'] = $destination->uuid;
-            }
-        }
-
-        $driver = $driver->getConnection()->transaction(function () use ($driver, $request, $positionData) {
+        $observedAt = $request->filled('timestamp') ? Carbon::parse($request->input('timestamp'))->utc() : null;
+        abort_if($observedAt && $observedAt->gt(now()->addSeconds(30)), 422, 'GPS observation is in the future. Check the device clock.');
+        $accepted = false;
+        $driver = $driver->getConnection()->transaction(function () use ($driver, $observedAt, $positionData, &$accepted) {
             $locked = Driver::where('uuid', $driver->uuid)->lockForUpdate()->firstOrFail();
             $driverMeta = (array) $locked->meta;
-            $driverMeta['navigator_position_at'] = $request->filled('timestamp') ? Carbon::parse($request->input('timestamp'))->utc()->toISOString() : null;
+            $previous = data_get($driverMeta, 'navigator_position_at');
+            if ($observedAt && is_string($previous) && strtotime($previous) !== false && $observedAt->lte(Carbon::parse($previous))) {
+                Log::debug('Ignoring an out-of-order driver GPS observation.', ['driver_uuid' => $locked->uuid]);
+                return $locked;
+            }
+            $driverMeta['navigator_position_at'] = $observedAt?->toISOString();
             $locked->updateQuietly($positionData + ['meta' => $driverMeta]);
+            $accepted = true;
             return $locked;
         });
+        if (!$accepted) return $this->driverResource($driver);
+        if ($order = $driver->getCurrentOrder()) {
+            $positionData['order_uuid'] = $order->uuid;
+            $destination = $order->payload?->getPickupOrCurrentWaypoint();
+            if ($destination) $positionData['destination_uuid'] = $destination->uuid;
+        }
         $driver->createPosition($positionData);
 
         $driver->loadMissing('vehicle');
