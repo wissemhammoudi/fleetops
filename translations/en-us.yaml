@@ -1,3 +1,8 @@
+pickup-handover:
+    title: Pickup handover
+    awaiting_customer: Awaiting customer confirmation
+    confirmed: Handover confirmed
+    disputed: Handover disputed — operations review required
 fleet-ops:
     extension-name: Fleet-Ops
 

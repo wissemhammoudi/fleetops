@@ -270,12 +270,17 @@ class CollectionRounds
             $stops[$index] = $stop + ['request_id' => $input['request_id'], 'request_hash' => $requestHash,
                 'reason' => trim($input['reason'] ?? ''), 'inspection' => $inspection, 'at' => now()->toISOString(), 'driver_uuid' => $driver];
             $stops[$index]['status'] = $outcome;
+            if ($outcome === 'collected') {
+                $stops[$index] = CollectionHandovers::report($round, $order, $stops[$index]);
+            }
             $round->stops = $stops;
             $orderStops = collect($stops)->where('order_uuid', $order->uuid);
             if (!$orderStops->contains('status', 'pending')) {
                 $collected = $orderStops->where('status', 'collected')->count();
                 $state = $collected === $orderStops->count() ? 'collected' : ($collected ? 'pickup_exception' : 'awaiting_preparation');
                 $order->recordCollectionRound($round->uuid, $state, $state === 'awaiting_preparation');
+            }
+            if ($order->isDirty()) {
                 $order->save();
             }
             if (!collect($stops)->contains('status', 'pending')) {
@@ -284,6 +289,26 @@ class CollectionRounds
             self::audit($round, 'stop_recorded', ['stop_uuid' => $stop['uuid'], 'outcome' => $outcome, 'driver_uuid' => $driver]);
 
             return $round;
+        });
+    }
+
+    public static function customerHandover(string $company, callable $resolveOwnedOrder, array $input): Order
+    {
+        abort_unless(session('user') && !session('is_driver'), 403, 'An authenticated customer is required.');
+
+        return self::transaction($company, function () use ($company, $resolveOwnedOrder, $input) {
+            // Use the driver's company -> round -> order lock order to avoid deadlocks.
+            $round = self::find($company, $input['round_uuid']);
+            $order = $resolveOwnedOrder();
+            abort_unless($order->company_uuid === $company, 404, 'Order not found.');
+            if (CollectionHandovers::decide($round, $order, $input)) {
+                self::audit($round, 'customer_handover_' . ($input['action'] === 'confirm' ? 'confirmed' : 'disputed'), [
+                    'stop_uuid' => $input['stop_uuid'], 'order_uuid' => $order->uuid, 'customer_uuid' => $order->customer_uuid,
+                    'reason' => trim($input['reason'] ?? ''), 'request_id' => $input['request_id'],
+                ]);
+            }
+
+            return $order;
         });
     }
 

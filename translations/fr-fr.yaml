@@ -1,3 +1,8 @@
+pickup-handover:
+    title: Remise des colis au chauffeur
+    awaiting_customer: En attente de confirmation du client
+    confirmed: Remise confirmée
+    disputed: Remise contestée — examen par les opérations requis
 planning:
     orchestrator:
         select-all: "Sélectionner toutes les commandes planifiables ensemble"

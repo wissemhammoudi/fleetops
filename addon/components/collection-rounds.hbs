@@ -179,6 +179,10 @@
                         {{#each this.selected.stops as |stop|}}
                             <div class="border-t py-2">
                                 <p>{{stop.order_id}} - {{stop.contact.name}} - {{stop.contact.street1}} - {{stop.status}} {{stop.reason}}</p>
+                                {{#if stop.handover}}
+                                    <p data-test-dispatch-handover>{{t "pickup-handover.title"}}: {{t (concat "pickup-handover." stop.handover.status)}}</p>
+                                    {{#if stop.handover.reason}}<p role="alert">{{stop.handover.reason}}</p>{{/if}}
+                                {{/if}}
                                 {{#if stop.callUrl}}<a href={{stop.callUrl}}>{{t "collection-rounds.call-customer"}}</a>{{/if}}
                                 <p>{{stop.notes}}</p>
                                 {{#each stop.order_parcels as |parcel|}}<p>{{parcel.name}} x{{parcel.quantity}}</p>{{/each}}

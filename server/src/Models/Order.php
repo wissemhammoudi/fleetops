@@ -117,6 +117,23 @@ class Order extends Model
         $this->recordingCollectionReadiness = true;
     }
 
+    public function recordCollectionHandover(array $pickup, string $event): void
+    {
+        $meta = $this->meta;
+        $handovers = $meta['collection_workflow']['handovers'] ?? [];
+        $handovers = array_values(array_filter($handovers, fn ($previous) =>
+            $previous['round_uuid'] !== $pickup['round_uuid'] || $previous['stop_uuid'] !== $pickup['stop_uuid']));
+        $handovers[] = $pickup;
+        $meta['collection_workflow']['handovers'] = $handovers;
+        $meta['collection_workflow']['history'][] = [
+            'event' => $event, 'at' => now()->toISOString(), 'actor_uuid' => session('user'),
+            'round_uuid' => $pickup['round_uuid'], 'stop_uuid' => $pickup['stop_uuid'],
+            'handover' => $pickup,
+        ];
+        $this->meta = $meta;
+        $this->recordingCollectionReadiness = true;
+    }
+
     public function recordDeliveryRoute(?array $route): void
     {
         $meta = $this->meta;
