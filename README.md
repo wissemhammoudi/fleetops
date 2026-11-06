@@ -63,6 +63,22 @@ Parcel QR-label previews are removed from pickup/depot details; existing physica
 barcode scans, parcel identities and depot reconciliation remain unchanged.
 Deploy the backend and rebuild Console together; no migration is required.
 
+### Mobile pickup tracking
+
+Customer-portal `GET orders/{id}/pickup-tracking` resolves the authenticated
+customer's order before projecting its own pickup progress. Only the next
+pending customer on an in-progress route can see the assigned online driver's
+fresh GPS; other visits, route geometry, custody and customer addresses are not
+shared. Source timestamps older than two minutes or over 30 seconds in the
+future are not live. Collection, cancellation and reassignment withdraw sharing.
+The response is no-store and requires the protected customer route.
+
+Driver assignment responses include recent completed rounds (100 rounds total,
+active work first) and company/driver-scoped delivery progress in saved route
+stops. The saved sequence is unchanged. Navigator uses these snapshots for its
+numbered route navigator rather than guessing that a pickup completed a delivery.
+Deploy FleetOps and customer-portal together before distributing both mobile apps.
+
 ### Operations
 
 - Create, import, schedule, dispatch, start, cancel, and complete delivery orders.
