@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import { waypointIconHtml } from '../utils/route-colors';
+import ensureLeafletDrawEditNamespace from '../utils/leaflet-draw-namespace-guard';
 
 const PICKUP = '#22C55E';
 const DROPOFF = '#EF4444';
@@ -19,6 +20,12 @@ function located(place) {
  */
 export default class PlanningMapComponent extends Component {
     @service mapSettings;
+
+    constructor() {
+        super(...arguments);
+        // leaflet-draw's marker init hook reads L.Edit.Marker without checking L.Edit.
+        ensureLeafletDrawEditNamespace();
+    }
 
     get routes() {
         return this.args.routes ?? [];
