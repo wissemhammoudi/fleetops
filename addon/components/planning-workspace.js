@@ -204,6 +204,7 @@ export default class PlanningWorkspaceComponent extends Component {
     }
 
     @restartableTask *load(page = this.page) {
+        if (!Number.isInteger(page)) page = this.page;
         const company = this.currentUser.companyId;
         this.error = null;
         this.selected = new Set();

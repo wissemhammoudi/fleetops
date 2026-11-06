@@ -29,6 +29,7 @@ export default class CollectionPlanningService extends Service {
     async load(page = this.followupPage) {
         // A component may request loading during construction; reset outside its render computation.
         await Promise.resolve();
+        if (!Number.isInteger(page)) page = this.followupPage;
         if (!this.canRead) return;
         const company = this.currentUser.companyId;
         if (company !== this.companyId) {

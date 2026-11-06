@@ -318,8 +318,9 @@ export default class CollectionRoutePlannerComponent extends Component {
                 throw new Error(this.intl.t('planning.invalid-response'));
             }
             this.invalidate();
-            const refreshed = yield this.args.onSaved();
-            if (refreshed && company === this.currentUser.companyId) this.notifications.success(this.intl.t('planning.optimizer.saved'));
+            this.notifications.success(this.intl.t('planning.optimizer.saved'));
+            // The parent reload closes this planner, so do not keep this task waiting on it.
+            this.args.onSaved?.();
         } catch (error) {
             if (company !== this.currentUser.companyId) return;
             this.error = error.message;

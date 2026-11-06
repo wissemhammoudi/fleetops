@@ -104,6 +104,8 @@ export default class CollectionRoundsComponent extends Component {
     }
 
     @dropTask *load(page = this.collectionPlanning.followupPage) {
+        // Buttons pass their click event; only explicit page numbers change the page.
+        if (!Number.isInteger(page)) page = this.collectionPlanning.followupPage;
         try {
             yield this.collectionPlanning.load(page);
             this.selections = {};
