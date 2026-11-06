@@ -36,8 +36,12 @@ class CollectionCapacity
 
     public static function assertAssignment(CollectionRound $round, Driver $driver, array $schedule): void
     {
+        $routing = $round->routing;
+        $window = data_get($routing, 'plan_uuid') && data_get($routing, 'departure_at') && data_get($routing, 'ends_at')
+            ? ['from' => \Carbon\CarbonImmutable::parse($routing['departure_at']), 'to' => \Carbon\CarbonImmutable::parse($routing['ends_at']), 'plan_uuid' => $routing['plan_uuid']]
+            : null;
         CollectionRoutePlans::assertNoOptimizedReservation($round->company_uuid, $driver->uuid, $driver->vehicle_uuid,
-            $round->scheduled_at->copy()->setTimezone($round->timezone)->toDateString(), $round->uuid);
+            $round->scheduled_at->copy()->setTimezone($round->timezone)->toDateString(), $round->uuid, [], $window);
         $conflict = CollectionRound::where('company_uuid', $round->company_uuid)->where('driver_uuid', $driver->uuid)
             ->where('uuid', '!=', $round->uuid)->where('scheduled_at', $round->scheduled_at)
             ->whereIn('status', ['draft', 'released', 'in_progress', 'awaiting_depot'])->exists();

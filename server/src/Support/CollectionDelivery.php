@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 
 class CollectionDelivery
 {
-    public static function change(string $company, string $orderId, array $input, ?string $driverUuid = null, array $routeOrders = []): CollectionDeliveryLeg
+    public static function change(string $company, string $orderId, array $input, ?string $driverUuid = null, array $routeOrders = [], ?array $window = null): CollectionDeliveryLeg
     {
         $input = Validator::make($input, [
             'action' => ['required', 'in:assign,load,accept,release,recall,reschedule'],
@@ -34,7 +34,7 @@ class CollectionDelivery
         abort_unless($driverUuid ? $input['action'] === 'accept' : $input['action'] !== 'accept', 403, 'Driver acceptance and operations actions use separate authenticated endpoints.');
         $connection = DB::connection(config('fleetbase.connection.db', 'mysql'));
 
-        return $connection->transaction(function () use ($company, $orderId, $input, $driverUuid, $routeOrders, $connection) {
+        return $connection->transaction(function () use ($company, $orderId, $input, $driverUuid, $routeOrders, $window, $connection) {
             abort_unless($connection->table('companies')->where('uuid', $company)->lockForUpdate()->first(['uuid']), 404, 'Company not found.');
             $order = Order::where('company_uuid', $company)->where('uuid', $orderId)->lockForUpdate()->firstOrFail();
             $leg = CollectionDeliveryLeg::where('company_uuid', $company)->where('order_uuid', $order->uuid)->lockForUpdate()->first();
@@ -90,7 +90,7 @@ class CollectionDelivery
                     $assigned = Driver::where('company_uuid', $company)->where('uuid', $input['driver_uuid'])->first();
                     abort_unless($assigned, 422, 'Select an active driver from this company.');
                     CollectionRoutePlans::assertNoOptimizedReservation($company, $assigned->uuid, $assigned->vehicle_uuid,
-                        data_get($order->meta, 'collection_workflow.planned_delivery_date'), null, array_unique([$order->uuid, ...$routeOrders]));
+                        data_get($order->meta, 'collection_workflow.planned_delivery_date'), null, array_unique([$order->uuid, ...$routeOrders]), $window);
                     abort_unless(!$leg || in_array($leg->status, ['staging', 'recalled', 'held'], true), 409, 'Recall an accepted handover before changing its driver. Goods must remain at depot.');
                     abort_unless(Driver::where('company_uuid', $company)->where('uuid', $input['driver_uuid'])->exists(), 422, 'Select an active driver from this company.');
                     $manifest = self::manifest($order, $round);

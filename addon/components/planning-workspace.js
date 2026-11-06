@@ -66,8 +66,7 @@ export default class PlanningWorkspaceComponent extends Component {
                 ...order,
                 kind,
                 selected: this.selected.has(order.uuid),
-                // Pickups and depot deliveries are planned separately, so a selection never mixes both.
-                selectable: Boolean(kind) && (!current || current === kind || this.selected.has(order.uuid)),
+                selectable: Boolean(kind) && (current !== 'mixed' || this.canPlanMixed || this.selected.has(order.uuid)),
                 canOpenRound: this.data.permissions.collection && this.collectionPlanning.rounds.some((round) => round.uuid === order.round_uuid),
                 stateLabel: this.intl.exists(`planning.states.${order.state}`) ? this.intl.t(`planning.states.${order.state}`) : order.state,
                 stateClass: STATE_CLASSES[order.state] ?? (order.stage === 'attention' ? STATE_CLASSES.pickup_exception : DEFAULT_STATE_CLASS),
@@ -78,12 +77,24 @@ export default class PlanningWorkspaceComponent extends Component {
     get selectAllKind() {
         if (this.selectionKind === 'pickup' || this.selectionKind === 'delivery') return this.selectionKind;
         const rows = this.data?.orders ?? [];
-        return rows.some((order) => this.kindOf(order) === 'pickup') ? 'pickup' : rows.some((order) => this.kindOf(order) === 'delivery') ? 'delivery' : null;
+        const hasPickup = rows.some((order) => this.kindOf(order) === 'pickup');
+        const hasDelivery = rows.some((order) => this.kindOf(order) === 'delivery');
+        if (hasPickup && hasDelivery && this.mixedAllowed) return 'mixed';
+        return hasPickup ? 'pickup' : hasDelivery ? 'delivery' : null;
     }
 
     get selectableForAll() {
         const kind = this.selectAllKind;
-        return kind ? (this.data?.orders ?? []).filter((order) => this.kindOf(order) === kind) : [];
+        if (!kind) return [];
+        return (this.data?.orders ?? []).filter((order) => (kind === 'mixed' ? Boolean(this.kindOf(order)) : this.kindOf(order) === kind));
+    }
+
+    get mixedAllowed() {
+        return Boolean(this.data?.permissions.optimize_pickup && this.data?.permissions.optimize_delivery);
+    }
+
+    get canPlanMixed() {
+        return this.selectionKind === 'mixed' && this.mixedAllowed;
     }
 
     get allSelected() {
@@ -281,6 +292,7 @@ export default class PlanningWorkspaceComponent extends Component {
         else selected.delete(order.uuid);
         this.selected = selected;
         if (!selected.size) this.plannerKind = null;
+        else if (this.plannerKind) this.plannerKind = this.selectionKind;
     }
 
     @action pageBy(offset) {

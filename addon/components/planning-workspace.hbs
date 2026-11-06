@@ -247,8 +247,25 @@
                                     data-test-plan-delivery
                                 />
                             {{/if}}
+                            {{#if (eq this.selectionKind "mixed")}}
+                                <Button
+                                    @type="primary"
+                                    @size="sm"
+                                    @icon="route"
+                                    @text={{t "planning.orchestrator.plan-mixed"}}
+                                    @onClick={{fn this.openPlanner "mixed"}}
+                                    @disabled={{or (not this.canPlanMixed) (not this.selectedDepot)}}
+                                    @wrapperClass="w-full"
+                                    class="w-full"
+                                    data-test-plan-mixed
+                                />
+                            {{/if}}
                             <p class="text-xs text-gray-500 dark:text-gray-400">{{t
-                                    (if (eq this.selectionKind "delivery") "planning.orchestrator.delivery-hint" "planning.orchestrator.pickup-hint")
+                                    (if
+                                        (eq this.selectionKind "mixed")
+                                        "planning.orchestrator.mixed-hint"
+                                        (if (eq this.selectionKind "delivery") "planning.orchestrator.delivery-hint" "planning.orchestrator.pickup-hint")
+                                    )
                                 }}</p>
                         </div>
                     {{else}}

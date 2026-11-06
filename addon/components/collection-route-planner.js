@@ -11,6 +11,37 @@ function localDate(date) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }
 
+const pad = (value) => String(value).padStart(2, '0');
+
+// Parse ISO-8601 by hand: some browsers/extensions choke on microsecond precision timestamps.
+export function parseInstant(value) {
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'number') return value < 1e12 ? value * 1000 : value;
+    const match = typeof value === 'string' && value.trim().match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i);
+    if (!match) return NaN;
+    const [, year, month, day, hour, minute, second = '0', fraction = '0', zone = 'Z'] = match;
+    let instant = Date.UTC(+year, +month - 1, +day, +hour, +minute, +second, Number(fraction.slice(0, 3).padEnd(3, '0')));
+    if (zone.toUpperCase() !== 'Z') {
+        const digits = zone.slice(1).replace(':', '');
+        instant -= (zone[0] === '-' ? -1 : 1) * (Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2))) * 60000;
+    }
+    return instant;
+}
+
+export function clockTime(value, timeZone) {
+    const instant = parseInstant(value);
+    if (!Number.isFinite(instant)) return '';
+    try {
+        const parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: timeZone || undefined }).formatToParts(new Date(instant));
+        const text = `${parts.find((part) => part.type === 'hour')?.value}:${parts.find((part) => part.type === 'minute')?.value}`;
+        if (/^\d{2}:\d{2}$/.test(text)) return text;
+    } catch {
+        // Unknown time zone: fall back to the browser clock below.
+    }
+    const local = new Date(instant);
+    return Number.isFinite(local.getHours()) ? `${pad(local.getHours())}:${pad(local.getMinutes())}` : '';
+}
+
 export default class CollectionRoutePlannerComponent extends Component {
     @service fetch;
     @service currentUser;
@@ -79,7 +110,9 @@ export default class CollectionRoutePlannerComponent extends Component {
     }
 
     get permitted() {
-        return this.kind === 'pickup' ? this.args.permissions?.optimize_pickup : this.args.permissions?.optimize_delivery;
+        const permissions = this.args.permissions ?? {};
+        if (this.kind === 'mixed') return permissions.optimize_pickup && permissions.optimize_delivery;
+        return this.kind === 'pickup' ? permissions.optimize_pickup : permissions.optimize_delivery;
     }
 
     get driverRows() {
@@ -95,25 +128,28 @@ export default class CollectionRoutePlannerComponent extends Component {
         const vehicles = new Map((this.args.drivers ?? []).map((driver) => [driver.uuid, [driver.vehicle_name, driver.plate_number].filter(Boolean).join(' - ')]));
         return (this.proposal?.routes ?? this.args.savedRoutes ?? [])
             .filter((route) => this.proposal || !this.date || route.date === this.date)
-            .map((route, index) => ({
-                ...route,
-                color: COLORS[index % COLORS.length],
-                vehicleLabel: vehicles.get(route.driver_uuid) ?? '',
-                stops: (route.stops ?? []).map((stop) => ({ ...stop, time: this.formatTime(stop.arrival_at) })),
-                coordinates: route.geometry ? polyline.decode(route.geometry) : [],
-                kilometers: (route.distance_meters / 1000).toFixed(1),
-                minutes: Math.ceil(route.duration_seconds / 60),
-            }));
+            .map((route, index) => {
+                const stops = route.stops ?? [];
+                return {
+                    ...route,
+                    color: COLORS[index % COLORS.length],
+                    vehicleLabel: vehicles.get(route.driver_uuid) ?? '',
+                    stops: stops.map((stop, position) => ({
+                        ...stop,
+                        kind: stop.kind ?? route.kind,
+                        time: this.formatTime(stop.arrival_at, route.timezone),
+                        canMoveUp: Boolean(this.proposal) && position > 0,
+                        canMoveDown: Boolean(this.proposal) && position < stops.length - 1,
+                    })),
+                    coordinates: route.geometry ? polyline.decode(route.geometry) : [],
+                    kilometers: (route.distance_meters / 1000).toFixed(1),
+                    minutes: Math.ceil(route.duration_seconds / 60),
+                };
+            });
     }
 
-    formatTime(value) {
-        const date = value ? new Date(value) : null;
-        if (!date || Number.isNaN(date.getTime())) return value ?? '';
-        try {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: this.currentUser.company?.timezone || undefined });
-        } catch {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
+    formatTime(value, timeZone) {
+        return clockTime(value, timeZone || this.proposal?.routes?.[0]?.timezone || this.currentUser.company?.timezone);
     }
 
     get expiresAt() {
@@ -121,7 +157,7 @@ export default class CollectionRoutePlannerComponent extends Component {
     }
 
     get busy() {
-        return this.orchestrate.isRunning || this.save.isRunning;
+        return this.orchestrate.isRunning || this.save.isRunning || this.moveStop.isRunning;
     }
 
     @action togglePanel() {
@@ -227,6 +263,28 @@ export default class CollectionRoutePlannerComponent extends Component {
         } catch (error) {
             if (company !== this.currentUser.companyId || revision !== this.revision) return;
             this.error = error.message;
+            this.notifications.serverError(error);
+        }
+    }
+
+    @dropTask *moveStop(route, index, offset) {
+        const company = this.currentUser.companyId;
+        const proposal = this.proposal;
+        const target = index + offset;
+        if (!proposal || target < 0 || target >= route.stops.length) return;
+        const order = route.stops.map((stop) => stop.task_id);
+        [order[index], order[target]] = [order[target], order[index]];
+        try {
+            const result = yield this.fetch.post(`fleet-ops/planning/proposals/${encodeURIComponent(proposal.plan_uuid)}/resequence`, {
+                kind: proposal.kind,
+                routes: { [route.driver_uuid]: order },
+            });
+            if (company !== this.currentUser.companyId || proposal !== this.proposal) return;
+            if (typeof result.plan_uuid !== 'string' || !Array.isArray(result.routes)) throw new Error(this.intl.t('planning.invalid-response'));
+            this.proposal = result;
+            this.error = null;
+        } catch (error) {
+            if (company !== this.currentUser.companyId) return;
             this.notifications.serverError(error);
         }
     }

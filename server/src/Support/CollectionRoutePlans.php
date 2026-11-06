@@ -32,6 +32,58 @@ class CollectionRoutePlans
         return ['plan_uuid' => $id, 'expires_at' => now()->addMinutes(15)->toISOString()] + $proposal;
     }
 
+    /** Re-time a reviewed proposal with the stop order chosen by the planner (VROOM plan mode). */
+    public static function resequence(string $company, string $id, array $sequences): array
+    {
+        $plan = self::db()->table('collection_route_plans')->where('uuid', $id)->where('company_uuid', $company)->first();
+        abort_unless($plan, 404, 'Route proposal not found.');
+        abort_if($plan->request_id, 409, 'This proposal was already saved.');
+        abort_unless(now()->lessThan($plan->expires_at), 409, 'Route proposal expired. Optimize again.');
+        $input = json_decode($plan->input, true, 512, JSON_THROW_ON_ERROR);
+        $proposal = json_decode($plan->proposal, true, 512, JSON_THROW_ON_ERROR);
+        $context = self::context($company, $input);
+        abort_unless(hash_equals($plan->fingerprint, $context['fingerprint']), 409, 'Orders, vehicles, depot or availability changed. Optimize again.');
+        $resourceIds = collect($context['resources'])->mapWithKeys(fn ($resource, $resourceId) => [$resource['driver_uuid'] => $resourceId]);
+        $vehicles = [];
+        foreach ($proposal['routes'] as $route) {
+            $current = array_column($route['stops'], 'task_id');
+            $requested = array_map('intval', $sequences[$route['driver_uuid']] ?? $current);
+            $sortedCurrent = $current;
+            $sortedRequested = $requested;
+            sort($sortedCurrent);
+            sort($sortedRequested);
+            abort_unless($sortedCurrent === $sortedRequested, 422, 'You can only reorder the stops already on each route.');
+            $vehicle = collect($context['payload']['vehicles'])->firstWhere('id', $resourceIds[$route['driver_uuid']] ?? null);
+            abort_unless($vehicle, 409, 'A route driver changed. Optimize again.');
+            $vehicle['steps'] = [['type' => 'start'], ...array_map(fn ($taskId) => ['type' => 'job', 'id' => $taskId], $requested), ['type' => 'end']];
+            $vehicles[] = $vehicle;
+        }
+        $payload = ['jobs' => $context['payload']['jobs'], 'vehicles' => $vehicles, 'options' => ['g' => true, 'c' => true]];
+        $solution = app(VroomOrchestrationEngine::class)->solveCollectionRoutes($company, $payload);
+        foreach ($solution['routes'] as $route) {
+            $violations = collect($route['violations'] ?? [])->pluck('cause')->unique()->values()->all();
+            if (!$violations) continue;
+            $driver = $context['resources'][$route['vehicle']]['driver_name'] ?? '';
+            abort(422, match (true) {
+                in_array('delay', $violations, true) => "With this order {$driver} would arrive late or return after {$input['end_time']}. Try another order.",
+                in_array('load', $violations, true) => "With this order {$driver}'s vehicle would be over capacity. Deliver before picking up more parcels.",
+                default => "This stop order is not possible for {$driver} (" . implode(', ', $violations) . ').',
+            });
+        }
+        // Plan mode may omit jobs that were left unassigned by the original optimization.
+        $listed = collect($solution['routes'])->flatMap(fn ($route) => collect($route['steps'] ?? [])->where('type', 'job')->pluck('id'))
+            ->merge(collect($solution['unassigned'])->pluck('id'))->all();
+        foreach (array_keys($context['tasks']) as $taskId) {
+            if (!in_array($taskId, $listed, true)) $solution['unassigned'][] = ['id' => $taskId];
+        }
+        $resequenced = self::solution($solution, $context, $input);
+        self::db()->table('collection_route_plans')->where('uuid', $id)->whereNull('request_id')->update([
+            'proposal' => json_encode($resequenced, JSON_THROW_ON_ERROR), 'expires_at' => now()->addMinutes(15), 'updated_at' => now(),
+        ]);
+
+        return ['plan_uuid' => $id, 'expires_at' => now()->addMinutes(15)->toISOString()] + $resequenced;
+    }
+
     public static function commit(string $company, string $id, string $requestId): array
     {
         return self::db()->transaction(function () use ($company, $id, $requestId) {
@@ -48,25 +100,27 @@ class CollectionRoutePlans
             abort_unless(hash_equals($plan->fingerprint, $context['fingerprint']), 409, 'Orders, vehicles, depot or availability changed. Orchestrate and review again.');
             $proposal = json_decode($plan->proposal, true, 512, JSON_THROW_ON_ERROR);
             $receipt = ['plan_uuid' => $id, 'rounds' => [], 'deliveries' => [], 'dispatch' => false];
-            if ($input['kind'] === 'delivery') {
-                $routed = collect($proposal['routes'])->pluck('order_uuids')->flatten()->all();
-                foreach (array_intersect_key($context['moves'], array_flip($routed)) as $orderId => $roundId) {
-                    self::moveDeliveryDate($company, $context['orders'][$orderId], $roundId, $input['date'], $context['calendar']['timezone']);
-                }
+            $routed = collect($proposal['routes'])->pluck('order_uuids')->flatten()->all();
+            foreach (array_intersect_key($context['moves'], array_flip($routed)) as $orderId => $roundId) {
+                self::moveDeliveryDate($company, $context['orders'][$orderId], $roundId, $input['date'], $context['calendar']['timezone']);
             }
             foreach ($proposal['routes'] as $route) {
+                $route['pickup_order_uuids'] ??= $input['kind'] === 'pickup' ? $route['order_uuids'] : [];
+                $route['delivery_order_uuids'] ??= $input['kind'] === 'delivery' ? $route['order_uuids'] : [];
                 $routing = $route + ['plan_uuid' => $id, 'actor_uuid' => session('user'), 'recorded_at' => now()->toISOString()];
-                if ($input['kind'] === 'pickup') {
+                $window = ['from' => CarbonImmutable::parse($route['departure_at']), 'to' => CarbonImmutable::parse($route['ends_at']), 'plan_uuid' => $id];
+                if ($route['pickup_order_uuids']) {
+                    $pickupStops = array_values(array_filter($route['stops'], fn ($stop) => ($stop['kind'] ?? $input['kind']) === 'pickup'));
                     $round = new CollectionRound([
                         'uuid' => (string) Str::uuid(), 'company_uuid' => $company,
                         'scheduled_at' => $context['departure'], 'timezone' => $context['calendar']['timezone'],
                         'status' => 'draft', 'driver_uuid' => $route['driver_uuid'],
                         'depot' => $context['depot_legacy'], 'routing' => $routing,
-                        'stops' => array_map(fn ($stop) => $context['tasks'][$stop['task_id']]['pickup_stop'], $route['stops']),
+                        'stops' => array_map(fn ($stop) => $context['tasks'][$stop['task_id']]['pickup_stop'], $pickupStops),
                         'history' => [['event' => 'optimized_draft', 'plan_uuid' => $id, 'actor_uuid' => session('user'), 'at' => now()->toISOString()]], 'revision' => 1,
                     ]);
                     $round->save();
-                    foreach ($route['order_uuids'] as $orderId) {
+                    foreach ($route['pickup_order_uuids'] as $orderId) {
                         $order = $context['orders'][$orderId];
                         $order->recordCollectionRound($round->uuid, 'pickup_scheduled');
                         $meta = $order->meta;
@@ -76,26 +130,28 @@ class CollectionRoutePlans
                         $order->save();
                     }
                     $receipt['rounds'][] = $round->uuid;
-                } else {
-                    foreach ($route['order_uuids'] as $sequence => $orderId) {
-                        $leg = CollectionDelivery::change($company, $orderId, [
-                            'action' => 'assign', 'revision' => $context['legs'][$orderId]?->revision ?? 0,
-                            'driver_uuid' => $route['driver_uuid'], 'request_id' => $id . '-' . $sequence,
-                        ], null, $route['order_uuids']);
-                        $manifest = $leg->manifest;
-                        $manifest['routing'] = $routing + ['order_sequence' => $sequence + 1];
-                        $leg->manifest = $manifest;
-                        $leg->history = [...$leg->history, ['action' => 'optimized_route', 'plan_uuid' => $id,
-                            'at' => now()->toISOString(), 'actor_uuid' => session('user')]];
-                        $leg->save();
-                        $order = $context['orders'][$orderId];
-                        $order->recordDeliveryRoute([
-                            'plan_uuid' => $id, 'driver_uuid' => $route['driver_uuid'], 'sequence' => $sequence + 1,
-                            'departure_at' => $route['departure_at'], 'arrival_at' => $route['stops'][$sequence]['arrival_at'],
-                        ]);
-                        $order->save();
-                        $receipt['deliveries'][] = $leg->uuid;
-                    }
+                }
+                $deliveryStops = array_values(array_filter($route['stops'], fn ($stop) => ($stop['kind'] ?? $input['kind']) === 'delivery'));
+                foreach ($deliveryStops as $index => $stop) {
+                    $orderId = $stop['order_uuid'];
+                    $sequence = (int) $stop['sequence'];
+                    $leg = CollectionDelivery::change($company, $orderId, [
+                        'action' => 'assign', 'revision' => $context['legs'][$orderId]?->revision ?? 0,
+                        'driver_uuid' => $route['driver_uuid'], 'request_id' => $id . '-' . $index,
+                    ], null, $route['delivery_order_uuids'], $window);
+                    $manifest = $leg->manifest;
+                    $manifest['routing'] = $routing + ['order_sequence' => $sequence];
+                    $leg->manifest = $manifest;
+                    $leg->history = [...$leg->history, ['action' => 'optimized_route', 'plan_uuid' => $id,
+                        'at' => now()->toISOString(), 'actor_uuid' => session('user')]];
+                    $leg->save();
+                    $order = $context['orders'][$orderId];
+                    $order->recordDeliveryRoute([
+                        'plan_uuid' => $id, 'driver_uuid' => $route['driver_uuid'], 'sequence' => $sequence,
+                        'departure_at' => $route['departure_at'], 'arrival_at' => $stop['arrival_at'],
+                    ]);
+                    $order->save();
+                    $receipt['deliveries'][] = $leg->uuid;
                 }
             }
             self::db()->table('collection_route_plans')->where('uuid', $id)->update([
@@ -151,11 +207,16 @@ class CollectionRoutePlans
         $fingerprints = [];
         $legs = [];
         $moves = [];
+        $kinds = [];
         foreach ($orders as $order) {
             abort_unless(CollectionWorkflow::applies($order) && !$order->dispatched && !$order->started && !$order->driver_assigned_uuid,
                 409, 'Select unstarted collection orders only.');
             $fingerprints['orders'][$order->uuid] = hash('sha256', serialize($order->getAttributes()) . CollectionReadiness::fingerprint($order));
-            if ($input['kind'] === 'pickup') {
+            // A mixed route picks up ready orders and delivers the ones already received at the depot.
+            $kind = $input['kind'] !== 'mixed' ? $input['kind']
+                : (data_get($order->meta, 'collection_workflow.state') === 'received_at_depot' ? 'delivery' : 'pickup');
+            $kinds[$order->uuid] = $kind;
+            if ($kind === 'pickup') {
                 CollectionReadiness::assertReadyForPlanning($order);
                 abort_unless(data_get($order->meta, 'collection_workflow.scheduling_mode') === 'dispatcher', 409, 'Reconfirm historical readiness before optimized pickup planning.');
                 $stops = CollectionReadiness::pickupStops($order);
@@ -215,12 +276,15 @@ class CollectionRoutePlans
                 continue;
             }
             $taskId = count($tasks) + 1;
-            $tasks[$taskId] = ['order_uuid' => $order->uuid, 'order_id' => $order->public_id, 'location' => $location,
+            $tasks[$taskId] = ['order_uuid' => $order->uuid, 'order_id' => $order->public_id, 'kind' => $kind, 'location' => $location,
                 'label' => $label, 'quantity' => $count, 'window' => $window,
                 'skills' => OrchestrationPayloadBuilder::resolveSkills($order->required_skills ?? []),
-                'pickup_stop' => $input['kind'] === 'pickup' ? $stop : null];
+                'pickup_stop' => $kind === 'pickup' ? $stop : null];
         }
         abort_unless($tasks, 422, 'No selected orders have eligible, supported routing stops. Review addresses and multi-stop orders.');
+        $deliveryIds = array_keys(array_filter($kinds, fn ($kind) => $kind === 'delivery'));
+        $hasDeliveries = collect($tasks)->contains(fn ($task) => $task['kind'] === 'delivery');
+        $reservation = ['from' => $departure, 'to' => $end, 'plan_uuid' => null];
         $vehicles = [];
         $resources = [];
         $usedVehicles = [];
@@ -233,20 +297,22 @@ class CollectionRoutePlans
             $usedVehicles[] = $vehicle->uuid;
             $capacity = CollectionCapacity::driverLimit($driver, $calendar);
             abort_unless($capacity, 422, 'Configure parcel capacity for every selected vehicle.');
-            // Conservatively reserve an entire operating date, rather than inventing travel-time availability.
+            // Optimized routes reserve only their departure-to-return window, so a driver can run several routes a day.
             $vehicleDrivers = Driver::where('company_uuid', $company)->where('vehicle_uuid', $vehicle->uuid)->pluck('uuid')->all();
             $busyRounds = CollectionRound::where('company_uuid', $company)->whereIn('driver_uuid', $vehicleDrivers)
                 ->whereBetween('scheduled_at', [$date->startOfDay()->utc(), $date->endOfDay()->utc()])
-                ->whereIn('status', ['draft', 'released', 'in_progress', 'awaiting_depot'])->whereJsonLength('stops', '>', 0)->exists();
+                ->whereIn('status', ['draft', 'released', 'in_progress', 'awaiting_depot'])->whereJsonLength('stops', '>', 0)->get()
+                ->contains(fn ($round) => !data_get($round->routing, 'plan_uuid') || self::overlaps($round->routing, $reservation));
             $busyLegs = CollectionDeliveryLeg::where('company_uuid', $company)->whereIn('driver_uuid', $vehicleDrivers)
                 ->whereIn('status', ['staging', 'accepted', 'released'])->where('manifest->delivery_date', $input['date'])
-                ->whereNotIn('order_uuid', $input['kind'] === 'delivery' ? $input['order_uuids'] : [])->exists();
+                ->whereNotIn('order_uuid', $deliveryIds)->get()
+                ->contains(fn ($leg) => !data_get($leg->manifest, 'routing.plan_uuid') || self::overlaps(data_get($leg->manifest, 'routing'), $reservation));
             $busyOrders = Order::where('company_uuid', $company)->whereIn('driver_assigned_uuid', $vehicleDrivers)
                 ->whereNotIn('status', ['completed', 'done', 'delivered', 'cancelled', 'canceled', 'order_completed', 'order_delivered', 'order_canceled'])
                 ->where(fn ($query) => $query->where('started', true)->orWhere('dispatched', true)->orWhereIn('status', ['dispatched', 'started', 'out_for_delivery']))->exists();
-            abort_if($busyRounds || $busyLegs || $busyOrders, 409, 'A selected driver already has pickup, delivery or active order work. Review availability first.');
-            self::assertNoOptimizedReservation($company, $driver->uuid, $vehicle->uuid, $input['date'], null,
-                $input['kind'] === 'delivery' ? $input['order_uuids'] : []);
+            abort_if($busyRounds || $busyLegs || $busyOrders, 409,
+                "{$driver->name} already has pickup, delivery or active order work between {$input['start_time']} and {$input['end_time']}. Choose a time after that route returns, or another driver.");
+            self::assertNoOptimizedReservation($company, $driver->uuid, $vehicle->uuid, $input['date'], null, $deliveryIds, $reservation);
             if (self::db()->getSchemaBuilder()->hasTable('manifests')) {
                 $reserved = self::db()->table('manifests')->where('company_uuid', $company)->whereNull('deleted_at')
                     ->where(fn ($query) => $query->where('vehicle_uuid', $vehicle->uuid)->orWhereIn('driver_uuid', $vehicleDrivers))
@@ -289,7 +355,8 @@ class CollectionRoutePlans
             }
             $skills = array_values(array_unique(array_merge(OrchestrationPayloadBuilder::resolveSkills($driver->skills ?? []),
                 OrchestrationPayloadBuilder::resolveSkills($vehicle->skills ?? []))));
-            $origin = $input['kind'] === 'delivery' ? $depot : PlanningPlaces::snapshot($company, $selected['start_place_uuid']);
+            // Routes that deliver must start at the depot, where the parcels are loaded.
+            $origin = $hasDeliveries ? $depot : PlanningPlaces::snapshot($company, $selected['start_place_uuid']);
             $resourceId = $index + 1;
             $resources[$resourceId] = ['driver_uuid' => $driver->uuid, 'driver_name' => $driver->name,
                 'vehicle_uuid' => $vehicle->uuid, 'origin' => $origin, 'destination' => $depot, 'capacity' => $capacity, 'skills' => $skills];
@@ -302,7 +369,7 @@ class CollectionRoutePlans
         $jobs = [];
         foreach ($tasks as $id => $task) {
             $jobs[] = ['id' => $id, 'location' => [$task['location']['lng'], $task['location']['lat']],
-                ($input['kind'] === 'pickup' ? 'pickup' : 'delivery') => [$task['quantity']],
+                'pickup' => [$task['kind'] === 'pickup' ? $task['quantity'] : 0], 'delivery' => [$task['kind'] === 'delivery' ? $task['quantity'] : 0],
                 'service' => 300, 'time_windows' => [$task['window']], 'skills' => $task['skills']];
         }
         $fingerprint = hash('sha256', json_encode([$fingerprints, $calendar, $depot, $resources, $tasks], JSON_THROW_ON_ERROR));
@@ -356,7 +423,10 @@ class CollectionRoutePlans
             abort_unless(($last['type'] ?? null) === 'end' && is_int($last['arrival'] ?? null)
                 && $last['arrival'] >= $previous && $last['arrival'] <= $context['end']->timestamp, 502, 'Route does not return to the depot within its working window.');
             $routes[] = $resource + ['kind' => $input['kind'], 'date' => $input['date'], 'timezone' => $context['calendar']['timezone'], 'stops' => $stops,
-                'order_uuids' => array_column($stops, 'order_uuid'), 'distance_meters' => $route['distance'],
+                'order_uuids' => array_column($stops, 'order_uuid'),
+                'pickup_order_uuids' => array_column(array_filter($stops, fn ($stop) => $stop['kind'] === 'pickup'), 'order_uuid'),
+                'delivery_order_uuids' => array_column(array_filter($stops, fn ($stop) => $stop['kind'] === 'delivery'), 'order_uuid'),
+                'distance_meters' => $route['distance'],
                 'duration_seconds' => $last['arrival'] - $context['departure']->timestamp, 'travel_seconds' => $route['duration'],
                 'geometry' => is_string($route['geometry'] ?? null) ? $route['geometry'] : null,
                 'departure_at' => $context['departure']->toISOString(), 'ends_at' => CarbonImmutable::createFromTimestampUTC($last['arrival'])->toISOString()];
@@ -374,7 +444,7 @@ class CollectionRoutePlans
         return ['kind' => $input['kind'], 'date' => $input['date'], 'routes' => $routes, 'unassigned' => $unassigned];
     }
 
-    public static function assertNoOptimizedReservation(string $company, ?string $driver, ?string $vehicle, string $date, ?string $excludeRound = null, array $excludeOrders = []): void
+    public static function assertNoOptimizedReservation(string $company, ?string $driver, ?string $vehicle, string $date, ?string $excludeRound = null, array $excludeOrders = [], ?array $window = null): void
     {
         $schema = self::db()->getSchemaBuilder();
         if ($schema->hasTable('collection_rounds') && $schema->hasColumn('collection_rounds', 'routing')) {
@@ -385,15 +455,28 @@ class CollectionRoutePlans
                 ->whereJsonLength('stops', '>', 0)->where('uuid', '!=', $excludeRound ?? '')
                 ->where(fn ($query) => $query->whereIn('status', ['released', 'in_progress', 'awaiting_depot'])
                     ->orWhere(fn ($draft) => $draft->where('status', 'draft')->whereDate('scheduled_at', $scheduledDate)));
-            abort_if($rounds->exists(), 409, 'Vehicle or driver is reserved by an optimized pickup route.');
+            $reserved = $window ? $rounds->get()->contains(fn ($round) => self::overlaps($round->routing, $window)) : $rounds->exists();
+            abort_if($reserved, 409, 'Vehicle or driver is reserved by an optimized pickup route at this time.');
         }
         if ($schema->hasTable('collection_delivery_legs')) {
             $legs = CollectionDeliveryLeg::where('company_uuid', $company)->whereNotNull('manifest->routing->plan_uuid')
                 ->whereNotIn('order_uuid', $excludeOrders)->whereIn('status', ['staging', 'accepted', 'released'])
                 ->where('manifest->delivery_date', $date)
                 ->where(fn ($query) => $query->where('driver_uuid', $driver)->orWhere('manifest->routing->vehicle_uuid', $vehicle));
-            abort_if($legs->exists(), 409, 'Vehicle or driver is reserved by an optimized depot delivery route.');
+            $reserved = $window ? $legs->get()->contains(fn ($leg) => self::overlaps(data_get($leg->manifest, 'routing'), $window)) : $legs->exists();
+            abort_if($reserved, 409, 'Vehicle or driver is reserved by an optimized depot delivery route at this time.');
         }
+    }
+
+    /** Whether a saved route overlaps the window; routes of the same plan never conflict with each other. */
+    private static function overlaps(?array $routing, array $window): bool
+    {
+        if ($window['plan_uuid'] && data_get($routing, 'plan_uuid') === $window['plan_uuid']) return false;
+        $from = data_get($routing, 'departure_at');
+        $to = data_get($routing, 'ends_at');
+        if (!$from || !$to) return true;
+
+        return CarbonImmutable::parse($from)->lessThan($window['to']) && CarbonImmutable::parse($to)->greaterThan($window['from']);
     }
 
     public static function assertDeliveryRelease(string $company, CollectionDeliveryLeg $leg): void
@@ -408,9 +491,10 @@ class CollectionRoutePlans
             409, 'The delivery vehicle is no longer available. Recall and review this route.');
         PlanningPlaces::assertCurrent($company, $route['origin']);
         PlanningPlaces::assertCurrent($company, $route['destination']);
-        $peers = CollectionDeliveryLeg::where('company_uuid', $company)->whereIn('order_uuid', $route['order_uuids'])
+        $routeOrders = $route['delivery_order_uuids'] ?? $route['order_uuids'];
+        $peers = CollectionDeliveryLeg::where('company_uuid', $company)->whereIn('order_uuid', $routeOrders)
             ->orderBy('uuid')->lockForUpdate()->get();
-        abort_unless($peers->count() === count($route['order_uuids']) && $peers->every(fn ($peer) =>
+        abort_unless($peers->count() === count($routeOrders) && $peers->every(fn ($peer) =>
             in_array($peer->status, ['accepted', 'released'], true) && $peer->driver_uuid === $driver->uuid
             && data_get($peer->manifest, 'routing.plan_uuid') === $route['plan_uuid']
             && data_get($peer->manifest, 'acceptance.status') === 'accepted'

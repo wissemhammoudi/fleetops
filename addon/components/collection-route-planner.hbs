@@ -31,17 +31,21 @@
         {{! Header }}
         <div class="px-3 py-2 border-b dark:border-gray-700 flex-shrink-0">
             <div class="flex items-center gap-2">
-                <span class="flex items-center justify-center w-7 h-7 rounded text-white flex-shrink-0 {{if (eq this.kind 'delivery') 'bg-violet-600' 'bg-emerald-600'}}"><FaIcon
-                        @icon={{if (eq this.kind "delivery") "truck-fast" "truck-pickup"}}
-                        @size="xs"
-                    /></span>
+                <span
+                    class="flex items-center justify-center w-7 h-7 rounded text-white flex-shrink-0
+                        {{if (eq this.kind 'delivery') 'bg-violet-600' (if (eq this.kind 'mixed') 'bg-indigo-600' 'bg-emerald-600')}}"
+                ><FaIcon @icon={{if (eq this.kind "delivery") "truck-fast" (if (eq this.kind "mixed") "route" "truck-pickup")}} @size="xs" /></span>
                 <div class="flex-1 min-w-0">
                     <div class="text-sm font-semibold truncate dark:text-white">{{t
-                            (if (eq this.kind "delivery") "planning.orchestrator.delivery-title" "planning.orchestrator.pickup-title")
+                            (if
+                                (eq this.kind "delivery")
+                                "planning.orchestrator.delivery-title"
+                                (if (eq this.kind "mixed") "planning.orchestrator.mixed-title" "planning.orchestrator.pickup-title")
+                            )
                         }}</div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
                         {{t "planning.orchestrator.selected" count=@selection.size}}
-                        {{#if @depotName}}· {{t (if (eq this.kind "delivery") "planning.orchestrator.from-depot" "planning.orchestrator.to-depot") depot=@depotName}}{{/if}}
+                        {{#if @depotName}}· {{t (if (eq this.kind "pickup") "planning.orchestrator.to-depot" "planning.orchestrator.from-depot") depot=@depotName}}{{/if}}
                     </div>
                 </div>
                 {{#if @onClose}}
@@ -238,8 +242,8 @@
                             <FaIcon @icon="flag" @size="xs" class="w-5 text-center" />
                             <span class="truncate">{{route.origin.name}}</span>
                         </div>
-                        {{#each route.stops as |stop|}}
-                            <div class="flex items-start gap-2 px-3 py-2 border-b dark:border-gray-700/60 dark:bg-gray-800">
+                        {{#each route.stops as |stop index|}}
+                            <div class="flex items-start gap-2 px-3 py-2 border-b dark:border-gray-700/60 dark:bg-gray-800" data-test-route-stop>
                                 <span
                                     class="mt-0.5 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold"
                                     style={{html-safe (concat "font-size:0.6rem; background-color:" route.color)}}
@@ -247,10 +251,39 @@
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center gap-1.5">
                                         <span class="text-xs font-mono font-semibold dark:text-gray-300 truncate">{{stop.order_id}}</span>
+                                        <span
+                                            class="px-1 rounded font-semibold uppercase flex-shrink-0
+                                                {{if
+                                                    (eq stop.kind 'delivery')
+                                                    'bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-200'
+                                                    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200'
+                                                }}"
+                                            style={{html-safe "font-size:0.6rem"}}
+                                        >{{t (if (eq stop.kind "delivery") "planning.orchestrator.stop-delivery" "planning.orchestrator.stop-pickup")}}</span>
                                         {{#if stop.time}}<span class="ml-auto text-xs text-blue-400 flex-shrink-0">{{stop.time}}</span>{{/if}}
                                     </div>
                                     <div class="text-xs text-gray-500 dark:text-gray-400 truncate">{{stop.label}}</div>
                                 </div>
+                                {{#if this.proposal}}
+                                    <div class="flex flex-col flex-shrink-0">
+                                        <button
+                                            type="button"
+                                            class="px-1 text-gray-400 hover:text-gray-800 dark:hover:text-white disabled:opacity-30"
+                                            title={{t "planning.orchestrator.move-up"}}
+                                            disabled={{or this.busy (not stop.canMoveUp)}}
+                                            {{on "click" (perform this.moveStop route index -1)}}
+                                            data-test-stop-up
+                                        ><FaIcon @icon="chevron-up" @size="xs" /></button>
+                                        <button
+                                            type="button"
+                                            class="px-1 text-gray-400 hover:text-gray-800 dark:hover:text-white disabled:opacity-30"
+                                            title={{t "planning.orchestrator.move-down"}}
+                                            disabled={{or this.busy (not stop.canMoveDown)}}
+                                            {{on "click" (perform this.moveStop route index 1)}}
+                                            data-test-stop-down
+                                        ><FaIcon @icon="chevron-down" @size="xs" /></button>
+                                    </div>
+                                {{/if}}
                             </div>
                         {{/each}}
                         <div class="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400">

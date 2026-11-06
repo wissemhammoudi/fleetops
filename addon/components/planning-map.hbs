@@ -34,7 +34,12 @@
 
         {{#each this.routes as |route|}}
             {{#if route.coordinates.length}}<layers.polyline @locations={{route.coordinates}} @color={{route.color}} @weight={{5}} @opacity={{0.85}} />{{/if}}
-            <layers.marker @lat={{route.origin.location.lat}} @lng={{route.origin.location.lng}} as |marker|>
+            <layers.marker
+                @lat={{route.origin.location.lat}}
+                @lng={{route.origin.location.lng}}
+                @icon={{div-icon html=(this.icon "S" route.color) className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16) popupAnchor=(array 0 -20)}}
+                as |marker|
+            >
                 <marker.tooltip>{{route.driver_name}}: {{route.origin.name}}</marker.tooltip>
             </layers.marker>
             {{#each route.stops as |stop|}}
@@ -60,7 +65,12 @@
                     </marker.tooltip>
                 </layers.marker>
             {{/each}}
-            <layers.marker @lat={{route.destination.location.lat}} @lng={{route.destination.location.lng}} as |marker|>
+            <layers.marker
+                @lat={{route.destination.location.lat}}
+                @lng={{route.destination.location.lng}}
+                @icon={{div-icon html=(this.icon "H" this.depotColor) className="fleetops-waypoint-marker" iconSize=(array 32 32) iconAnchor=(array 16 16) popupAnchor=(array 0 -20)}}
+                as |marker|
+            >
                 <marker.tooltip>{{route.destination.name}}</marker.tooltip>
             </layers.marker>
         {{/each}}
