@@ -3,7 +3,6 @@ import { inject as service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
-import * as XLSX from 'xlsx';
 import { buildRouteTypeSummary } from '../../utils/order-route-summary';
 
 /**
@@ -532,7 +531,7 @@ export default class OrchestratorImportComponent extends Component {
     }
 
     async _parseXlsx(file) {
-        const buffer = await this._readFileAsArrayBuffer(file);
+        const [XLSX, buffer] = await Promise.all([import('xlsx'), this._readFileAsArrayBuffer(file)]);
         const workbook = XLSX.read(buffer, { type: 'array' });
         // Use the first sheet
         const sheetName = workbook.SheetNames[0];
@@ -653,6 +652,7 @@ export default class OrchestratorImportComponent extends Component {
 
             if (ext === 'xlsx' || ext === 'xls') {
                 // Re-parse the full xlsx file (all rows, not just the 3-row sample)
+                const XLSX = yield import('xlsx');
                 const buffer = yield this._readFileAsArrayBuffer(this.selectedFile);
                 const workbook = XLSX.read(buffer, { type: 'array' });
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
