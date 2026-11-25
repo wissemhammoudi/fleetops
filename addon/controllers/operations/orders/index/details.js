@@ -17,6 +17,7 @@ export default class OperationsOrdersIndexDetailsController extends Controller {
     @service hostRouter;
     @service universe;
     @service sidebar;
+    @service intl;
     @tracked routingControl;
     @tracked routingCompleted = false;
     @tracked realtimeOrderPublicId = null;
@@ -88,6 +89,12 @@ export default class OperationsOrdersIndexDetailsController extends Controller {
             {
                 items: [
                     {
+                        text: this.intl.t('order.actions.schedule-pickup'),
+                        icon: 'calendar-plus',
+                        disabled: ['canceled', 'completed'].includes(this.model.status),
+                        fn: () => this.orderActions.schedulePickup(this.model),
+                    },
+                    {
                         text: 'Edit details',
                         icon: 'pencil',
                         disabled: this.model.status === 'canceled',
@@ -112,19 +119,6 @@ export default class OperationsOrdersIndexDetailsController extends Controller {
                         text: 'View order label',
                         icon: 'file-invoice',
                         fn: () => this.orderActions.viewLabel(this.model),
-                    },
-                    {
-                        separator: true,
-                    },
-                    {
-                        text: 'Listen to socket channel',
-                        icon: 'headphones',
-                        fn: () => this.hostRouter.transitionTo('console.developers.sockets.view', `order.${this.model.public_id}`),
-                    },
-                    {
-                        text: 'View metadata',
-                        icon: 'table',
-                        fn: () => this.orderActions.viewMetadata(this.model),
                     },
                     {
                         separator: true,

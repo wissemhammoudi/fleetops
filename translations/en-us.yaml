@@ -1463,6 +1463,9 @@ order:
         dispatch-title: Are you sure you want to dispatch this order?
         dispatch-body: Once this order is dispatched the assigned driver will be notified.
         dispatch-success: Order {orderId} has been dispatched.
+        schedule-pickup-success: Pickup scheduled for order {orderId}.
+        schedule-pickup-bulk-success: Pickup scheduled for {count} orders.
+        schedule-pickup-none-eligible: Select orders that are ready for pickup or direct orders to schedule.
         order-bulk-search: Input comma delimited order ID's or tracking numbers to perform a bulk search
     actions:
         create-new-customer: Create New Customer
@@ -1470,6 +1473,8 @@ order:
         create-new-place: Create New Place
         change-driver: Change Driver
         assign-driver: Assign Driver
+        schedule-pickup: Schedule Pickup
+        view-label: View Order Label
         update-activity: Update Activity
         reload-activity: Reload Activity
         view-activity-as-timeline: View as Timeline
@@ -2303,6 +2308,18 @@ modals:
 
     order-label:
         loading: Loading Label...
+
+    order-schedule-pickup:
+        pickup-date: Pickup date
+        select-pickup-date: Select a pickup date
+        pickup-datetime: Pickup date & time
+        optional-driver: Driver (optional)
+        collection-help: Adding these ready-for-pickup orders creates or joins a draft collection round for the chosen date.
+        no-dates: No upcoming pickup dates are configured yet. Open the Orchestrator to review your collection schedule.
+        open-orchestrator: Open in Orchestrator
+        current-status: Current pickup state
+        status-help: Pickup scheduling is managed through the Orchestrator once an order is prepared or already planned.
+        orders-selected: "{count, plural, one {# order selected} other {# orders selected}}"
 
     order-new-activity:
         select-message: Select an activity status to update order tracking activity, or input a custom activity.

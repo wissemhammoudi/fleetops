@@ -588,41 +588,54 @@ class DriverController extends Controller
         // Get the user's company for this driver profile
         $company = static::getDriverCompanyFromUser($user);
 
-        // generate verification token
-        try {
-            VerificationCode::generateSmsVerificationFor($user, 'driver_login', [
-                'company_uuid'    => $company->uuid,
-                'messageCallback' => function ($verification) use ($company) {
-                    return 'Your ' . data_get($company, 'name', config('app.name')) . ' verification code is ' . $verification->code;
-                },
-            ]);
+        $verificationOptions = [
+            'company_uuid'    => $company->uuid,
+            'messageCallback' => function ($verification) use ($company) {
+                return 'Your ' . data_get($company, 'name', config('app.name')) . ' verification code is ' . $verification->code;
+            },
+        ];
 
-            return response()->json(['status' => 'OK', 'method' => 'sms']);
-        } catch (\Throwable $e) {
-            if (app()->bound('sentry')) {
-                app('sentry')->captureException($e);
+        // Generate verification token via SMS only when SMS transport is configured
+        if (static::isSmsConfiguredFor($user->phone)) {
+            try {
+                VerificationCode::generateSmsVerificationFor($user, 'driver_login', $verificationOptions);
+
+                return response()->json(['status' => 'OK', 'method' => 'sms']);
+            } catch (\Throwable $e) {
+                if (app()->bound('sentry')) {
+                    app('sentry')->captureException($e);
+                }
             }
+        }
 
-            // SEND VERIFICATION CODE BY EMAIL IF DRIVER HAS EMAIL ADDRESS
-            if ($user->email) {
-                try {
-                    VerificationCode::generateEmailVerificationFor($user, 'driver_login', [
-                        'company_uuid'    => $company->uuid,
-                        'messageCallback' => function ($verification) use ($company) {
-                            return 'Your ' . data_get($company, 'name', config('app.name')) . ' verification code is ' . $verification->code;
-                        },
-                    ]);
+        // Send or fall back to verification code by email if driver has email address
+        if ($user->email) {
+            try {
+                VerificationCode::generateEmailVerificationFor($user, 'driver_login', $verificationOptions);
 
-                    return response()->json(['status' => 'OK', 'method' => 'email']);
-                } catch (\Throwable $e) {
-                    if (app()->bound('sentry')) {
-                        app('sentry')->captureException($e);
-                    }
+                return response()->json(['status' => 'OK', 'method' => 'email']);
+            } catch (\Throwable $e) {
+                if (app()->bound('sentry')) {
+                    app('sentry')->captureException($e);
                 }
             }
         }
 
         return response()->apiError('Unable to send SMS Verification code.');
+    }
+
+    protected static function isSmsConfiguredFor(?string $phone = null): bool
+    {
+        $smsService = new \Fleetbase\Services\SmsService();
+
+        if (method_exists($smsService, 'isConfiguredFor')) {
+            return $smsService->isConfiguredFor($phone);
+        }
+
+        return (bool) config('sms.providers.twilio.enabled', true)
+            && !empty(config('twilio.twilio.connections.twilio.sid'))
+            && !empty(config('twilio.twilio.connections.twilio.token'))
+            && !empty(config('twilio.twilio.connections.twilio.from'));
     }
 
     /**

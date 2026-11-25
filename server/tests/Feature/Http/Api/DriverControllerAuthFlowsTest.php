@@ -189,6 +189,7 @@ function fleetopsDriverAuthBoot(): SQLiteConnection
 
     app()->forgetInstance('twilio');
     Illuminate\Support\Facades\Facade::clearResolvedInstance('twilio');
+    config()->set('twilio.twilio.connections.twilio', ['sid' => '', 'token' => '', 'from' => '']);
 
     session(['company' => 'company-1']);
 
@@ -290,6 +291,7 @@ test('phone login falls back to email verification and errors without channels',
 
 test('phone login reports the sms method when the transport delivers', function () {
     $connection = fleetopsDriverAuthBoot();
+    config()->set('twilio.twilio.connections.twilio', ['sid' => 'AC-test', 'token' => 'tok-test', 'from' => '+15550001111']);
     $twilio     = new FleetOpsDriverAuthTwilioFake();
     app()->instance('twilio', $twilio);
     Fleetbase\Twilio\Support\Laravel\Facade::clearResolvedInstances();
@@ -356,15 +358,15 @@ test('verification failures report to sentry and exhaust every channel', functio
     };
     app()->instance('sentry', $sentry);
 
-    // The SMS attempt fails in the harness and is reported before the
-    // controller falls back to the email channel
+    // When SMS is not configured, loginWithPhone skips SMS cleanly with 0 Sentry errors
+    // and goes straight to the email OTP channel (1 verification code row created).
     app()->instance('request', Request::create('/x', 'POST', ['phone' => '6591234567']));
-    $emailFallback = $controller->loginWithPhone();
-    expect($emailFallback->getData(true))->toBe(['status' => 'OK', 'method' => 'email'])
-        ->and($sentry->captured)->toHaveCount(1);
+    $emailDirect = $controller->loginWithPhone();
+    expect($emailDirect->getData(true))->toBe(['status' => 'OK', 'method' => 'email'])
+        ->and($sentry->captured)->toHaveCount(0)
+        ->and($connection->table('verification_codes')->where('for', 'driver_login')->count())->toBe(1);
 
-    // When the mail channel also fails both failures are reported and the
-    // controller surfaces the generic error
+    // When the mail channel also fails while SMS is unconfigured, only the mail failure is reported.
     app()->instance('mail.manager', new class {
         public function to($users)
         {
@@ -380,7 +382,16 @@ test('verification failures report to sentry and exhaust every channel', functio
 
     $noChannel = $controller->loginWithPhone();
     expect($noChannel->getData(true)['error'])->toContain('Unable to send SMS Verification code')
-        ->and(count($sentry->captured))->toBeGreaterThanOrEqual(3);
+        ->and($sentry->captured)->toHaveCount(1);
+
+    // When SMS IS configured and throws, the SMS exception is reported before falling back to email.
+    config()->set('twilio.twilio.connections.twilio', ['sid' => 'AC-test', 'token' => 'tok-test', 'from' => '+15550001111']);
+    app()->instance('mail.manager', new FleetOpsDriverAuthMailerFake());
+    Illuminate\Support\Facades\Mail::clearResolvedInstance('mail.manager');
+
+    $smsFallback = $controller->loginWithPhone();
+    expect($smsFallback->getData(true))->toBe(['status' => 'OK', 'method' => 'email'])
+        ->and($sentry->captured)->toHaveCount(2);
 
     app()->forgetInstance('sentry');
 });

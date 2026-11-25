@@ -4,7 +4,7 @@ import { inject as service } from '@ember/service';
 
 export default class ApplicationController extends Controller {
     @service hostRouter;
-    @tracked routes = ['console.fleet-ops.operations', 'console.fleet-ops.management', 'console.fleet-ops.maintenance', 'console.fleet-ops.connectivity', 'console.fleet-ops.analytics'];
+    @tracked routes = ['console.fleet-ops.operations', 'console.fleet-ops.management', 'console.fleet-ops.analytics'];
 
     get isOpsNavigationsActive() {
         const allRoutesInactive = this.routes.every((route) => !this.isRouteActive(route));

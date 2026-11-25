@@ -989,6 +989,9 @@ order:
     dispatch-body: Une fois cette commande dispatchée, le conducteur assigné sera
       notifié.
     dispatch-success: La commande {orderId} a été dispatchée.
+    schedule-pickup-success: Ramassage planifié pour la commande {orderId}.
+    schedule-pickup-bulk-success: Ramassage planifié pour {count} commandes.
+    schedule-pickup-none-eligible: Sélectionnez des commandes prêtes pour le ramassage ou directes à planifier.
     order-bulk-search: Saisissez des ID de commande ou des numéros de suivi séparés
       par des virgules pour effectuer une recherche en masse
   actions:
@@ -997,6 +1000,8 @@ order:
     create-new-place: Créer un nouveau lieu
     change-driver: Changer de conducteur
     assign-driver: Assigner un conducteur
+    schedule-pickup: Planifier le ramassage
+    view-label: Voir l'étiquette
     update-activity: Mettre à jour l'activité
     reload-activity: Recharger l'activité
     view-activity-as-timeline: Voir en chronologie
@@ -1745,6 +1750,17 @@ modals:
   order-event:
     schedule: Planifier
     unschedule: Annuler la planification
+  order-schedule-pickup:
+    pickup-date: Date de ramassage
+    select-pickup-date: Choisir une date de ramassage
+    pickup-datetime: Date et heure de ramassage
+    optional-driver: Conducteur (optionnel)
+    collection-help: L'ajout de ces commandes prêtes crée ou rejoint une tournée de collecte brouillon pour la date choisie.
+    no-dates: Aucune date de ramassage configurée. Ouvrez l'Orchestrateur pour vérifier le planning.
+    open-orchestrator: Ouvrir dans l'Orchestrateur
+    current-status: Statut actuel du ramassage
+    status-help: La planification du ramassage se gère dans l'Orchestrateur une fois la commande préparée ou déjà planifiée.
+    orders-selected: "{count, plural, one {# commande sélectionnée} other {# commandes sélectionnées}}"
   order-form:
     id-text: Utilisez ce champ pour définir éventuellement un identifiant personnalisé
       ou interne pour la commande.

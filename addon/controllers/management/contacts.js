@@ -9,12 +9,12 @@ export default class ManagementContactsController extends Controller {
     get tabs() {
         return [
             {
-                route: 'management.contacts.index',
-                label: 'Contacts',
-            },
-            {
                 route: 'management.contacts.customers',
                 label: 'Customers',
+            },
+            {
+                route: 'management.contacts.index',
+                label: 'Contacts',
             },
         ];
     }

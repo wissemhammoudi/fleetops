@@ -26,17 +26,6 @@
                 {{/each}}
                 <div class="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1"></div>
             {{/if}}
-            {{#if this.data.permissions.direct}}
-                <Button
-                    @icon="route"
-                    @text={{t "planning.direct-tools"}}
-                    @type={{if this.showDirectPlanner "primary" "default"}}
-                    @size="sm"
-                    @onClick={{this.toggleDirectPlanner}}
-                    title={{t "planning.direct-help"}}
-                    data-test-planning-direct
-                />
-            {{/if}}
             <Button @icon="sync" @type="default" @size="sm" @isLoading={{this.load.isRunning}} @onClick={{perform this.load}} data-test-planning-refresh />
         </div>
     </Layout::Section::Header>
@@ -70,11 +59,7 @@
                 {{/each}}
             {{/if}}
         </div>
-    {{/if}}
 
-    {{#if this.showDirectPlanner}}
-        <div class="flex-1 min-h-0 overflow-hidden"><OrchestratorWorkbench /></div>
-    {{else if this.data}}
         {{! ── Main 3-panel body ── }}
         <div class="workbench-body flex flex-1 min-h-0 overflow-hidden">
 

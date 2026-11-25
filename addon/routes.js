@@ -4,9 +4,6 @@ import buildRoutes from 'ember-engines/routes';
 export default buildRoutes(function () {
     this.route('virtual', { path: '/:section/:slug' });
     this.route('operations', { path: '/' }, function () {
-        this.route('collection-rounds');
-        this.route('customer-wallets');
-        this.route('website-inbox');
         this.route('order-config', function () {});
         this.route('service-rates', function () {
             this.route('index', { path: '/' }, function () {
@@ -20,7 +17,6 @@ export default buildRoutes(function () {
         this.route('orchestrator', function () {});
         this.route('scheduler', function () {
             this.route('index', { path: '/' });
-            this.route('fleet-schedule');
         });
         this.route('orders', { path: '/' }, function () {
             this.route('index', { path: '/' }, function () {
@@ -29,12 +25,6 @@ export default buildRoutes(function () {
                     this.route('index', { path: '/' });
                     this.route('virtual', { path: '/:slug' });
                 });
-            });
-        });
-        this.route('routes', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('details', { path: '/:public_id' });
             });
         });
     });
@@ -47,23 +37,6 @@ export default buildRoutes(function () {
                     this.route('vehicles');
                     this.route('drivers');
                     this.route('virtual', { path: '/:slug' });
-                });
-                this.route('edit', { path: '/edit/:public_id' });
-            });
-        });
-        this.route('vendors', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                    this.route('personnel');
-                });
-                this.route('edit', { path: '/edit/:public_id' });
-            });
-            this.route('integrated', function () {
-                this.route('new');
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
                 });
                 this.route('edit', { path: '/edit/:public_id' });
             });
@@ -87,30 +60,7 @@ export default buildRoutes(function () {
                 this.route('details', { path: '/:public_id' }, function () {
                     this.route('index', { path: '/' });
                     this.route('positions');
-                    this.route('devices');
-                    this.route('equipment');
-                    this.route('trailers');
-                    this.route('schedules');
-                    this.route('work-orders');
-                    this.route('maintenance-history');
-                    this.route('inspections');
                     this.route('virtual', { path: '/:slug' });
-                });
-                this.route('edit', { path: '/edit/:public_id' });
-            });
-        });
-        this.route('trailers', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                    this.route('positions');
-                    this.route('devices');
-                    this.route('equipment');
-                    this.route('connections');
-                    this.route('schedules');
-                    this.route('work-orders');
-                    this.route('maintenance-history');
                 });
                 this.route('edit', { path: '/edit/:public_id' });
             });
@@ -157,11 +107,6 @@ export default buildRoutes(function () {
                 this.route('edit', { path: '/edit/:public_id' });
             });
         });
-        this.route('fuel-transactions', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('details', { path: '/:public_id' });
-            });
-        });
         this.route('issues', function () {
             this.route('index', { path: '/' }, function () {
                 this.route('new');
@@ -174,139 +119,6 @@ export default buildRoutes(function () {
         this.route('website-requests', function () {
             this.route('index', { path: '/' }, function () {
                 this.route('details', { path: '/:id' });
-            });
-        });
-    });
-    this.route('connectivity', function () {
-        this.route('fuel-providers', { path: '/fuel-integrations' }, function () {
-            this.route('index', { path: '/' });
-            this.route('new');
-            this.route('edit', { path: '/edit/:public_id' });
-            this.route('details', { path: '/:public_id' }, function () {
-                this.route('index', { path: '/' });
-                this.route('sync');
-                this.route('matching');
-                this.route('transactions');
-                this.route('settings');
-            });
-        });
-        this.route('telematics', function () {
-            this.route('index', { path: '/' });
-            this.route('new');
-            this.route('edit', { path: '/edit/:public_id' });
-            this.route('details', { path: '/:public_id' }, function () {
-                this.route('index', { path: '/' });
-                this.route('devices');
-                this.route('attachments');
-                this.route('sensors');
-                this.route('events');
-                this.route('logs');
-            });
-        });
-
-        this.route('devices', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                    this.route('vehicle');
-                    this.route('sensors');
-                    this.route('events');
-                    this.route('virtual', { path: '/:slug' });
-                });
-            });
-        });
-
-        this.route('sensors', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                    this.route('virtual', { path: '/:slug' });
-                });
-            });
-        });
-
-        this.route('events', function () {
-            this.route('details', { path: '/:public_id' });
-        });
-
-        this.route('tracking');
-    });
-    this.route('maintenance', function () {
-        this.route('inspection-forms', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                    this.route('submissions');
-                });
-            });
-        });
-
-        this.route('inspection-submissions', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                    this.route('photos');
-                    this.route('audit');
-                });
-            });
-        });
-
-        this.route('schedules', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                    this.route('work-orders');
-                });
-            });
-        });
-
-        this.route('maintenances', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                });
-            });
-        });
-
-        this.route('work-orders', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                });
-            });
-        });
-
-        this.route('equipment', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                });
-            });
-        });
-
-        this.route('parts', function () {
-            this.route('index', { path: '/' }, function () {
-                this.route('new');
-                this.route('edit', { path: '/edit/:public_id' });
-                this.route('details', { path: '/:public_id' }, function () {
-                    this.route('index', { path: '/' });
-                });
             });
         });
     });
@@ -331,9 +143,5 @@ export default buildRoutes(function () {
         this.route('map');
         this.route('orchestrator');
         this.route('scheduling');
-        this.route('payments', function () {
-            this.route('index', { path: '/' });
-            this.route('onboard');
-        });
     });
 });

@@ -968,6 +968,17 @@ fleet-ops:
       order-event:
         schedule: جدولة
         unschedule: إلغاء الجدولة
+      order-schedule-pickup:
+        pickup-date: تاريخ الاستلام
+        select-pickup-date: اختر تاريخ الاستلام
+        pickup-datetime: تاريخ ووقت الاستلام
+        optional-driver: السائق (اختياري)
+        collection-help: إضافة هذه الطلبات الجاهزة ينشئ أو ينضم إلى جولة استلام مسودة للتاريخ المختار.
+        no-dates: لا توجد تواريخ استلام قادمة مهيأة بعد. افتح المنسق لمراجعة جدول الجمع.
+        open-orchestrator: فتح في المنسق
+        current-status: حالة الاستلام الحالية
+        status-help: تتم جدولة الاستلام من خلال المنسق بعد تحضير الطلب أو تخطيطه بالفعل.
+        orders-selected: "{count, plural, one {# طلب محدد} other {# طلبات محددة}}"
       order-form:
         id-text: استخدم هذا الحقل لتعيين معرف مخصص أو معرف داخلي للطلب اختياريًا.
         schedule-text: التاريخ والوقت الذي سيتم فيه إرسال الطلب. إذا لم يتم تعيين سائق في وقت الإرسال، فسيفشل الإرسال. إذا كان الطلب فوريًا، فسيتم إرسال الطلب إلى السائقين في محيط الالتقاط.
@@ -2102,6 +2113,13 @@ order:
       no-dropoff-address: No dropoff address
       no-route-details: No route details available.
       no-order-linked: No order is linked to this issue.
+    prompts:
+      schedule-pickup-success: تمت جدولة الاستلام للطلب {orderId}.
+      schedule-pickup-bulk-success: تمت جدولة الاستلام لـ {count} طلبات.
+      schedule-pickup-none-eligible: اختر طلبات جاهزة للاستلام أو طلبات مباشرة للجدولة.
+    actions:
+      schedule-pickup: جدولة الاستلام
+      view-label: عرض ملصق الطلب
 vehicle:
   placeholders:
     filter-internal-id: اكتب أو امسح المعرفات الداخلية

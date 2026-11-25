@@ -1,19 +1,10 @@
 import Route from '@ember/routing/route';
+import { inject as service } from '@ember/service';
 
 export default class ManagementIndexRoute extends Route {
-    queryParams = {
-        view: { refreshModel: false },
-        status: { refreshModel: false },
-        filters: { refreshModel: false },
-        fleet: { refreshModel: false },
-        q: { refreshModel: false },
-        saved: { refreshModel: false },
-        assigned: { refreshModel: false },
-        window: { refreshModel: false },
-    };
+    @service hostRouter;
 
-    setupController(controller, model, transition) {
-        super.setupController(controller, model, transition);
-        controller.reload.perform();
+    beforeModel() {
+        return this.hostRouter.replaceWith('console.fleet-ops.management.drivers.index');
     }
 }

@@ -5,6 +5,9 @@
             <Badge @status={{@card.status}} />
         </div>
         <div class="flex flex-row space-x-1">
+            {{#if (and (not-eq @card.status "canceled") (not-eq @card.status "completed"))}}
+                <Button @size="xs" @icon="calendar-plus" @onClick={{fn this.orderActions.schedulePickup @card}} @helpText={{t "order.actions.schedule-pickup"}} @wrapperClass="self-start" />
+            {{/if}}
             {{#unless @card.driver_assigned}}
                 <Button @size="xs" @icon="user-plus" @onClick={{fn this.orderActions.assignDriver @card}} @helpText={{t "order.actions.assign-driver"}} @wrapperClass="self-start" />
             {{/unless}}

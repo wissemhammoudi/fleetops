@@ -6,7 +6,6 @@ export default class ManagementVehiclesIndexDetailsController extends Controller
     @service vehicleActions;
     @service('universe/menu-service') menuService;
     @service hostRouter;
-    @service intl;
 
     get tabs() {
         const registeredTabs = this.menuService.getMenuItems('fleet-ops:component:vehicle:details');
@@ -20,31 +19,6 @@ export default class ManagementVehiclesIndexDetailsController extends Controller
                 id: 'positions',
                 route: 'management.vehicles.index.details.positions',
                 label: 'Positions',
-            },
-            {
-                id: 'devices',
-                route: 'management.vehicles.index.details.devices',
-                label: 'Devices',
-            },
-            {
-                id: 'schedules',
-                route: 'management.vehicles.index.details.schedules',
-                label: 'Schedules',
-            },
-            {
-                id: 'work-orders',
-                route: 'management.vehicles.index.details.work-orders',
-                label: 'Work Orders',
-            },
-            {
-                id: 'maintenance-history',
-                route: 'management.vehicles.index.details.maintenance-history',
-                label: 'Maintenance',
-            },
-            {
-                id: 'inspections',
-                route: 'management.vehicles.index.details.inspections',
-                label: this.intl.t('resource.inspections'),
             },
             ...(isArray(registeredTabs) ? registeredTabs : []),
         ];

@@ -25,9 +25,8 @@ export default class SettingsIndexController extends Controller {
         },
         {
             title: 'Business And Data',
-            description: 'Keep commerce, metadata, and visual conventions aligned.',
+            description: 'Keep metadata and visual conventions aligned.',
             links: [
-                { label: 'Payments', route: 'settings.payments', icon: 'cash-register', description: 'Payment setup for operational commerce workflows.' },
                 { label: 'Custom Fields', route: 'settings.custom-fields', icon: 'pen-to-square', description: 'Operational metadata fields for Fleet-Ops records.' },
                 { label: 'Avatars', route: 'settings.avatars', icon: 'icons', description: 'Visual assets for driver, vehicle, and map displays.' },
             ],
@@ -77,13 +76,6 @@ export default class SettingsIndexController extends Controller {
             slug: 'fleet-ops/settings/map',
             title: 'Map settings',
             description: 'Set map providers, display defaults, and operator map behavior.',
-        },
-        {
-            label: 'Payments',
-            icon: 'cash-register',
-            slug: 'fleet-ops/settings/payments',
-            title: 'Payments guide',
-            description: 'Connect payment providers and payment behavior for Fleet-Ops workflows.',
         },
         {
             label: 'Notifications',

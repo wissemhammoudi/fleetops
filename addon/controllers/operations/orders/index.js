@@ -128,6 +128,11 @@ export default class OperationsOrdersIndexController extends Controller {
                 icon: 'user-plus',
                 fn: this.orderActions.bulkAssignDriver,
             },
+            {
+                label: this.intl.t('order.actions.schedule-pickup'),
+                icon: 'calendar-plus',
+                fn: this.orderActions.bulkSchedulePickup,
+            },
         ];
     }
 
@@ -315,6 +320,7 @@ export default class OperationsOrdersIndexController extends Controller {
                 label: this.intl.t('column.type'),
                 valuePath: 'type',
                 resizable: true,
+                hidden: true,
                 humanize: true,
                 sortable: true,
                 filterable: true,
@@ -405,6 +411,19 @@ export default class OperationsOrdersIndexController extends Controller {
                         label: this.intl.t('common.view-resource', { resource: this.intl.t('resource.order') }),
                         icon: 'eye',
                         fn: this.orderActions.transition.view,
+                        permission: 'fleet-ops view order',
+                    },
+                    {
+                        label: this.intl.t('order.actions.schedule-pickup'),
+                        icon: 'calendar-plus',
+                        fn: this.orderActions.schedulePickup,
+                        permission: 'fleet-ops update order',
+                        isVisible: (order) => !['canceled', 'completed'].includes(order.status),
+                    },
+                    {
+                        label: this.intl.t('order.actions.view-label'),
+                        icon: 'file-invoice',
+                        fn: this.orderActions.viewLabel,
                         permission: 'fleet-ops view order',
                     },
                     {

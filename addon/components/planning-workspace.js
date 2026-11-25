@@ -35,7 +35,6 @@ export default class PlanningWorkspaceComponent extends Component {
     @tracked selected = new Set();
     @tracked plannerKind = null;
     @tracked roundId = null;
-    @tracked showDirectPlanner = false;
     @tracked hasCollectionPreview = false;
     @tracked leftCollapsed = false;
     @tracked rightCollapsed = false;
@@ -195,7 +194,6 @@ export default class PlanningWorkspaceComponent extends Component {
         this.data = null;
         this.selected = new Set();
         this.roundId = null;
-        this.showDirectPlanner = false;
         this.hasCollectionPreview = false;
         this.plannerKind = null;
         this.stage = 'all';
@@ -244,7 +242,7 @@ export default class PlanningWorkspaceComponent extends Component {
     }
 
     @action chooseStage(stage) {
-        this.stage = stage;
+        this.stage = this.stage === stage ? 'all' : stage;
         this.load.perform(1);
     }
 
@@ -260,7 +258,6 @@ export default class PlanningWorkspaceComponent extends Component {
 
     @action openPlanner(kind) {
         this.plannerKind = kind;
-        this.showDirectPlanner = false;
         this.roundId = null;
     }
 
@@ -307,32 +304,5 @@ export default class PlanningWorkspaceComponent extends Component {
     @action closeRound() {
         this.roundId = null;
         this.load.perform();
-    }
-
-    @action toggleDirectPlanner() {
-        const company = this.currentUser.companyId;
-        if (this.showDirectPlanner) {
-            this.modalsManager.confirm({
-                title: this.intl.t('planning.switch-title'),
-                body: this.intl.t('planning.switch-help'),
-                confirm: () => {
-                    if (company !== this.currentUser.companyId) return;
-                    this.showDirectPlanner = false;
-                    this.load.perform();
-                },
-            });
-        } else if (this.hasCollectionPreview) {
-            this.modalsManager.confirm({
-                title: this.intl.t('planning.switch-title'),
-                body: this.intl.t('planning.switch-help'),
-                confirm: () => {
-                    if (company !== this.currentUser.companyId) return;
-                    this.showDirectPlanner = true;
-                    this.hasCollectionPreview = false;
-                },
-            });
-        } else {
-            this.showDirectPlanner = true;
-        }
     }
 }

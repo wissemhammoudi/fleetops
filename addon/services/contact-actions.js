@@ -273,11 +273,6 @@ export default class ContactActionsService extends ResourceActionService {
             onConverted: (vendor) => {
                 if (typeof options.onConverted === 'function') {
                     options.onConverted(vendor);
-                    return;
-                }
-
-                if (vendor?.id) {
-                    this.hostRouter.transitionTo('console.fleet-ops.management.vendors.index.details', vendor.id);
                 }
             },
         });

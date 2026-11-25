@@ -7,8 +7,6 @@ import isMenuItemActive from '@fleetbase/ember-ui/utils/is-menu-item-active';
 const SECTION_REGISTRY_KEYS = {
     operations: 'universeOperationsMenuItems',
     management: 'universeManagementMenuItems',
-    maintenance: 'universeMaintenanceMenuItems',
-    connectivity: 'universeConnectivityMenuItems',
     analytics: 'universeAnalyticsMenuItems',
     settings: 'universeSettingsMenuItems',
 };
@@ -26,8 +24,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
     @tracked universeMenuItems = [];
     @tracked universeOperationsMenuItems = [];
     @tracked universeManagementMenuItems = [];
-    @tracked universeConnectivityMenuItems = [];
-    @tracked universeMaintenanceMenuItems = [];
     @tracked universeAnalyticsMenuItems = [];
     @tracked universeSettingsMenuItems = [];
     @tracked universeMenuPanels = [];
@@ -65,20 +61,10 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                 label: this.intl.t('menu.resources'),
                 icon: 'truck',
                 route: 'management',
-                defaultRoute: 'management.index',
+                defaultRoute: 'management.drivers',
                 requiresVisibleChildren: true,
-                keywords: ['drivers', 'vehicles', 'fleets', 'contacts', 'places'],
+                keywords: ['drivers', 'vehicles', 'fleets', 'contacts', 'customers', 'places'],
                 children: this.resourcesItems,
-            }),
-            this.createBranch({
-                id: 'maintenance',
-                label: this.intl.t('menu.maintenance'),
-                icon: 'cog',
-                route: 'maintenance',
-                defaultRoute: 'maintenance.index',
-                requiresVisibleChildren: true,
-                keywords: ['work orders', 'equipment', 'parts'],
-                children: this.maintenanceItems,
             }),
             this.createBranch({
                 id: 'analytics',
@@ -97,7 +83,7 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                 route: 'settings',
                 defaultRoute: 'settings.index',
                 requiresVisibleChildren: true,
-                keywords: ['configuration', 'navigator', 'map', 'routing', 'notifications'],
+                keywords: ['configuration', 'navigator', 'map', 'routing', 'notifications', 'order config', 'service rates'],
                 children: this.settingsItems,
             }),
         ];
@@ -116,12 +102,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                 'live map',
             ]),
             ...this.planningItems,
-            this.createItem('menu.order-config', 'diagram-project', 'operations.order-config', 'fleet-ops list order-config', 'fleet-ops see order-config', [
-                'configuration',
-                'fields',
-                'entities',
-            ]),
-            this.createItem('menu.service-rates', 'file-invoice-dollar', 'operations.service-rates', 'fleet-ops list service-rate', 'fleet-ops see service-rate', ['rates', 'pricing']),
         ]);
     }
 
@@ -147,22 +127,13 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
 
     get resourcesItems() {
         return this.withRegistryItems('management', [
-            this.createHubItem(this.intl.t('menu.radar'), 'satellite-dish', 'management.index', 'fleet-ops list driver', 'fleet-ops see driver', [
-                'radar',
-                'needs attention',
-                'resources hub',
-                'triage',
-                'handover',
-                'shift changes',
-            ]),
             this.createItem('menu.drivers', 'id-card', 'management.drivers', 'fleet-ops list driver', 'fleet-ops see driver', ['driver', 'online drivers']),
             this.createItem('menu.vehicles', 'truck', 'management.vehicles', 'fleet-ops list vehicle', 'fleet-ops see vehicle', ['vehicle', 'track vehicles', 'online vehicles']),
             this.createItem('menu.fleets', 'user-group', 'management.fleets', 'fleet-ops list fleet', 'fleet-ops see fleet', ['fleet', 'teams']),
-            this.createItem('menu.vendors', 'warehouse', 'management.vendors', 'fleet-ops list vendor', 'fleet-ops see vendor'),
-            this.createItem('menu.contacts', 'address-book', 'management.contacts', 'fleet-ops list contact', 'fleet-ops see contact'),
+            this.createItem('menu.contacts', 'address-book', 'management.contacts.customers', 'fleet-ops list contact', 'fleet-ops see contact', ['customers', 'contacts']),
             this.createItem('menu.places', 'location-dot', 'management.places', 'fleet-ops list place', 'fleet-ops see place'),
-            this.createItem('menu.fuel-reports', 'gas-pump', 'management.fuel-reports', 'fleet-ops list fuel-report', 'fleet-ops see fuel-report'),
             this.createItem('menu.issues', 'triangle-exclamation', 'management.issues', 'fleet-ops list issue', 'fleet-ops see issue'),
+            this.createItem('menu.fuel-reports', 'gas-pump', 'management.fuel-reports', 'fleet-ops list fuel-report', 'fleet-ops see fuel-report'),
             ...(this.websiteRequestCounts.canList
                 ? [
                       {
@@ -176,29 +147,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                       },
                   ]
                 : []),
-        ]);
-    }
-
-    get maintenanceItems() {
-        return this.withRegistryItems('maintenance', [
-            this.createHubItem('Maintenance Hub', 'wrench', 'maintenance.index', 'fleet-ops list maintenance-schedule', 'fleet-ops see maintenance-schedule', [
-                'maintenance hub',
-                'service readiness',
-                'maintenance control panel',
-            ]),
-            this.createItem('menu.inspection-forms', 'clipboard-check', 'maintenance.inspection-forms', 'fleet-ops list inspection-form', 'fleet-ops see inspection-form', [
-                'dvir',
-                'checklist',
-            ]),
-            this.createItem('menu.inspections', 'list-check', 'maintenance.inspection-submissions', 'fleet-ops list inspection-submission', 'fleet-ops see inspection-submission', [
-                'dvir',
-                'defects',
-            ]),
-            this.createItem('menu.schedules', 'calendar-alt', 'maintenance.schedules', 'fleet-ops list maintenance-schedule', 'fleet-ops see maintenance-schedule'),
-            this.createItem('menu.work-orders', 'clipboard-list', 'maintenance.work-orders', 'fleet-ops list work-order', 'fleet-ops see work-order'),
-            this.createItem('menu.maintenances', 'history', 'maintenance.maintenances', 'fleet-ops list maintenance', 'fleet-ops see maintenance'),
-            this.createItem('menu.equipment', 'trailer', 'maintenance.equipment', 'fleet-ops list equipment', 'fleet-ops see equipment'),
-            this.createItem('menu.parts', 'cog', 'maintenance.parts', 'fleet-ops list part', 'fleet-ops see part'),
         ]);
     }
 
@@ -216,9 +164,14 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                 'configuration dashboard',
                 'setup focus',
             ]),
+            this.createItem('menu.order-config', 'diagram-project', 'operations.order-config', 'fleet-ops list order-config', 'fleet-ops see order-config', [
+                'configuration',
+                'fields',
+                'entities',
+            ]),
+            this.createItem('menu.service-rates', 'file-invoice-dollar', 'operations.service-rates', 'fleet-ops list service-rate', 'fleet-ops see service-rate', ['rates', 'pricing']),
             this.createItem('menu.navigator-app', 'location-arrow', 'settings.navigator-app', 'fleet-ops view navigator-settings', 'fleet-ops see navigator-settings'),
             this.createItem('menu.map', 'map', 'settings.map', 'fleet-ops view map-settings', 'fleet-ops see map-settings'),
-            this.createItem('menu.payments', 'cash-register', 'settings.payments', 'fleet-ops view payments', 'fleet-ops see payments'),
             this.createItem('menu.notifications', 'bell', 'settings.notifications', 'fleet-ops view notification-settings', 'fleet-ops see notification-settings'),
             this.createItem('menu.routing', 'route', 'settings.routing', 'fleet-ops view routing-settings', 'fleet-ops see routing-settings'),
             this.createItem('menu.orchestrator', 'circle-nodes', 'settings.orchestrator', 'fleet-ops view routing-settings', 'fleet-ops see routing-settings'),
@@ -271,8 +224,6 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
         this.universeMenuItems = registeredMenuItems.filter((menuItem) => menuItem.section === undefined);
         this.universeOperationsMenuItems = registeredMenuItems.filter((menuItem) => menuItem.section === 'operations');
         this.universeManagementMenuItems = registeredMenuItems.filter((menuItem) => menuItem.section === 'management');
-        this.universeMaintenanceMenuItems = registeredMenuItems.filter((menuItem) => menuItem.section === 'maintenance');
-        this.universeConnectivityMenuItems = registeredMenuItems.filter((menuItem) => menuItem.section === 'connectivity');
         this.universeAnalyticsMenuItems = registeredMenuItems.filter((menuItem) => menuItem.section === 'analytics');
         this.universeSettingsMenuItems = registeredMenuItems.filter((menuItem) => menuItem.section === 'settings');
     }
@@ -366,43 +317,28 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
             'operations.orders': 0,
             'operations.orchestrator': 1,
             'operations.scheduler': 2,
-            'operations.order-config': 3,
-            'operations.service-rates': 4,
-            'management.index': 0,
-            'management.drivers': 1,
-            'management.vehicles': 2,
-            'management.trailers': 3,
-            'management.fleets': 4,
-            'management.vendors': 5,
-            'management.contacts': 6,
-            'management.places': 7,
-            'management.fuel-reports': 8,
-            'management.fuel-transactions': 9,
-            'management.issues': 10,
-            'management.website-requests': 11,
-            'maintenance.index': 0,
-            'maintenance.schedules': 1,
-            'maintenance.work-orders': 2,
-            'maintenance.maintenances': 3,
-            'maintenance.equipment': 4,
-            'maintenance.parts': 5,
-            'connectivity.telematics': 0,
-            'connectivity.fuel-providers': 1,
-            'connectivity.devices': 2,
-            'connectivity.sensors': 3,
-            'connectivity.events': 4,
+            'management.drivers': 0,
+            'management.vehicles': 1,
+            'management.fleets': 2,
+            'management.contacts': 3,
+            'management.contacts.customers': 3,
+            'management.places': 4,
+            'management.issues': 5,
+            'management.fuel-reports': 6,
+            'management.website-requests': 7,
             'analytics.index': 0,
             'analytics.reports': 1,
             'settings.index': 0,
-            'settings.navigator-app': 1,
-            'settings.map': 2,
-            'settings.payments': 3,
-            'settings.notifications': 4,
-            'settings.routing': 5,
-            'settings.orchestrator': 6,
-            'settings.scheduling': 7,
-            'settings.custom-fields': 8,
-            'settings.avatars': 9,
+            'operations.order-config': 1,
+            'operations.service-rates': 2,
+            'settings.navigator-app': 3,
+            'settings.map': 4,
+            'settings.notifications': 5,
+            'settings.routing': 6,
+            'settings.orchestrator': 7,
+            'settings.scheduling': 8,
+            'settings.custom-fields': 9,
+            'settings.avatars': 10,
         };
 
         return priorities[route] ?? 0;

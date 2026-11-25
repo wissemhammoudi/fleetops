@@ -1,0 +1,79 @@
+<Modal::Default @modalIsOpened={{@modalIsOpened}} @options={{@options}} @confirm={{@onConfirm}} @decline={{@onDecline}}>
+    <div class="modal-body-container space-y-4">
+        {{#if (eq @options.mode "collection-ready")}}
+            <div class="rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 px-3 py-2 text-xs text-indigo-800 dark:text-indigo-200">
+                {{#if @options.bulkCount}}
+                    <p class="font-semibold">{{t "modals.order-schedule-pickup.orders-selected" count=@options.bulkCount}}</p>
+                {{/if}}
+                <p>{{t "modals.order-schedule-pickup.collection-help"}}</p>
+            </div>
+
+            {{#if @options.pickupDates.length}}
+                <InputGroup @name={{t "modals.order-schedule-pickup.pickup-date"}}>
+                    <select class="form-select form-input w-full" aria-label={{t "modals.order-schedule-pickup.pickup-date"}} {{on "change" @options.selectPickupDate}}>
+                        <option value="">{{t "modals.order-schedule-pickup.select-pickup-date"}}</option>
+                        {{#each @options.pickupDates as |date|}}
+                            <option value={{date}} selected={{eq date @options.selectedPickupDate}}>{{date}}</option>
+                        {{/each}}
+                    </select>
+                </InputGroup>
+            {{else}}
+                <div class="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 space-y-2">
+                    <p>{{t "modals.order-schedule-pickup.no-dates"}}</p>
+                    <Button @size="sm" @icon="circle-nodes" @text={{t "modals.order-schedule-pickup.open-orchestrator"}} @onClick={{@options.openOrchestrator}} />
+                </div>
+            {{/if}}
+        {{else if (eq @options.mode "collection-status")}}
+            <div class="rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-3 space-y-2 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="font-semibold text-gray-600 dark:text-gray-300">{{t "modals.order-schedule-pickup.current-status"}}</span>
+                    <Badge @status={{@options.workflowStateLabel}} />
+                </div>
+                {{#if @options.plannedAt}}
+                    <div class="text-gray-600 dark:text-gray-300">
+                        {{t "modals.order-schedule-pickup.pickup-date"}}:
+                        <strong>{{format-date-fns @options.plannedAt "PPP p"}}</strong>
+                    </div>
+                {{/if}}
+                <p class="text-gray-500 dark:text-gray-400">{{t "modals.order-schedule-pickup.status-help"}}</p>
+            </div>
+            <div class="flex justify-end">
+                <Button @type="primary" @icon="circle-nodes" @text={{t "modals.order-schedule-pickup.open-orchestrator"}} @onClick={{@options.openOrchestrator}} />
+            </div>
+        {{else}}
+            {{#if @options.bulkCount}}
+                <div class="rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200">
+                    {{t "modals.order-schedule-pickup.orders-selected" count=@options.bulkCount}}
+                </div>
+            {{/if}}
+
+            <div class="input-group">
+                <InputLabel @labelText={{t "modals.order-schedule-pickup.pickup-datetime"}} />
+                <DateTimeInput
+                    class="form-input w-full"
+                    @value={{@options.scheduledAt}}
+                    @minDate={{format-date-fns (now) "yyyy-MM-d"}}
+                    @minTime={{format-date-fns (now) "HH:mm"}}
+                    @onUpdate={{@options.setScheduledAt}}
+                />
+            </div>
+
+            <InputGroup @name={{t "modals.order-schedule-pickup.optional-driver"}}>
+                <ModelSelect
+                    @modelName="driver"
+                    @selectedItemComponent={{component "select-option/driver" compact=true}}
+                    @selectedModel={{@options.driverAssigned}}
+                    @placeholder={{t "modals.order-assign-driver.select-assign"}}
+                    @triggerClass="form-select form-input"
+                    @infiniteScroll={{false}}
+                    @renderInPlace={{true}}
+                    @allowClear={{true}}
+                    @onChange={{@options.selectDriver}}
+                    as |model|
+                >
+                    <SelectOption::Driver @option={{model}} />
+                </ModelSelect>
+            </InputGroup>
+        {{/if}}
+    </div>
+</Modal::Default>
