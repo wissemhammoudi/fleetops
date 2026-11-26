@@ -16,12 +16,26 @@
                     <span>{{t "order.fields.driver-assigned"}}</span>
                 </div>
                 <div class="field-value">
-                    <Driver::Pill
-                        @driver={{@resource.driver_assigned}}
-                        @onClick={{this.focusOrderAssignedDriver}}
-                        @titleFallback="No driver assigned"
-                        @titleClass={{unless @resource.driver_assigned "text-gray-300"}}
-                    />
+                    {{#if @resource.driver_assigned}}
+                        <Driver::Pill
+                            @driver={{@resource.driver_assigned}}
+                            @onClick={{this.focusOrderAssignedDriver}}
+                            @titleFallback="No driver assigned"
+                            @titleClass={{unless @resource.driver_assigned "text-gray-300"}}
+                        />
+                    {{else if @resource.meta.collection_workflow.pickup_driver_name}}
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium">{{@resource.meta.collection_workflow.pickup_driver_name}}</span>
+                            <Badge @hideStatusDot={{true}} @status="info">Pickup</Badge>
+                        </div>
+                    {{else}}
+                        <Driver::Pill
+                            @driver={{@resource.driver_assigned}}
+                            @onClick={{this.focusOrderAssignedDriver}}
+                            @titleFallback="No driver assigned"
+                            @titleClass="text-gray-300"
+                        />
+                    {{/if}}
                 </div>
             </div>
             <div class="field-info-container">
@@ -29,7 +43,16 @@
                     <span>{{t "order.fields.vehicle-assigned"}}</span>
                 </div>
                 <div class="field-value">
-                    <Vehicle::Pill @vehicle={{@resource.vehicle_assigned}} @titleFallback="No vehicle assigned" @titleClass={{unless @resource.vehicle_assigned "text-gray-300"}} />
+                    {{#if @resource.vehicle_assigned}}
+                        <Vehicle::Pill @vehicle={{@resource.vehicle_assigned}} @titleFallback="No vehicle assigned" @titleClass={{unless @resource.vehicle_assigned "text-gray-300"}} />
+                    {{else if @resource.meta.collection_workflow.pickup_vehicle_name}}
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium">{{@resource.meta.collection_workflow.pickup_vehicle_name}}</span>
+                            <Badge @hideStatusDot={{true}} @status="info">Pickup</Badge>
+                        </div>
+                    {{else}}
+                        <Vehicle::Pill @vehicle={{@resource.vehicle_assigned}} @titleFallback="No vehicle assigned" @titleClass="text-gray-300" />
+                    {{/if}}
                 </div>
             </div>
             <div class="field-info-container">

@@ -33,22 +33,30 @@ class CollectionRoundController extends Controller
 
         $orderUuids = $rounds->flatMap(fn ($round) => collect($round->stops)->pluck('order_uuid'))
             ->filter()->unique()->values()->all();
-        $trackingByOrder = $orderUuids
+        $ordersByUuid = $orderUuids
             ? \Fleetbase\FleetOps\Models\Order::where('company_uuid', $driver->company_uuid)
                 ->whereIn('uuid', $orderUuids)
-                ->with('trackingNumber')
+                ->with(['trackingNumber', 'payload.entities'])
                 ->get()
-                ->mapWithKeys(fn ($order) => [$order->uuid => $order->trackingNumber?->tracking_number])
-                ->all()
-            : [];
+                ->keyBy('uuid')
+            : collect();
 
-        return response()->json(['rounds' => $rounds->map(function ($round) use ($driver, $trackingByOrder) {
+        return response()->json(['rounds' => $rounds->map(function ($round) use ($driver, $ordersByUuid) {
                 $data = $round->toArray();
                 $data['depot'] = \Fleetbase\FleetOps\Support\CollectionDepot::destination($round);
                 if (!empty($data['stops']) && is_array($data['stops'])) {
-                    $data['stops'] = array_map(function ($stop) use ($trackingByOrder) {
-                        if (empty($stop['tracking_number']) && !empty($stop['order_uuid']) && isset($trackingByOrder[$stop['order_uuid']])) {
-                            $stop['tracking_number'] = $trackingByOrder[$stop['order_uuid']];
+                    $data['stops'] = array_map(function ($stop) use ($ordersByUuid) {
+                        $order = !empty($stop['order_uuid']) ? $ordersByUuid->get($stop['order_uuid']) : null;
+                        if ($order) {
+                            if (empty($stop['tracking_number']) && $order->trackingNumber?->tracking_number) {
+                                $stop['tracking_number'] = $order->trackingNumber->tracking_number;
+                            }
+                            if (empty($stop['tracking_number_uuid']) && $order->trackingNumber?->uuid) {
+                                $stop['tracking_number_uuid'] = $order->trackingNumber->uuid;
+                            }
+                            if (empty($stop['entity_uuids'])) {
+                                $stop['entity_uuids'] = $order->payload?->entities?->pluck('uuid')->filter()->values()->all() ?? [];
+                            }
                         }
                         return $stop;
                     }, $data['stops']);

@@ -3,6 +3,7 @@
 namespace Fleetbase\FleetOps\Http\Resources\v1;
 
 use Fleetbase\FleetOps\Models\Contact as ContactModel;
+use Fleetbase\FleetOps\Support\CollectionRounds;
 use Fleetbase\FleetOps\Support\Utils;
 use Fleetbase\Http\Resources\Comment;
 use Fleetbase\Http\Resources\File;
@@ -28,6 +29,13 @@ class Order extends FleetbaseResource
         $withTrackerData = $request->has('with_tracker_data') || !empty($this->resource->tracker_data);
         $withEta         = $request->has('with_eta') || !empty($this->resource->eta);
         $tracker         = ($withTrackerData || $withEta) ? $this->resource->tracker() : null;
+        $meta            = data_get($this, 'meta', Utils::createObject());
+        if ($isInternal && is_array($meta) && data_get($meta, 'collection_workflow.collection_round_uuid') && !data_get($meta, 'collection_workflow.pickup_driver_name')) {
+            $pickupAssignment = CollectionRounds::pickupAssignmentForOrder($this->resource);
+            if ($pickupAssignment) {
+                $meta['collection_workflow'] = array_merge((array) $meta['collection_workflow'], $pickupAssignment);
+            }
+        }
 
         return $this->withCustomFields([
             'id'                   => $this->when($isInternal, $this->id, $this->public_id),
@@ -98,7 +106,7 @@ class Order extends FleetbaseResource
             'eta'                  => $this->when($withEta, function () use ($tracker) {
                 return $this->resource->eta ?? ($tracker ? $tracker->eta() : null);
             }),
-            'meta'                 => data_get($this, 'meta', Utils::createObject()),
+            'meta'                 => $meta,
             'dispatched_at'        => $this->dispatched_at,
             'started_at'           => $this->started_at,
             'scheduled_at'         => $this->scheduled_at,

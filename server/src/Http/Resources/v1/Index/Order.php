@@ -2,6 +2,7 @@
 
 namespace Fleetbase\FleetOps\Http\Resources\v1\Index;
 
+use Fleetbase\FleetOps\Support\CollectionRounds;
 use Fleetbase\FleetOps\Support\Utils;
 use Fleetbase\Http\Resources\FleetbaseResource;
 use Fleetbase\Support\Http;
@@ -122,9 +123,15 @@ class Order extends FleetbaseResource
             'updated_at'           => $this->updated_at,
 
             // Meta flag to indicate this is an index resource
-            'meta'                 => [
-                '_index_resource' => true,
-            ],
+            'meta'                 => array_filter([
+                '_index_resource'     => true,
+                'collection_workflow' => $isInternal && data_get($this->meta, 'collection_workflow.collection_round_uuid')
+                    ? array_merge(
+                        (array) data_get($this->meta, 'collection_workflow', []),
+                        CollectionRounds::pickupAssignmentForOrder($this->resource) ?? []
+                    )
+                    : null,
+            ], static fn ($value) => $value !== null),
         ];
     }
 }

@@ -182,7 +182,9 @@ class Order extends Model
         $this->route_uuid = null;
         $this->unsetRelation('route');
         $this->unsetRelation('payload');
+        $deliveryDriver = Driver::where('company_uuid', $this->company_uuid)->where('uuid', $leg->driver_uuid)->first();
         $this->driver_assigned_uuid = $leg->driver_uuid;
+        $this->vehicle_assigned_uuid = $deliveryDriver?->vehicle_uuid;
         $this->adhoc = false;
         $this->recordingCollectionReadiness = true;
         $acceptance = $leg->manifest['acceptance'];

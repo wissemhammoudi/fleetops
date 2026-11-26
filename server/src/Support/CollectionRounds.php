@@ -133,6 +133,7 @@ class CollectionRounds
                 }
                 $round->driver_uuid = $driver->uuid;
                 $round->depot = \Illuminate\Support\Arr::only((array) $depot, ['uuid', 'name', 'street1', 'street2', 'city', 'province', 'postal_code', 'country', 'phone', 'location_wkt']);
+                self::syncOrderPickupAssignment($round, $driver);
             } elseif ($action === 'reschedule') {
                 abort_unless($round->status === 'draft' && count($round->stops), 409, 'Only nonempty draft pickups can be moved. Recall released work before changing its date.');
                 $calendar = CollectionSchedule::forCompany($company);
@@ -188,10 +189,22 @@ class CollectionRounds
 
                 CollectionDepot::prepare($round, $orders);
                 $round->status = 'released';
+                self::syncOrderPickupAssignment($round, $driver);
             } elseif ($action === 'cancel') {
                 abort_unless(in_array($round->status, ['draft', 'released'], true), 409, 'Only an unstarted round can be recalled.');
                 foreach (self::orders($round) as $order) {
                     $order->recordCollectionRound($round->uuid, 'awaiting_preparation', true);
+                    $meta = $order->meta ?? [];
+                    if (isset($meta['collection_workflow']) && is_array($meta['collection_workflow'])) {
+                        unset(
+                            $meta['collection_workflow']['pickup_driver_uuid'],
+                            $meta['collection_workflow']['pickup_driver_name'],
+                            $meta['collection_workflow']['pickup_driver_phone'],
+                            $meta['collection_workflow']['pickup_vehicle_uuid'],
+                            $meta['collection_workflow']['pickup_vehicle_name'],
+                        );
+                        $order->meta = $meta;
+                    }
                     $order->save();
                 }
                 self::audit($round, 'recalled_stops', ['stops' => $round->stops, 'custody' => $round->custody]);
@@ -304,6 +317,16 @@ class CollectionRounds
             abort_unless(($activeVisit['kind'] ?? null) === 'pickup' && ($activeVisit['round_uuid'] ?? null) === $round->uuid
                 && ($activeVisit['stop_uuid'] ?? null) === $stop['uuid'], 409, 'Press Start pickup for this visit before recording its result.');
             $order = Order::where('company_uuid', $company)->where('uuid', $stop['order_uuid'])->lockForUpdate()->firstOrFail();
+            $scannedQr = trim((string) ($input['scanned_qr'] ?? ''));
+            if ($outcome === 'collected' && $scannedQr !== '') {
+                $checksInput = is_array($input['checks'] ?? null) ? $input['checks'] : [];
+                foreach (DeliveryOptions::driverChecks() as $check) {
+                    if (!array_key_exists($check['key'], $checksInput)) {
+                        $checksInput[$check['key']] = true;
+                    }
+                }
+                $input['checks'] = $checksInput;
+            }
             $outcome = $input['outcome'];
             $inspection = null;
             if (in_array($outcome, ['collected', 'packaging_refused'], true)) {
@@ -313,7 +336,6 @@ class CollectionRounds
             if ($outcome === 'collected') {
                 self::assertContract($order, $round);
             }
-            $scannedQr = trim((string) ($input['scanned_qr'] ?? ''));
             $stops[$index] = $stop + ['request_id' => $input['request_id'], 'request_hash' => $requestHash,
                 'reason' => trim($input['reason'] ?? ''), 'inspection' => $inspection, 'at' => now()->toISOString(), 'driver_uuid' => $driver]
                 + ($scannedQr !== '' ? ['scanned_qr' => $scannedQr] : []);
@@ -326,6 +348,12 @@ class CollectionRounds
             if (($routing['active_stop_uuid'] ?? null) === $stop['uuid']) {
                 unset($routing['active_stop_uuid']);
                 $round->routing = $routing;
+            }
+            $driverMeta = $assignedDriver->meta ?? [];
+            if (data_get($driverMeta, 'navigator_active_visit.kind') === 'pickup'
+                && data_get($driverMeta, 'navigator_active_visit.stop_uuid') === $stop['uuid']) {
+                unset($driverMeta['navigator_active_visit']);
+                $assignedDriver->updateQuietly(['meta' => $driverMeta]);
             }
             $orderStops = collect($stops)->where('order_uuid', $order->uuid);
             if (!$orderStops->contains('status', 'pending')) {
@@ -459,6 +487,62 @@ class CollectionRounds
         $valid = $routed && $end === null ? CollectionSchedule::operatesOn($planned, $calendar) : CollectionSchedule::containsPickup($planned, $calendar, $end);
         abort_unless($valid, 409,
             'The collection calendar changed. Recall any unstarted round, then ask the customer to withdraw and reconfirm readiness for Dispatcher planning.');
+    }
+
+    public static function syncOrderPickupAssignment(CollectionRound $round, ?Driver $driver = null): void
+    {
+        $assignedDriver = $driver ?? ($round->driver_uuid
+            ? Driver::where('company_uuid', $round->company_uuid)->where('uuid', $round->driver_uuid)->with('user')->first()
+            : null);
+        if (!$assignedDriver) {
+            return;
+        }
+        $vehicleUuid = data_get($round->routing, 'vehicle_uuid') ?: $assignedDriver->vehicle_uuid;
+        $vehicle = $vehicleUuid
+            ? Vehicle::where('company_uuid', $round->company_uuid)->where('uuid', $vehicleUuid)->first()
+            : null;
+        $info = [
+            'pickup_driver_uuid'  => $assignedDriver->uuid,
+            'pickup_driver_name'  => $assignedDriver->name,
+            'pickup_driver_phone' => $assignedDriver->phone,
+            'pickup_vehicle_uuid' => $vehicle?->uuid,
+            'pickup_vehicle_name' => $vehicle?->display_name ?: $vehicle?->plate_number,
+        ];
+        foreach (self::orders($round) as $order) {
+            $meta = is_array($order->meta) ? $order->meta : [];
+            $workflow = is_array($meta['collection_workflow'] ?? null) ? $meta['collection_workflow'] : [];
+            $meta['collection_workflow'] = array_merge($workflow, $info);
+            $order->meta = $meta;
+            $order->save();
+        }
+    }
+
+    public static function pickupAssignmentForOrder(Order $order): ?array
+    {
+        $roundUuid = data_get($order->meta, 'collection_workflow.collection_round_uuid');
+        if (!$roundUuid) {
+            return null;
+        }
+        $round = CollectionRound::where('company_uuid', $order->company_uuid)->where('uuid', $roundUuid)->first();
+        if (!$round || !$round->driver_uuid) {
+            return null;
+        }
+        $driver = Driver::where('company_uuid', $order->company_uuid)->where('uuid', $round->driver_uuid)->with('user')->first();
+        if (!$driver) {
+            return null;
+        }
+        $vehicleUuid = data_get($round->routing, 'vehicle_uuid') ?: $driver->vehicle_uuid;
+        $vehicle = $vehicleUuid
+            ? Vehicle::where('company_uuid', $order->company_uuid)->where('uuid', $vehicleUuid)->first()
+            : null;
+
+        return [
+            'pickup_driver_uuid'  => $driver->uuid,
+            'pickup_driver_name'  => $driver->name,
+            'pickup_driver_phone' => $driver->phone,
+            'pickup_vehicle_uuid' => $vehicle?->uuid,
+            'pickup_vehicle_name' => $vehicle?->display_name ?: $vehicle?->plate_number,
+        ];
     }
 
     public static function recordPauseAudit(CollectionRound $round, array $detail = []): void
