@@ -522,20 +522,29 @@ class DriverController extends Controller
      */
     public function login(Request $request)
     {
-        $identity = $request->input('identity');
-        $password = $request->input('password');
-        // $attrs    = $request->input(['name', 'phone', 'email']);
+        $identity = trim((string) $request->input('identity', ''));
+        $password = (string) $request->input('password', '');
 
-        // Get driver attempting to authenticate via phone
-        $user = User::where(
-            function ($query) use ($identity) {
-                $query->where('phone', static::phone($identity));
-                $query->orWhere('email', $identity);
-            }
-        )->whereHas('driver')->first();
+        if ($identity === '' || $password === '') {
+            return response()->apiError('Email or phone and password are required.', 422);
+        }
+
+        // Get driver attempting to authenticate via email or phone
+        $user = User::whereHas('driver')
+            ->whereNull('deleted_at')
+            ->where(function ($query) use ($identity) {
+                if (Utils::isEmail($identity)) {
+                    $query->whereRaw('LOWER(email) = ?', [strtolower($identity)]);
+                } else {
+                    $normalizedPhone = static::phone($identity);
+                    $query->where('phone', $normalizedPhone)
+                        ->orWhere('phone', $identity);
+                }
+            })
+            ->first();
 
         // Check password to authenticate driver
-        if (!$user || !is_string($user->password) || !Hash::check((string) $password, $user->password)) {
+        if (!$user || !is_string($user->password) || !Hash::check($password, $user->password)) {
             return response()->apiError('Authentication failed using password provided.', 401);
         }
 
@@ -561,24 +570,48 @@ class DriverController extends Controller
             return response()->apiError($e->getMessage());
         }
 
+        try {
+            DB::table('drivers')->where('uuid', $driver->uuid)->update(['auth_token' => $token->plainTextToken]);
+        } catch (\Throwable $e) {
+            if (app()->bound('sentry')) {
+                app('sentry')->captureException($e);
+            }
+        }
+
         $driver->token = $token->plainTextToken;
 
         return new DriverResource($driver);
     }
 
     /**
-     * Attempts authentication with phone number via SMS verification.
+     * Attempts authentication with phone number or email via verification code.
      *
      * @return \Illuminate\Http\Response
      */
     public function loginWithPhone()
     {
-        $phone = static::phone();
+        $rawIdentity = trim((string) (request()->input('identity') ?? request()->input('email') ?? request()->input('phone') ?? ''));
 
-        // check if user exists
-        $user = User::where('phone', $phone)->whereHas('driver')->whereNull('deleted_at')->first();
-        if (!$user) {
-            return response()->apiError('No driver with this phone # found.');
+        if ($rawIdentity === '') {
+            return response()->apiError('Phone number or email is required.', 422);
+        }
+
+        $isEmail = Utils::isEmail($rawIdentity);
+
+        if ($isEmail) {
+            $user = User::whereRaw('LOWER(email) = ?', [strtolower($rawIdentity)])
+                ->whereHas('driver')
+                ->whereNull('deleted_at')
+                ->first();
+            if (!$user) {
+                return response()->apiError('No driver with this email found.');
+            }
+        } else {
+            $phone = static::phone($rawIdentity);
+            $user = User::where('phone', $phone)->whereHas('driver')->whereNull('deleted_at')->first();
+            if (!$user) {
+                return response()->apiError('No driver with this phone # found.');
+            }
         }
 
         if (static::isLoginDeactivated($user)) {
@@ -595,8 +628,8 @@ class DriverController extends Controller
             },
         ];
 
-        // Generate verification token via SMS only when SMS transport is configured
-        if (static::isSmsConfiguredFor($user->phone)) {
+        // Generate verification token via SMS only when requesting by phone and SMS transport is configured
+        if (!$isEmail && static::isSmsConfiguredFor($user->phone)) {
             try {
                 VerificationCode::generateSmsVerificationFor($user, 'driver_login', $verificationOptions);
 
@@ -621,7 +654,7 @@ class DriverController extends Controller
             }
         }
 
-        return response()->apiError('Unable to send SMS Verification code.');
+        return response()->apiError($isEmail ? 'Unable to send email verification code.' : 'Unable to send SMS Verification code.');
     }
 
     protected static function isSmsConfiguredFor(?string $phone = null): bool
@@ -645,7 +678,9 @@ class DriverController extends Controller
      */
     public function verifyCode(Request $request)
     {
-        $identity = Utils::isEmail($request->identity) ? $request->identity : static::phone($request->identity);
+        $rawIdentity = trim((string) $request->input('identity', ''));
+        $isEmail = Utils::isEmail($rawIdentity);
+        $identity = $isEmail ? $rawIdentity : static::phone($rawIdentity);
         $code     = $request->input('code');
         $for      = $request->input('for', 'driver_login');
         $attrs    = $request->input(['name', 'phone', 'email']);
@@ -655,9 +690,13 @@ class DriverController extends Controller
         }
 
         // check if user exists
-        $user = User::whereHas('driver')->where(function ($query) use ($identity) {
-            $query->where('phone', $identity);
-            $query->orWhere('email', $identity);
+        $user = User::whereHas('driver')->whereNull('deleted_at')->where(function ($query) use ($identity, $rawIdentity, $isEmail) {
+            if ($isEmail) {
+                $query->whereRaw('LOWER(email) = ?', [strtolower($rawIdentity)]);
+            } else {
+                $query->where('phone', $identity)
+                    ->orWhere('phone', $rawIdentity);
+            }
         })->first();
 
         if (!$user) {
