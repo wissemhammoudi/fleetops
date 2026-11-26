@@ -2,6 +2,7 @@
 
 namespace Fleetbase\FleetOps\Http\Controllers\Api\v1;
 
+use Fleetbase\FleetOps\Models\CollectionDeliveryLeg;
 use Fleetbase\FleetOps\Models\CollectionRound;
 use Fleetbase\FleetOps\Models\Driver;
 use Fleetbase\FleetOps\Models\Order;
@@ -39,8 +40,12 @@ class OrderChatController extends Controller
             ->where('uuid', $roundUuid)
             ->where('driver_uuid', $driver->uuid)
             ->exists();
+        $assignedDeliveryLeg = CollectionDeliveryLeg::where('company_uuid', $driver->company_uuid)
+            ->where('driver_uuid', $driver->uuid)
+            ->where('order_uuid', $order->uuid)
+            ->exists();
 
-        abort_unless($assignedDirectly || $assignedToRound, 403, 'You are not assigned to this order.');
+        abort_unless($assignedDirectly || $assignedToRound || $assignedDeliveryLeg, 403, 'You are not assigned to this order.');
 
         return $order;
     }
@@ -52,7 +57,7 @@ class OrderChatController extends Controller
         $channel = OrderChatChannel::ensureForOrder($order, $driver, null, $driver->user_uuid);
 
         return response()->json(
-            ['chat_channel' => (new ChatChannelResource($channel))->resolve()]
+            ['chat_channel' => (new ChatChannelResource($channel))->toResponse(request())->getData(true)]
             + OrderChatChannel::serializeChannel($channel, $order, $driver->user_uuid)
         );
     }
@@ -65,7 +70,7 @@ class OrderChatController extends Controller
 
         return response()->json([
             'message'      => $result['message'],
-            'chat_channel' => (new ChatChannelResource($result['channel']))->resolve(),
+            'chat_channel' => (new ChatChannelResource($result['channel']))->toResponse($request)->getData(true),
         ] + $result['payload']);
     }
 

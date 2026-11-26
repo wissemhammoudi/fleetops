@@ -346,6 +346,17 @@ class CollectionRounds
                 ...($scannedQr !== '' ? ['scanned_qr' => $scannedQr] : []),
             ]);
 
+            if (in_array($outcome, ['absent', 'not_ready', 'packaging_refused'], true) && $assignedDriver->user_uuid) {
+                try {
+                    $label = str_replace('_', ' ', ucfirst($outcome));
+                    $note = trim((string) ($input['reason'] ?? ''));
+                    $chatRequest = new \Illuminate\Http\Request(['content' => "[Pickup problem - {$label}] {$note}"]);
+                    OrderChatChannel::sendMessage($order, (string) $assignedDriver->user_uuid, $chatRequest, $assignedDriver);
+                } catch (\Throwable) {
+                    // Keep stop exception recorded even if chat posting fails.
+                }
+            }
+
             return $round;
         });
     }

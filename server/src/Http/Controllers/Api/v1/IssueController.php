@@ -8,6 +8,9 @@ use Fleetbase\FleetOps\Http\Resources\v1\Issue as DeletedIssue;
 use Fleetbase\FleetOps\Http\Resources\v1\Issue as IssueResource;
 use Fleetbase\FleetOps\Models\Driver;
 use Fleetbase\FleetOps\Models\Issue;
+use Fleetbase\FleetOps\Models\Order;
+use Fleetbase\FleetOps\Support\OrderChatChannel;
+use Fleetbase\LaravelMysqlSpatial\Types\Point;
 use Fleetbase\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
@@ -26,6 +29,8 @@ class IssueController extends Controller
         $input = $request->only([
             'driver',
             'location',
+            'order',
+            'order_uuid',
             'category',
             'type',
             'report',
@@ -46,6 +51,25 @@ class IssueController extends Controller
             );
         }
 
+        // resolve linked order when provided
+        $orderRef = $input['order_uuid'] ?? $input['order'] ?? null;
+        unset($input['order']);
+        $order = null;
+        if (is_string($orderRef) && trim($orderRef) !== '') {
+            $order = Order::where('company_uuid', $driver->company_uuid)
+                ->where(function ($query) use ($orderRef) {
+                    $query->where('uuid', $orderRef)->orWhere('public_id', $orderRef);
+                })
+                ->first();
+            if ($order) {
+                $input['order_uuid'] = $order->uuid;
+            }
+        }
+
+        if (empty($input['location'])) {
+            $input['location'] = $driver->location ?? new Point(0, 0);
+        }
+
         // get the user uuid
         $input['company_uuid']      = $driver->company_uuid;
         $input['driver_uuid']       = $driver->uuid;
@@ -54,6 +78,18 @@ class IssueController extends Controller
 
         // create the issue
         $issue = $this->createIssue($input);
+
+        // forward order problems to the 3-party Order Chat so admin & customer see them right away
+        if ($order && $driver->user_uuid) {
+            try {
+                $label = trim((string) ($issue->category ?: $issue->type ?: 'Problem'));
+                $summary = trim((string) ($issue->report ?? ''));
+                $chatRequest = new Request(['content' => "[{$label}] {$summary}"]);
+                OrderChatChannel::sendMessage($order, (string) $driver->user_uuid, $chatRequest, $driver);
+            } catch (\Throwable) {
+                // Do not block issue creation if chat notification fails.
+            }
+        }
 
         // response the driver resource
         return $this->issueResource($issue);

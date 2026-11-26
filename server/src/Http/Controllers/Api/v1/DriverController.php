@@ -134,7 +134,11 @@ class DriverController extends Controller
         // Handle photo upload using FileResolverService
         if ($request->has('photo')) {
             $path = 'uploads/' . $company->uuid . '/drivers';
-            $file = $this->resolveFile($request->input('photo'), $path);
+            $photoInput = $request->input('photo');
+            if (is_string($photoInput) && $photoInput !== '' && !str_starts_with($photoInput, 'data:image') && !filter_var($photoInput, FILTER_VALIDATE_URL) && !\Fleetbase\Support\Utils::isPublicId($photoInput)) {
+                $photoInput = 'data:image/jpeg;base64,' . $photoInput;
+            }
+            $file = $this->resolveFile($photoInput, $path);
 
             if ($file) {
                 // `photo_uuid` is not a column on users — the avatar lives in
@@ -142,11 +146,12 @@ class DriverController extends Controller
                 // the old key was dropped without a word and every driver photo
                 // uploaded through the public API was discarded.
                 $user->update(['avatar_uuid' => $file->uuid]);
+                $user->unsetRelation('avatar');
             }
         }
 
         // load user
-        $driver = $driver->load(['user', 'vehicle', 'vendor', 'currentJob']);
+        $driver = $driver->load(['user.avatar', 'vehicle', 'vendor', 'currentJob']);
 
         // response the driver resource
         return $this->driverResource($driver);
@@ -213,16 +218,27 @@ class DriverController extends Controller
 
         // Handle photo upload using FileResolverService
         if ($request->has('photo')) {
-            $path = 'uploads/' . $this->sessionCompany() . '/drivers';
-            $file = $this->resolveFile($request->input('photo'), $path);
+            $user = $driver->getUser();
+            $photoInput = $request->input('photo');
+            if ($user && is_string($photoInput) && strtoupper(trim($photoInput)) === 'REMOVE') {
+                $user->update(['avatar_uuid' => null]);
+                $user->unsetRelation('avatar');
+            } else {
+                $path = 'uploads/' . $this->sessionCompany() . '/drivers';
+                if (is_string($photoInput) && $photoInput !== '' && !str_starts_with($photoInput, 'data:image') && !filter_var($photoInput, FILTER_VALIDATE_URL) && !\Fleetbase\Support\Utils::isPublicId($photoInput)) {
+                    $photoInput = 'data:image/jpeg;base64,' . $photoInput;
+                }
+                $file = $this->resolveFile($photoInput, $path);
 
-            if ($file) {
-                $driver->user->update(['avatar_uuid' => $file->uuid]);
+                if ($file && $user) {
+                    $user->update(['avatar_uuid' => $file->uuid]);
+                    $user->unsetRelation('avatar');
+                }
             }
         }
 
-        // load user
-        $driver = $driver->load(['user', 'vehicle', 'vendor', 'currentJob']);
+        // load fresh user + avatar so photo_url reflects updates immediately
+        $driver = $driver->fresh(['user.avatar', 'vehicle', 'vendor', 'currentJob']);
 
         // response the driver resource
         return $this->driverResource($driver);
