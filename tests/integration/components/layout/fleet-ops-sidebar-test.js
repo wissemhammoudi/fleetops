@@ -298,10 +298,10 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
 
         await click('.next-sidebar-navigator-back');
         await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(4)');
-        assert.strictEqual(router.transitions.at(-1).route, 'console.fleet-ops.settings.index');
+        assert.strictEqual(router.transitions.at(-1).route, 'console.fleet-ops.operations.order-config');
     });
 
-    test('it exposes analytics and settings hubs as first nested menu items', async function (assert) {
+    test('it exposes analytics hub and simplified settings links as first nested menu items', async function (assert) {
         await render(hbs`<Layout::FleetOpsSidebar />`);
 
         await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(2)');
@@ -314,9 +314,10 @@ module('Integration | Component | layout/fleet-ops-sidebar', function (hooks) {
 
         await click('.next-sidebar-navigator-back');
         await click('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:nth-of-type(4)');
-        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type').includesText('Settings Hub');
-        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type svg[data-icon="sliders"]').exists();
-        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type svg[data-icon="table-cells-large"]').doesNotExist();
+        assert.dom('.next-sidebar-navigator-view-in .next-sidebar-navigator-item:first-of-type').includesText('Order Config');
+        assert.dom('.next-sidebar-navigator-view-in').doesNotIncludeText('Settings Hub');
+        assert.dom('.next-sidebar-navigator-view-in').doesNotIncludeText('Custom Fields');
+        assert.dom('.next-sidebar-navigator-view-in').doesNotIncludeText('Avatars');
     });
 
     test('it preserves registered item priority, virtual metadata, and nested active state', async function (assert) {

@@ -137,8 +137,6 @@ export default buildRoutes(function () {
     this.route('settings', function () {
         this.route('navigator-app');
         this.route('notifications');
-        this.route('custom-fields');
-        this.route('avatars');
         this.route('routing');
         this.route('map');
         this.route('orchestrator');

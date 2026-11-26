@@ -13,12 +13,10 @@ module('Unit | Route | fleet-ops hub index routes', function (hooks) {
         this.owner.register('service:docs-panel', DocsPanelStubService);
     });
 
-    test('it registers the FleetOps hub route templates', function (assert) {
+    test('it registers the FleetOps hub and redirect route templates', function (assert) {
         assert.ok(this.owner.resolveRegistration('route:management/index'), 'management redirect route is registered');
         assert.ok(this.owner.resolveRegistration('route:analytics/index'), 'analytics hub route is registered');
         assert.ok(this.owner.resolveRegistration('template:analytics/index'), 'analytics hub template is registered');
-        assert.ok(this.owner.resolveRegistration('route:settings/index'), 'settings hub route is registered');
-        assert.ok(this.owner.resolveRegistration('controller:settings/index'), 'settings hub controller is registered');
-        assert.ok(this.owner.resolveRegistration('template:settings/index'), 'settings hub template is registered');
+        assert.ok(this.owner.resolveRegistration('route:settings/index'), 'settings redirect route is registered');
     });
 });

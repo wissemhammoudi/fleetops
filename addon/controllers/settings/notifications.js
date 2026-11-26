@@ -34,7 +34,7 @@ export default class SettingsNotificationsController extends Controller {
      * @memberof ConsoleAdminNotificationsController
      * @var {Array}
      */
-    @tracked notificationTransportMethods = ['email', 'sms'];
+    @tracked notificationTransportMethods = ['email'];
 
     /**
      * Creates an instance of ConsoleAdminNotificationsController.

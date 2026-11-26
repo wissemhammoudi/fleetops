@@ -81,9 +81,9 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
                 label: this.intl.t('menu.settings'),
                 icon: 'gear',
                 route: 'settings',
-                defaultRoute: 'settings.index',
+                defaultRoute: 'operations.order-config',
                 requiresVisibleChildren: true,
-                keywords: ['configuration', 'navigator', 'map', 'routing', 'notifications', 'order config', 'service rates'],
+                keywords: ['configuration', 'navigator', 'map', 'routing', 'notifications', 'order config', 'service rates', 'collection'],
                 children: this.settingsItems,
             }),
         ];
@@ -159,25 +159,23 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
 
     get settingsItems() {
         return this.withRegistryItems('settings', [
-            this.createHubItem('Settings Hub', 'sliders', 'settings.index', 'fleet-ops view navigator-settings', 'fleet-ops see navigator-settings', [
-                'settings hub',
-                'configuration dashboard',
-                'setup focus',
-            ]),
             this.createItem('menu.order-config', 'diagram-project', 'operations.order-config', 'fleet-ops list order-config', 'fleet-ops see order-config', [
                 'configuration',
                 'fields',
                 'entities',
             ]),
             this.createItem('menu.service-rates', 'file-invoice-dollar', 'operations.service-rates', 'fleet-ops list service-rate', 'fleet-ops see service-rate', ['rates', 'pricing']),
+            this.createItem('menu.scheduling', 'calendar-days', 'settings.scheduling', 'fleet-ops view scheduling-settings', 'fleet-ops see scheduling-settings', [
+                'collection',
+                'pickup windows',
+                'cutoff',
+                'tunis',
+            ]),
             this.createItem('menu.navigator-app', 'location-arrow', 'settings.navigator-app', 'fleet-ops view navigator-settings', 'fleet-ops see navigator-settings'),
             this.createItem('menu.map', 'map', 'settings.map', 'fleet-ops view map-settings', 'fleet-ops see map-settings'),
-            this.createItem('menu.notifications', 'bell', 'settings.notifications', 'fleet-ops view notification-settings', 'fleet-ops see notification-settings'),
             this.createItem('menu.routing', 'route', 'settings.routing', 'fleet-ops view routing-settings', 'fleet-ops see routing-settings'),
             this.createItem('menu.orchestrator', 'circle-nodes', 'settings.orchestrator', 'fleet-ops view routing-settings', 'fleet-ops see routing-settings'),
-            this.createItem('menu.scheduling', 'calendar-days', 'settings.scheduling', 'fleet-ops view scheduling-settings', 'fleet-ops see scheduling-settings'),
-            this.createItem('menu.custom-fields', 'pen-to-square', 'settings.custom-fields', 'fleet-ops view custom-field', 'fleet-ops see custom-field'),
-            this.createItem('menu.avatars', 'icons', 'settings.avatars', 'fleet-ops view avatar', 'fleet-ops see avatar'),
+            this.createItem('menu.notifications', 'bell', 'settings.notifications', 'fleet-ops view notification-settings', 'fleet-ops see notification-settings'),
         ]);
     }
 
@@ -328,17 +326,14 @@ export default class LayoutFleetOpsSidebarComponent extends Component {
             'management.website-requests': 7,
             'analytics.index': 0,
             'analytics.reports': 1,
-            'settings.index': 0,
-            'operations.order-config': 1,
-            'operations.service-rates': 2,
+            'operations.order-config': 0,
+            'operations.service-rates': 1,
+            'settings.scheduling': 2,
             'settings.navigator-app': 3,
             'settings.map': 4,
-            'settings.notifications': 5,
-            'settings.routing': 6,
-            'settings.orchestrator': 7,
-            'settings.scheduling': 8,
-            'settings.custom-fields': 9,
-            'settings.avatars': 10,
+            'settings.routing': 5,
+            'settings.orchestrator': 6,
+            'settings.notifications': 7,
         };
 
         return priorities[route] ?? 0;

@@ -48,7 +48,7 @@
                     />
                 </InputGroup>
             </ContentPanel>
-            <ContentPanel @title="Tracking Intelligence" @open={{true}} @wrapperClass="bordered-classic">
+            <ContentPanel @title="Tracking Intelligence" @open={{false}} @wrapperClass="bordered-classic">
                 <InputGroup @name="Tracking Provider" @helpText="Choose the provider used for live tracking intelligence and ETA calculations.">
                     <Select
                         @value={{this.trackingProvider}}
@@ -107,7 +107,7 @@
                     </div>
                 {{/if}}
             </ContentPanel>
-            <ContentPanel @title="Operational Alerts" @open={{true}} @wrapperClass="bordered-classic">
+            <ContentPanel @title="Operational Alerts" @open={{false}} @wrapperClass="bordered-classic">
                 <InputGroup @name="Late Departures" @helpText="Notify when an order has not departed after the scheduled pickup window plus the configured grace period.">
                     <Toggle @isToggled={{this.lateDepartureAlertsEnabled}} @onToggle={{fn (mut this.lateDepartureAlertsEnabled)}} />
                 </InputGroup>
