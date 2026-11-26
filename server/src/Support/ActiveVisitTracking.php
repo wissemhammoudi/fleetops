@@ -32,7 +32,7 @@ class ActiveVisitTracking
         $time = is_string($positionAt) && strtotime($positionAt) !== false ? Carbon::parse($positionAt) : null;
         $point = $driver->location;
         $fresh = $driver->online && $time && $time->between(now()->subSeconds(120), now()->addSeconds(30)) && self::validPoint($point);
-        $options = TrackingOptions::fromArray(['route_cache_ttl_seconds' => 20], $driver->company_uuid);
+        $options = TrackingOptions::fromArray(['route_cache_ttl_seconds' => 5], $driver->company_uuid);
         if ($visit['kind'] === 'depot') {
             $round = CollectionRound::where('company_uuid', $driver->company_uuid)->where('uuid', $visit['round_uuid'])->firstOrFail();
             $depot = CollectionDepot::destination($round);
@@ -77,9 +77,10 @@ class ActiveVisitTracking
         ];
         if (!$fresh || !$validDestination) return $result;
         $context = new TrackingContext($order, null, $driver, $point, $point, collect([$destination]), collect(), collect([$destination]), $destination, null, 0);
-        // Bound provider calls even when the source GPS updates more frequently than the UI.
-        $key = 'navigator_visit_eta:' . hash('sha256', json_encode([$driver->company_uuid, $driver->uuid, $visit, $destination->toArray(), (int) floor(now()->timestamp / 20)]));
-        $route = Cache::remember($key, 20, fn () => app(TrackingProviderManager::class)->track($context, $options));
+        // Bound provider calls per ~25m movement grid and 5-second window so moving drivers stay responsive.
+        $quantizedDriver = [round($point->getLat(), 4), round($point->getLng(), 4)];
+        $key = 'navigator_visit_eta:' . hash('sha256', json_encode([$driver->company_uuid, $driver->uuid, $visit, $quantizedDriver, $destination->toArray(), (int) floor(now()->timestamp / 5)]));
+        $route = Cache::remember($key, 5, fn () => app(TrackingProviderManager::class)->track($context, $options));
         $road = !in_array($route->provider, ['none', 'calculated']) && ($route->polyline || count($route->coordinates) > 1);
         $seconds = $route->durationInTrafficSeconds ?? $route->durationSeconds;
         if (!$road || $seconds === null || !is_finite($seconds) || $seconds < 0) {

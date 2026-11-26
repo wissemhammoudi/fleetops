@@ -1027,7 +1027,7 @@ class OrderController extends Controller
             return response()->apiError('Order has not been dispatched yet and cannot be started.');
         }
 
-        \Fleetbase\FleetOps\Support\DriverNavigation::delivery($driver, $order);
+        \Fleetbase\FleetOps\Support\DriverNavigation::delivery($driver, $order, $request->boolean('switch'));
 
         // set order to started
         $order->started    = true;

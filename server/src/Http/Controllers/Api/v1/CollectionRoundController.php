@@ -25,14 +25,34 @@ class CollectionRoundController extends Controller
     public function index()
     {
         $driver = $this->driver();
-
-        return response()->json(['rounds' => CollectionRound::where('company_uuid', $driver->company_uuid)->where('driver_uuid', $driver->uuid)
+        $rounds = CollectionRound::where('company_uuid', $driver->company_uuid)->where('driver_uuid', $driver->uuid)
             ->whereIn('status', ['released', 'in_progress', 'awaiting_depot', 'received_at_depot', 'completed'])
             ->orderByRaw("CASE WHEN status IN ('completed', 'received_at_depot') THEN 1 ELSE 0 END")
             ->orderByRaw("CASE WHEN status IN ('completed', 'received_at_depot') THEN scheduled_at END DESC")
-            ->orderBy('scheduled_at')->limit(100)->get()->map(function ($round) use ($driver) {
+            ->orderBy('scheduled_at')->limit(100)->get();
+
+        $orderUuids = $rounds->flatMap(fn ($round) => collect($round->stops)->pluck('order_uuid'))
+            ->filter()->unique()->values()->all();
+        $trackingByOrder = $orderUuids
+            ? \Fleetbase\FleetOps\Models\Order::where('company_uuid', $driver->company_uuid)
+                ->whereIn('uuid', $orderUuids)
+                ->with('trackingNumber')
+                ->get()
+                ->mapWithKeys(fn ($order) => [$order->uuid => $order->trackingNumber?->tracking_number])
+                ->all()
+            : [];
+
+        return response()->json(['rounds' => $rounds->map(function ($round) use ($driver, $trackingByOrder) {
                 $data = $round->toArray();
                 $data['depot'] = \Fleetbase\FleetOps\Support\CollectionDepot::destination($round);
+                if (!empty($data['stops']) && is_array($data['stops'])) {
+                    $data['stops'] = array_map(function ($stop) use ($trackingByOrder) {
+                        if (empty($stop['tracking_number']) && !empty($stop['order_uuid']) && isset($trackingByOrder[$stop['order_uuid']])) {
+                            $stop['tracking_number'] = $trackingByOrder[$stop['order_uuid']];
+                        }
+                        return $stop;
+                    }, $data['stops']);
+                }
                 if (!empty($data['routing']['stops'])) $data['routing'] = CollectionRouteProgress::forDriver($data['routing'], $driver->company_uuid, $driver->uuid);
                 return $data;
             }),
@@ -43,14 +63,16 @@ class CollectionRoundController extends Controller
     {
         $driver = $this->driver();
         $input = $request->validate([
-            'action' => ['required', 'in:start,start_visit,result,start_depot,receive_depot'],
+            'action' => ['required', 'in:start,start_visit,pause_visit,result,start_depot,receive_depot'],
             'revision' => ['required', 'integer', 'min:1'],
             'stop_uuid' => ['required_if:action,result,start_visit', 'string', 'max:150'],
+            'switch' => ['sometimes', 'boolean'],
             'request_id' => ['required_if:action,result,receive_depot', 'string', 'min:8', 'max:100'],
             'depot_uuid' => ['required_if:action,receive_depot', 'string', 'max:150'],
             'manifest_verified' => ['required_if:action,receive_depot', 'boolean'],
             'outcome' => ['required_if:action,result', 'in:collected,not_ready,absent,packaging_refused'],
             'reason' => ['required_if:outcome,not_ready,absent,packaging_refused', 'nullable', 'string', 'max:1000'],
+            'scanned_qr' => ['nullable', 'string', 'max:255'],
             'checks' => ['sometimes', 'array'],
             'checks.*' => ['boolean'],
         ]);
@@ -90,14 +112,30 @@ class CollectionRoundController extends Controller
     public function startDelivery(Request $request)
     {
         $driver = $this->driver();
-        $input = $request->validate(['order_uuid' => ['required', 'string', 'max:150']]);
-        return \Fleetbase\FleetOps\Support\DriverNavigation::transaction($driver->company_uuid, function () use ($driver, $input) {
+        $input = $request->validate([
+            'order_uuid' => ['required', 'string', 'max:150'],
+            'switch' => ['sometimes', 'boolean'],
+        ]);
+        $switch = (bool) ($input['switch'] ?? false);
+        return \Fleetbase\FleetOps\Support\DriverNavigation::transaction($driver->company_uuid, function () use ($driver, $input, $switch) {
             $order = \Fleetbase\FleetOps\Models\Order::where('company_uuid', $driver->company_uuid)->where('driver_assigned_uuid', $driver->uuid)
                 ->where('uuid', $input['order_uuid'])->firstOrFail();
             abort_if(in_array($order->status, DriverNavigation::TERMINAL_STATUSES), 409, 'This delivery is closed.');
+            if ($switch) {
+                DriverNavigation::pause($driver);
+            }
             if (!$order->started) return app(OrderController::class)->startOrder($order->public_id, new Request());
-            \Fleetbase\FleetOps\Support\DriverNavigation::delivery($driver, $order);
+            \Fleetbase\FleetOps\Support\DriverNavigation::delivery($driver, $order, $switch);
             return response()->json(['started' => true]);
+        });
+    }
+
+    public function pauseNavigation()
+    {
+        $driver = $this->driver();
+        return DriverNavigation::transaction($driver->company_uuid, function () use ($driver) {
+            $paused = DriverNavigation::pause($driver);
+            return response()->json(['paused' => $paused !== null, 'visit' => $paused, 'navigation' => null]);
         });
     }
 

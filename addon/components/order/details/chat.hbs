@@ -1,0 +1,85 @@
+<ContentPanel @title="Order messages (Driver, Customer & Admin)" @open={{true}} @wrapperClass="bordered-top">
+    <div class="space-y-3 text-xs">
+        {{#if (and this.loading (not this.chatData))}}
+            <div class="text-gray-500">Loading order messages...</div>
+        {{else if (not this.isActive)}}
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-gray-500 dark:text-gray-400">
+                    The 3-party channel opens automatically when pickup or delivery starts.
+                </span>
+                <Button @icon="comments" @text="Open chat channel" @size="xs" @onClick={{this.openChannel}} />
+            </div>
+        {{else}}
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap gap-1.5">
+                    {{#each this.participants as |person|}}
+                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100">
+                            {{person.name}} ({{if (eq person.role "driver") "Driver" (if (eq person.role "customer") "Customer" "Admin")}})
+                        </span>
+                    {{/each}}
+                </div>
+                <Button @icon="arrows-rotate" @text="Refresh" @size="xs" @disabled={{this.loading}} @onClick={{fn this.loadChat false false}} />
+            </div>
+
+            <div class="space-y-2 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 p-2.5 bg-gray-50 dark:bg-gray-900">
+                {{#each this.messages as |msg|}}
+                    <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-2 bg-white dark:bg-gray-800 space-y-1">
+                        <div class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                            <strong class="text-gray-900 dark:text-gray-100">{{msg.sender.name}}</strong>
+                            <span class="uppercase font-semibold">{{msg.sender.role}}</span>
+                            {{#if msg.created_at}}
+                                <span>{{format-date-fns msg.created_at "MMM d, HH:mm"}}</span>
+                            {{/if}}
+                        </div>
+                        {{#if msg.content}}
+                            <div class="text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{{msg.content}}</div>
+                        {{/if}}
+                        {{#if msg.attachments.length}}
+                            <div class="flex flex-wrap gap-2 pt-1">
+                                {{#each msg.attachments as |att|}}
+                                    <button type="button" class="p-0 border-0 bg-transparent cursor-pointer" {{on "click" (fn this.openImage att.url)}}>
+                                        <img src={{att.url}} alt={{or att.filename "Chat photo"}} class="w-32 h-24 object-cover rounded border border-gray-300 dark:border-gray-600" />
+                                    </button>
+                                {{/each}}
+                            </div>
+                        {{/if}}
+                    </div>
+                {{else}}
+                    <div class="text-gray-500 dark:text-gray-400">No messages yet. Write a message or attach a photo for the driver and customer.</div>
+                {{/each}}
+            </div>
+
+            <form class="space-y-2" {{on "submit" this.sendMessage}}>
+                {{#if this.previewUrl}}
+                    <div class="flex items-center gap-2 p-1.5 border border-gray-200 dark:border-gray-700 rounded">
+                        <img src={{this.previewUrl}} alt={{this.imageFilename}} class="w-10 h-10 object-cover rounded" />
+                        <span class="flex-1 truncate">{{this.imageFilename}}</span>
+                        <button type="button" class="btn btn-default btn-xs" {{on "click" this.clearImage}}>Remove</button>
+                    </div>
+                {{/if}}
+                <textarea
+                    class="form-input w-full"
+                    rows="2"
+                    placeholder="Message driver and customer..."
+                    value={{this.content}}
+                    disabled={{this.sending}}
+                    {{on "input" this.updateContent}}
+                ></textarea>
+                <div class="flex items-center justify-between gap-2">
+                    <label class="btn btn-default btn-xs cursor-pointer">
+                        <span>Attach image</span>
+                        <input type="file" accept="image/*" class="hidden" {{on "change" this.selectImage}} />
+                    </label>
+                    <Button @type="primary" @buttonType="submit" @icon="paper-plane" @text={{if this.sending "Sending..." "Send"}} @size="xs" @disabled={{not this.canSend}} />
+                </div>
+            </form>
+        {{/if}}
+    </div>
+
+    {{#if this.viewerUrl}}
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/85" role="dialog" aria-modal="true">
+            <button type="button" class="btn btn-default btn-xs absolute top-4 right-4" {{on "click" this.closeViewer}}>Close</button>
+            <img src={{this.viewerUrl}} alt="Attachment preview" class="max-w-full max-h-full rounded" />
+        </div>
+    {{/if}}
+</ContentPanel>

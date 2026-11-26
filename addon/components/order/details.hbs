@@ -32,6 +32,7 @@
                 )
                 Payload=(component "order/details/payload" resource=@resource onChange=@onPayloadChanged isLoading=@isLoading)
                 Documents=(component "order/details/documents" resource=@resource onChange=@onDocumentsChanged isLoading=@isLoading)
+                Chat=(component "order/details/chat" resource=@resource isLoading=@isLoading)
                 Comments=(component "order/details/comments" resource=@resource onChange=@onCommentsChanged isLoading=@isLoading)
                 Metadata=(component "order/details/metadata" resource=@resource onChange=@onMetadataChanged isLoading=@isLoading)
                 RegistryYieldEnd=(component
@@ -65,6 +66,7 @@
         </RegistryYield>
         <Order::Details::Payload @resource={{@resource}} @onChange={{@onPayloadChanged}} @isLoading={{@isLoading}} />
         <Order::Details::Documents @resource={{@resource}} @onChange={{@onDocumentsChanged}} @isLoading={{@isLoading}} />
+        <Order::Details::Chat @resource={{@resource}} @isLoading={{@isLoading}} />
         <Order::Details::Comments @resource={{@resource}} @onChange={{@onCommentsChanged}} @isLoading={{@isLoading}} />
         <Order::Details::Metadata @resource={{@resource}} @onChange={{@onMetadataChanged}} @isLoading={{@isLoading}} />
         <RegistryYield @registry="fleet-ops:component:order:details:end" as |RegistryComponent|>

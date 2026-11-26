@@ -37,9 +37,11 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
             $router->get('collection-rounds', 'CollectionRoundController@index');
             $router->get('driver-navigation', 'CollectionRoundController@navigation');
             $router->post('driver-navigation', 'CollectionRoundController@startDelivery');
+            $router->post('driver-navigation/pause', 'CollectionRoundController@pauseNavigation');
             $router->post('collection-rounds/{id}', 'CollectionRoundController@update');
             $router->get('collection-deliveries', 'CollectionRoundController@deliveries');
             $router->post('collection-deliveries/{id}', 'CollectionRoundController@acceptDelivery');
+            $router->post('chat-channels/{id}/send-image', 'OrderChatController@sendChannelMessage');
             // drivers routes
             $router->group(['prefix' => 'drivers', 'middleware' => []], function () use ($router) {
                 $router->post('register-device', 'DriverController@registerDevice');
@@ -209,6 +211,8 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
                 $router->get('{id}/tracker', 'OrderController@trackerData');
                 $router->get('{id}/eta', 'OrderController@etaData');
                 $router->get('{id}/comments', 'OrderController@orderComments');
+                $router->get('{id}/chat', 'OrderChatController@show');
+                $router->post('{id}/chat/messages', 'OrderChatController@sendMessage');
                 $router->match(['post', 'patch'], '{id}/set-destination/{placeId}', 'OrderController@setDestination');
                 $router->post('{id}/capture-signature/{subjectId?}', 'OrderController@captureSignature');
                 $router->post('{id}/capture-qr/{subjectId?}', 'OrderController@captureQrScan');
@@ -542,6 +546,8 @@ Route::prefix(config('fleetops.api.routing.prefix'))->namespace('Fleetbase\Fleet
                                 $router->get('label/{id}', $controller('label'));
                                 $router->get('next-activity/{id}', $controller('nextActivity'));
                                 $router->get('{id}/tracker', 'OrderController@trackerInfo');
+                                $router->get('{id}/chat', 'OrderChatController@show');
+                                $router->post('{id}/chat/messages', 'OrderChatController@sendMessage');
                                 $router->get('{id}/eta', 'OrderController@waypointEtas');
                                 $router->post('{id}/ping-driver', $controller('pingDriver'));
                                 $router->post('{id}/capture-photo/{subjectId?}', $controller('capturePhoto'));

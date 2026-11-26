@@ -99,12 +99,14 @@ class CollectionReadiness
         $snapshot = self::snapshot($order);
         $places = collect($snapshot['places'])->keyBy('uuid');
         $stops = [];
+        $trackingNumber = $order->trackingNumber?->tracking_number;
         $parcels = array_map(fn ($entity) => ['name' => $entity->name, 'quantity' => $entity->quantity ?? 1], $snapshot['entities']);
-        $append = function (string $key, string $place) use (&$stops, $places, $order, $parcels): void {
+        $append = function (string $key, string $place) use (&$stops, $places, $order, $parcels, $trackingNumber): void {
             $row = [
                 'uuid' => $order->uuid . ':' . $key,
                 'order_uuid' => $order->uuid,
                 'order_id' => $order->public_id ?? $order->uuid,
+                'tracking_number' => $trackingNumber,
                 'contact' => \Illuminate\Support\Arr::only((array) $places->get($place), ['name', 'street1', 'street2', 'city', 'phone']),
                 'status' => 'pending',
                 'order_parcels' => $parcels,
