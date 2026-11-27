@@ -262,7 +262,17 @@ class CollectionRounds
                 self::revision($round, $input);
                 $assigned = Driver::where('company_uuid', $company)->where('uuid', $driver)->firstOrFail();
                 DriverNavigation::pause($assigned);
-                return self::find($company, $id);
+                $fresh = self::find($company, $id);
+                $stopUuid = $input['stop_uuid'] ?? null;
+                $activeStopUuid = data_get($fresh->routing, 'active_stop_uuid');
+                if ($activeStopUuid && (!$stopUuid || $activeStopUuid === $stopUuid)) {
+                    $routing = $fresh->routing ?? [];
+                    unset($routing['active_stop_uuid']);
+                    $fresh->routing = $routing;
+                    self::audit($fresh, 'visit_paused', ['stop_uuid' => $stopUuid, 'driver_uuid' => $driver]);
+                }
+
+                return $fresh;
             }
             $startingRound = $input['action'] === 'start_visit' && $round->status === 'released';
             if ($input['action'] === 'start' || ($input['action'] === 'start_visit' && $round->status === 'released')) {
