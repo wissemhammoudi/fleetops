@@ -515,37 +515,7 @@ export default class OperationsSchedulerIndexController extends Controller {
             revert();
             const round = this.collectionPlanning.rounds.find((row) => row.uuid === extendedProps.roundUuid);
             if (round && extendedProps.kind === 'delivery') {
-                const order = round.depot_orders?.find((row) => row.order_uuid === extendedProps.orderUuid);
-                if (
-                    !order?.delivery ||
-                    order.delivery.status !== 'staging' ||
-                    !this.collectionPlanning.permissions['assign-delivery'] ||
-                    order.delivery.manifest.units.some((unit) => unit.staged_at)
-                ) {
-                    this.notifications.warning(this.intl.t('planning.locked'));
-                    return;
-                }
-                if (event.resourceIds?.[0] && event.resourceIds[0] !== (order.delivery.driver_uuid ?? 'collection-unassigned')) {
-                    this.notifications.warning(this.intl.t('planning.keep-driver'));
-                    return;
-                }
-                const date = calendarDate(start);
-                this.modalsManager.confirm({
-                    title: this.intl.t('planning.move-draft'),
-                    body: `${this.intl.t('planning.new-date', { date })} ${this.intl.t('planning.delivery-date-help')}`,
-                    confirm: async () => {
-                        try {
-                            await this.collectionPlanning.change(`fleet-ops/collection-deliveries/${encodeURIComponent(order.order_uuid)}`, {
-                                action: 'reschedule',
-                                delivery_date: date,
-                                revision: order.delivery.revision,
-                                request_id: crypto.randomUUID(),
-                            });
-                        } catch (error) {
-                            this.notifications.serverError(error);
-                        }
-                    },
-                });
+                this.notifications.warning(this.intl.t('planning.locked'));
                 return;
             }
             if (!round || extendedProps.kind !== 'pickup' || round.status !== 'draft' || !this.collectionPlanning.permissions.plan) {

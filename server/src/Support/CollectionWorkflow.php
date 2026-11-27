@@ -56,7 +56,7 @@ class CollectionWorkflow
                 'ready_at' => null,
                 'planned_collection_at' => null,
                 'depot_received_at' => null,
-                'planned_delivery_date' => null,
+                'depot_date' => null,
                 'collection_round_uuid' => null,
                 'delivery_run_uuid' => null,
                 'history' => [['state' => 'awaiting_preparation', 'at' => now()->toISOString(), 'actor_uuid' => session('user')]],

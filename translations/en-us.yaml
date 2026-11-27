@@ -55,7 +55,7 @@ planning:
         idle-step-select: "Tick orders in the list (ready pickups or parcels at the depot)."
         idle-step-plan: "Press Plan pickup or Plan delivery, choose the date and drivers."
         idle-step-confirm: "Optimize, review the routes on the map, then confirm."
-        delivery-date: "Delivery date"
+        depot-date: "Depot date"
         counts:
             ready_for_pickup: "Ready for pickup"
             pickup_planned: "Pickup planned"
@@ -149,7 +149,7 @@ planning:
     calendar: Planning calendar
     unassigned: Unassigned pickups & deliveries
     pickup-event: "Pickup - {orders} orders - {parcels} parcels"
-    delivery-event: "Delivery date - {order}"
+    delivery-event: "Delivery - {order}"
     keep-driver: Change delivery drivers in the handover details. Assigned pickups cannot be dragged to the unassigned row.
     new-date: "New date: {date}."
     new-driver: "New driver: {driver}."
@@ -186,18 +186,18 @@ collection-depot:
     reconcile-help: Confirm the physical count against every expected label. Missing, damaged or partly collected goods hold the entire order. Receipt is not delivery completion.
     resolve: Resolve order hold
     resolve-help: Explain the resolution in the notes first. Every expected physical parcel must be received in good condition and every pickup collected; a partial collection cannot be waived.
-    delivery-date: Earliest planned delivery date
-    eligible: Eligible for delivery release today after staging scans and assigned-driver acceptance.
+    depot-date: Depot date
+    eligible: Ready for delivery release after staging scans and assigned-driver acceptance.
 
 collection-delivery:
     title: Depot delivery handover
-    help: One operational delivery leg on the original order. Stage every physical parcel at depot; the assigned driver must inspect and accept the exact manifest in Navigator. Goods stay at depot until operations releases departure on an eligible operating day.
+    help: One operational delivery leg on the original order. Stage every physical parcel at depot; the assigned driver must inspect and accept the exact manifest in Navigator. Goods stay at depot until operations releases departure.
     driver: Delivery driver
     assign: Prepare delivery handover
     barcode: Scan label as parcel enters the depot staging area
     load: Record staged parcel
     release: Release delivery departure
-    release-help: Confirm every staged parcel is physically handed to the accepted driver now. This releases the depot-origin route on the original order, with no new charge. No same-day standard delivery or unresolved holds.
+    release-help: Confirm every staged parcel is physically handed to the accepted driver now. This releases the depot-origin route on the original order, with no new charge. Orders on hold cannot depart.
     reason: Recall / custody verification notes
     recall: Recall unreleased handover
     recall-help: Physically verify every staged parcel remains at depot before recalling. Acceptance is revoked and a fresh assignment requires new scans. Departed goods cannot be reassigned through this action.
@@ -3033,7 +3033,7 @@ settings:
         cutoff-help: Orders ready at or after this time move to the next operating day.
         departure: Pickup round departure
         closed-dates: Closure dates
-        closed-dates-help: "One local date per line, in YYYY-MM-DD format. Standard delivery is planned for the next operating day after confirmed depot receipt."
+        closed-dates-help: "One local date per line, in YYYY-MM-DD format."
         save: Save collection calendar
         saved: Collection calendar saved.
         reload: Reload collection calendar

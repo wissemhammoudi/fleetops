@@ -52,7 +52,7 @@ planning:
         idle-step-select: "Cochez les commandes dans la liste (collectes prêtes ou colis au dépôt)."
         idle-step-plan: "Cliquez sur Planifier la collecte ou la livraison, choisissez la date et les chauffeurs."
         idle-step-confirm: "Optimisez, vérifiez les tournées sur la carte, puis confirmez."
-        delivery-date: "Date de livraison"
+        depot-date: "Date dépôt"
         counts:
             ready_for_pickup: "Prêtes à collecter"
             pickup_planned: "Collecte planifiée"
@@ -146,7 +146,7 @@ planning:
     calendar: Calendrier de planification
     unassigned: Collectes et livraisons non affectées
     pickup-event: "Collecte - {orders} commandes - {parcels} colis"
-    delivery-event: "Date de livraison - {order}"
+    delivery-event: "Livraison - {order}"
     keep-driver: Changez le chauffeur de livraison dans la remise. Une collecte affectée ne peut pas être déplacée vers la ligne sans chauffeur.
     new-date: "Nouvelle date : {date}."
     new-driver: "Nouveau chauffeur : {driver}."

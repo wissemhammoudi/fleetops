@@ -154,9 +154,18 @@ class Order extends Model
         $meta = $this->meta;
         $workflow = $meta['collection_workflow'];
         $workflow['state'] = $received ? 'received_at_depot' : 'depot_hold';
-        $workflow['depot_received_at'] = $received ? now()->toISOString() : null;
-        $workflow['planned_delivery_date'] = $received ? $date : null;
-        $workflow['delivery_timezone'] = $received ? $timezone : null;
+        if ($received) {
+            $receivedAt = now();
+            $workflow['depot_received_at'] = $receivedAt->toISOString();
+            $workflow['depot_date'] = $timezone ? $receivedAt->copy()->setTimezone($timezone)->toDateString() : $receivedAt->toDateString();
+            $workflow['depot_timezone'] = $timezone;
+        } else {
+            $workflow['depot_received_at'] = null;
+            $workflow['depot_date'] = null;
+            $workflow['depot_timezone'] = null;
+        }
+        $workflow['planned_delivery_date'] = null;
+        $workflow['delivery_timezone'] = null;
         if ($received && $depot) $workflow['depot'] = \Illuminate\Support\Arr::only($depot, ['uuid', 'name', 'street1', 'city']);
         $workflow['history'][] = ['state' => $workflow['state'], 'round_uuid' => $roundUuid, 'at' => now()->toISOString(), 'actor_uuid' => session('user')];
         $meta['collection_workflow'] = $workflow;

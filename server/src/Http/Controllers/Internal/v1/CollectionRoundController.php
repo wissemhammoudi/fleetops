@@ -80,8 +80,11 @@ class CollectionRoundController extends Controller
                     $order = \Fleetbase\FleetOps\Models\Order::where('company_uuid', $round->company_uuid)->where('uuid', $uuid)->first();
                     $leg = CollectionDeliveryLeg::where('company_uuid', $round->company_uuid)->where('order_uuid', $uuid)->first();
                     $delivery = $leg?->toArray();
-                    unset($delivery['manifest']['requests']);
-                    $data['depot_orders'][] = ['order_uuid' => $uuid, 'eligible' => $order && CollectionDepot::eligible($order), 'delivery' => $delivery] + $receipt;
+                    unset($delivery['manifest']['requests'], $receipt['delivery_date']);
+                    $depotReceivedAt = data_get($order?->meta, 'collection_workflow.depot_received_at') ?? ($receipt['at'] ?? null);
+                    $depotDate = data_get($order?->meta, 'collection_workflow.depot_date')
+                        ?? ($receipt['depot_date'] ?? ($depotReceivedAt ? \Carbon\CarbonImmutable::parse($depotReceivedAt)->setTimezone($schedule['timezone'])->toDateString() : null));
+                    $data['depot_orders'][] = ['order_uuid' => $uuid, 'eligible' => $order && CollectionDepot::eligible($order), 'depot_received_at' => $depotReceivedAt, 'depot_date' => $depotDate, 'delivery' => $delivery] + $receipt;
                 }
 
                 return $data;
@@ -109,9 +112,8 @@ class CollectionRoundController extends Controller
 
     public function delivery(Request $request, string $id)
     {
-        $input = $request->validate(['action' => ['required', 'in:assign,load,release,recall,reschedule']]);
-        $action = $input['action'] === 'reschedule' ? 'assign-delivery' : $input['action'] . '-delivery';
-        return response()->json(['delivery' => CollectionDelivery::change(CollectionConsoleAccess::authorize($action), $id, $request->all())]);
+        $input = $request->validate(['action' => ['required', 'in:assign,load,release,recall']]);
+        return response()->json(['delivery' => CollectionDelivery::change(CollectionConsoleAccess::authorize($input['action'] . '-delivery'), $id, $request->all())]);
     }
 
     public function labels(string $id)

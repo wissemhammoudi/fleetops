@@ -100,10 +100,6 @@ class CollectionRoutePlans
             abort_unless(hash_equals($plan->fingerprint, $context['fingerprint']), 409, 'Orders, vehicles, depot or availability changed. Orchestrate and review again.');
             $proposal = json_decode($plan->proposal, true, 512, JSON_THROW_ON_ERROR);
             $receipt = ['plan_uuid' => $id, 'rounds' => [], 'deliveries' => [], 'dispatch' => false];
-            $routed = collect($proposal['routes'])->pluck('order_uuids')->flatten()->all();
-            foreach (array_intersect_key($context['moves'], array_flip($routed)) as $orderId => $roundId) {
-                self::moveDeliveryDate($company, $context['orders'][$orderId], $roundId, $input['date'], $context['calendar']['timezone']);
-            }
             foreach ($proposal['routes'] as $route) {
                 $route['pickup_order_uuids'] ??= $input['kind'] === 'pickup' ? $route['order_uuids'] : [];
                 $route['delivery_order_uuids'] ??= $input['kind'] === 'delivery' ? $route['order_uuids'] : [];
@@ -162,18 +158,6 @@ class CollectionRoutePlans
         }, 3);
     }
 
-    private static function moveDeliveryDate(string $company, Order $order, string $roundId, string $date, string $timezone): void
-    {
-        $order->recordCollectionPlanDate('delivery', $date, $timezone);
-        $order->save();
-        $round = CollectionRound::where('company_uuid', $company)->where('uuid', $roundId)->lockForUpdate()->firstOrFail();
-        $custody = $round->custody;
-        $custody['receipts'][$order->uuid]['delivery_date'] = $date;
-        $round->custody = $custody;
-        $round->revision++;
-        $round->save();
-    }
-
     private static function context(string $company, array $input, bool $lock = false): array
     {
         $calendar = CollectionSchedule::forCompany($company);
@@ -206,7 +190,6 @@ class CollectionRoutePlans
         $warnings = [];
         $fingerprints = [];
         $legs = [];
-        $moves = [];
         $kinds = [];
         foreach ($orders as $order) {
             abort_unless(CollectionWorkflow::applies($order) && !$order->dispatched && !$order->started && !$order->driver_assigned_uuid,
@@ -236,13 +219,6 @@ class CollectionRoutePlans
                 $round = ($lock ? $roundQuery->lockForUpdate() : $roundQuery)->firstOrFail();
                 abort_unless(data_get($round->depot, 'uuid') === $depot['uuid'], 409, 'Selected deliveries must belong to this depot.');
                 CollectionDelivery::assertReceipt($order, $round);
-                $deliveryDate = data_get($order->meta, 'collection_workflow.planned_delivery_date');
-                if ($deliveryDate !== $input['date']) {
-                    // The reviewed route date becomes the delivery date on commit, never earlier than depot eligibility.
-                    $earliest = CollectionSchedule::deliveryDate(\Illuminate\Support\Carbon::parse(data_get($round->custody, 'receipts.' . $order->uuid . '.at')), $calendar);
-                    abort_unless($input['date'] >= $earliest, 409, "Order {$order->public_id} can be delivered from {$earliest}. Choose that date or later.");
-                    $moves[$order->uuid] = $round->uuid;
-                }
                 $legQuery = CollectionDeliveryLeg::where('company_uuid', $company)->where('order_uuid', $order->uuid);
                 $leg = ($lock ? $legQuery->lockForUpdate() : $legQuery)->first();
                 abort_unless(!$leg || $leg->status === 'recalled'
@@ -304,9 +280,18 @@ class CollectionRoutePlans
                 ->whereIn('status', ['draft', 'released', 'in_progress', 'awaiting_depot'])->whereJsonLength('stops', '>', 0)->get()
                 ->contains(fn ($round) => !data_get($round->routing, 'plan_uuid') || self::overlaps($round->routing, $reservation));
             $busyLegs = CollectionDeliveryLeg::where('company_uuid', $company)->whereIn('driver_uuid', $vehicleDrivers)
-                ->whereIn('status', ['staging', 'accepted', 'released'])->where('manifest->delivery_date', $input['date'])
+                ->whereIn('status', ['staging', 'accepted', 'released'])
                 ->whereNotIn('order_uuid', $deliveryIds)->get()
-                ->contains(fn ($leg) => !data_get($leg->manifest, 'routing.plan_uuid') || self::overlaps(data_get($leg->manifest, 'routing'), $reservation));
+                ->contains(function ($leg) use ($input, $reservation) {
+                    $routing = data_get($leg->manifest, 'routing');
+                    if (data_get($routing, 'plan_uuid')) {
+                        $routeDate = data_get($routing, 'date') ?? data_get($leg->manifest, 'delivery_date');
+
+                        return $routeDate === $input['date'] && self::overlaps($routing, $reservation);
+                    }
+
+                    return in_array($leg->status, ['staging', 'accepted'], true);
+                });
             $busyOrders = Order::where('company_uuid', $company)->whereIn('driver_assigned_uuid', $vehicleDrivers)
                 ->whereNotIn('status', ['completed', 'done', 'delivered', 'cancelled', 'canceled', 'order_completed', 'order_delivered', 'order_canceled'])
                 ->where(fn ($query) => $query->where('started', true)->orWhere('dispatched', true)->orWhereIn('status', ['dispatched', 'started', 'out_for_delivery']))->exists();
@@ -375,7 +360,7 @@ class CollectionRoutePlans
         $fingerprint = hash('sha256', json_encode([$fingerprints, $calendar, $depot, $resources, $tasks], JSON_THROW_ON_ERROR));
 
         return ['payload' => ['jobs' => $jobs, 'vehicles' => $vehicles, 'options' => ['g' => true]],
-            'tasks' => $tasks, 'resources' => $resources, 'warnings' => $warnings, 'orders' => $orders, 'legs' => $legs, 'moves' => $moves,
+            'tasks' => $tasks, 'resources' => $resources, 'warnings' => $warnings, 'orders' => $orders, 'legs' => $legs,
             'fingerprint' => $fingerprint, 'calendar' => $calendar, 'departure' => $departure, 'end' => $end,
             'depot_legacy' => $depotLegacy];
     }
@@ -461,7 +446,7 @@ class CollectionRoutePlans
         if ($schema->hasTable('collection_delivery_legs')) {
             $legs = CollectionDeliveryLeg::where('company_uuid', $company)->whereNotNull('manifest->routing->plan_uuid')
                 ->whereNotIn('order_uuid', $excludeOrders)->whereIn('status', ['staging', 'accepted', 'released'])
-                ->where('manifest->delivery_date', $date)
+                ->where(fn ($query) => $query->where('manifest->routing->date', $date)->orWhere('manifest->delivery_date', $date))
                 ->where(fn ($query) => $query->where('driver_uuid', $driver)->orWhere('manifest->routing->vehicle_uuid', $vehicle));
             $reserved = $window ? $legs->get()->contains(fn ($leg) => self::overlaps(data_get($leg->manifest, 'routing'), $window)) : $legs->exists();
             abort_if($reserved, 409, 'Vehicle or driver is reserved by an optimized depot delivery route at this time.');

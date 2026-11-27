@@ -157,11 +157,11 @@
                                         <dd class="truncate text-right text-xs text-gray-700 dark:text-gray-300">{{t
                                                 (if (eq order.route_type "collection") "planning.collection-route" "planning.direct-route")
                                             }}</dd>
-                                        {{#if order.delivery_date}}
+                                        {{#if order.depot_date}}
                                             <dt class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                                <FaIcon @icon="calendar-day" @size="xs" class="w-3 text-center text-blue-400" />{{t "planning.orchestrator.delivery-date"}}
+                                                <FaIcon @icon="warehouse" @size="xs" class="w-3 text-center text-violet-400" />{{t "planning.orchestrator.depot-date"}}
                                             </dt>
-                                            <dd class="truncate text-right text-xs text-blue-500">{{order.delivery_date}}</dd>
+                                            <dd class="truncate text-right text-xs text-violet-500" title={{order.depot_received_at}}>{{order.depot_date}}</dd>
                                         {{/if}}
                                     </dl>
                                     {{#if order.canOpenRound}}

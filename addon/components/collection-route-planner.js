@@ -62,6 +62,8 @@ export default class CollectionRoutePlannerComponent extends Component {
     constructor() {
         super(...arguments);
         if (!this.args.permissions?.optimize_pickup && this.args.permissions?.optimize_delivery) this.chosenKind = 'delivery';
+        this.date = localDate(new Date());
+        this.keepDepartureAhead();
     }
 
     get kind() {
@@ -174,7 +176,8 @@ export default class CollectionRoutePlannerComponent extends Component {
 
     @action resetCompany() {
         this.drivers = {};
-        this.date = '';
+        this.date = localDate(new Date());
+        this.keepDepartureAhead();
         this.invalidate();
     }
 

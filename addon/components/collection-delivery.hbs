@@ -3,7 +3,7 @@
     <p>{{t "collection-delivery.help"}}</p>
     {{#if this.leg}}
         <p>{{this.leg.status}} - {{this.leg.driver_uuid}}</p>
-        <p>{{t "collection-depot.delivery-date"}}: {{this.leg.manifest.delivery_date}}</p>
+        {{#if (or this.leg.manifest.depot_date @order.depot_date)}}<p>{{t "collection-depot.depot-date"}}: {{or this.leg.manifest.depot_date @order.depot_date}}</p>{{/if}}
         <p>{{this.leg.manifest.depot.name}} - {{this.leg.manifest.depot.street1}}</p>
         {{#if this.routing}}
             <section class="border rounded p-3" data-test-delivery-route>
@@ -20,12 +20,6 @@
     {{#if this.released}}
         <p>{{t "collection-delivery.released"}}</p>
     {{else}}
-        {{#if (and this.movable @permissions.assign-delivery)}}
-            <InputGroup @name={{t "collection-depot.delivery-date"}}>
-                <input type="date" class="form-input" value={{this.deliveryDate}} {{on "change" this.selectDate}} aria-label={{t "collection-depot.delivery-date"}} />
-            </InputGroup>
-            <Button @text={{t "planning.move-draft"}} @onClick={{fn this.confirm "reschedule"}} @disabled={{or this.save.isRunning (not this.deliveryDate)}} />
-        {{/if}}
         {{#if (and this.assignable @permissions.assign-delivery)}}
             <label class="block">
                 {{t "collection-delivery.driver"}}

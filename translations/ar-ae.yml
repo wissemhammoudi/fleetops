@@ -40,7 +40,7 @@ planning:
     idle-step-select: "حدد الطلبات في القائمة (طلبات جاهزة للاستلام أو طرود في المستودع)."
     idle-step-plan: "اضغط تخطيط الاستلام أو تخطيط التوصيل، ثم اختر التاريخ والسائقين."
     idle-step-confirm: "حسّن المسارات وراجعها على الخريطة ثم أكّد."
-    delivery-date: "تاريخ التوصيل"
+    depot-date: "تاريخ المستودع"
     counts:
       ready_for_pickup: "جاهزة للاستلام"
       pickup_planned: "استلام مخطط"
@@ -53,7 +53,7 @@ planning:
   calendar: تقويم التخطيط
   unassigned: جمع وتوصيل بدون سائق
   pickup-event: "جمع - {orders} طلبات - {parcels} طرود"
-  delivery-event: "تاريخ التوصيل - {order}"
+  delivery-event: "توصيل - {order}"
   keep-driver: غيّر سائق التوصيل في تفاصيل التسليم. لا يمكن نقل جمع معيّن إلى صف بدون سائق.
   new-date: "التاريخ الجديد: {date}."
   new-driver: "السائق الجديد: {driver}."

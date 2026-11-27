@@ -103,14 +103,6 @@ class CollectionSchedule
         return self::operatingDate($date, $schedule)->setTimeFromTimeString($schedule['departure_time'])->utc();
     }
 
-    public static function deliveryDate(CarbonInterface $receivedAt, array $schedule): string
-    {
-        $schedule = self::validate($schedule);
-        $date = CarbonImmutable::instance($receivedAt)->setTimezone($schedule['timezone'])->startOfDay()->addDay();
-
-        return self::operatingDate($date, $schedule)->toDateString();
-    }
-
     public static function pickupSlots(CarbonInterface $earliest, array $schedule, ?string $date = null): array
     {
         $first = self::pickupAt($earliest, $schedule)->setTimezone($schedule['timezone'])->startOfDay();

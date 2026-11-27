@@ -137,11 +137,12 @@ class CollectionDepot
     private static function receiveOrder(CollectionRound $round, Order $order, array $receipt): array
     {
         $calendar = CollectionSchedule::forCompany($round->company_uuid);
-        $date = CollectionSchedule::deliveryDate(now(), $calendar);
-        $order->recordDepotReceipt($round->uuid, true, $date, $calendar['timezone'], $round->depot);
+        $receivedAt = now();
+        $depotDate = $receivedAt->copy()->setTimezone($calendar['timezone'])->toDateString();
+        $order->recordDepotReceipt($round->uuid, true, null, $calendar['timezone'], $round->depot);
         $order->save();
-        return ['order_id' => $receipt['order_id'], 'state' => 'received', 'at' => now()->toISOString(),
-            'delivery_date' => $date, 'timezone' => $calendar['timezone'], 'actor_uuid' => session('user')];
+        return ['order_id' => $receipt['order_id'], 'state' => 'received', 'at' => $receivedAt->toISOString(),
+            'depot_date' => $depotDate, 'timezone' => $calendar['timezone'], 'actor_uuid' => session('user')];
     }
 
     public static function assertReturnable(CollectionRound $round): void
@@ -217,12 +218,7 @@ class CollectionDepot
             || data_get($order->meta, 'collection_workflow.content_fingerprint') !== CollectionReadiness::fingerprint($order)) {
             return false;
         }
-        $calendar = CollectionSchedule::forCompany((string) $order->company_uuid);
-        $today = now()->setTimezone($calendar['timezone']);
-        $earliest = CollectionSchedule::deliveryDate(\Illuminate\Support\Carbon::parse($received), $calendar);
 
-        return $today->toDateString() >= max($earliest, (string) data_get($order->meta, 'collection_workflow.planned_delivery_date'))
-            && in_array($today->dayOfWeekIso, $calendar['operating_days'], true)
-            && !in_array($today->toDateString(), $calendar['closed_dates'], true);
+        return true;
     }
 }

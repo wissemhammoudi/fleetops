@@ -22,11 +22,11 @@ export function collectionEvents(rounds, permissions, timezone, intl) {
             extendedProps: { collection: true, roundUuid: round.uuid, kind: 'pickup', status: round.status },
         });
         for (const order of round.depot_orders ?? []) {
-            const date = order.delivery?.manifest?.delivery_date ?? order.delivery_date;
-            if (!date) continue;
-            // Delivery dates are custody-derived calendar dates, not UTC instants.
-            const [year, month, day] = date.split('-').map(Number);
             const routing = order.delivery?.manifest?.routing;
+            const date = routing?.date ?? order.delivery?.manifest?.depot_date ?? order.depot_date;
+            if (!date) continue;
+            // Depot/route dates are custody-derived calendar dates, not UTC instants.
+            const [year, month, day] = date.split('-').map(Number);
             const deliveryStart = routing?.departure_at ? toCalendarDate(routing.departure_at, timezone) : new Date(year, month - 1, day);
             events.push({
                 id: `delivery:${order.order_uuid}`,
@@ -35,8 +35,7 @@ export function collectionEvents(rounds, permissions, timezone, intl) {
                 start: deliveryStart,
                 end: routing?.ends_at ? toCalendarDate(routing.ends_at, timezone) : new Date(year, month - 1, day + 1),
                 allDay: !routing,
-                editable:
-                    !routing && order.delivery?.status === 'staging' && Boolean(permissions['assign-delivery']) && !(order.delivery.manifest?.units ?? []).some((unit) => unit.staged_at),
+                editable: false,
                 durationEditable: false,
                 backgroundColor: '#7c3aed',
                 extendedProps: { collection: true, roundUuid: round.uuid, orderUuid: order.order_uuid, kind: 'delivery', status: order.delivery?.status ?? order.state },

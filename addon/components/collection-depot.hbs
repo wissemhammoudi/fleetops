@@ -27,7 +27,7 @@
         {{#each @round.depot_orders as |order|}}
             <div class="border rounded p-3 space-y-2" data-test-depot-order>
                 <p>{{order.order_id}} - {{order.state}} - {{order.reason}}</p>
-                {{#if order.delivery_date}}<p>{{t "collection-depot.delivery-date"}}: {{order.delivery_date}} ({{order.timezone}})</p>{{/if}}
+                {{#if order.depot_date}}<p>{{t "collection-depot.depot-date"}}: {{order.depot_date}} ({{order.timezone}})</p>{{/if}}
                 {{#if order.eligible}}<p>{{t "collection-depot.eligible"}}</p>{{/if}}
                 {{#if @permissions.reconcile}}
                     <Button @text={{t "collection-depot.reconcile"}} @onClick={{fn this.confirm "reconcile" order}} @disabled={{this.save.isRunning}} data-test-depot-reconcile />

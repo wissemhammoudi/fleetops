@@ -12,7 +12,6 @@ export default class CollectionDeliveryComponent extends Component {
     @tracked driver = '';
     @tracked barcode = '';
     @tracked reason = '';
-    @tracked deliveryDate = '';
     retry = null;
 
     get leg() {
@@ -39,25 +38,14 @@ export default class CollectionDeliveryComponent extends Component {
         return this.leg?.status === 'accepted';
     }
 
-    get movable() {
-        return this.staging && !this.routing && !(this.leg.manifest?.units ?? []).some((unit) => unit.staged_at);
-    }
-
-    @action selectDate(event) {
-        this.deliveryDate = event.target.value;
-    }
-
     @action selectDriver(event) {
         this.driver = event.target.value;
     }
 
     @action confirm(action) {
         this.modalsManager.confirm({
-            title: this.intl.t(action === 'reschedule' ? 'planning.move-draft' : `collection-delivery.${action}`),
-            body:
-                action === 'reschedule'
-                    ? `${this.intl.t('planning.new-date', { date: this.deliveryDate })} ${this.intl.t('planning.delivery-date-help')}`
-                    : this.intl.t(`collection-delivery.${action}-help`),
+            title: this.intl.t(`collection-delivery.${action}`),
+            body: this.intl.t(`collection-delivery.${action}-help`),
             confirm: () => this.save.perform(action),
         });
     }
@@ -67,7 +55,6 @@ export default class CollectionDeliveryComponent extends Component {
             action,
             ...(action === 'assign' ? { driver_uuid: this.driver } : {}),
             ...(action === 'load' ? { barcode: this.barcode.trim() } : {}),
-            ...(action === 'reschedule' ? { delivery_date: this.deliveryDate } : {}),
             reason: this.reason.trim(),
         };
         try {
