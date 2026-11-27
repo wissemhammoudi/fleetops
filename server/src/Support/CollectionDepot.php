@@ -148,11 +148,6 @@ class CollectionDepot
     {
         abort_unless($round->status === 'awaiting_depot' && !collect($round->stops)->contains('status', 'pending')
             && collect($round->stops)->contains('status', 'collected'), 409, 'Finish the pickup visits before returning parcels to the depot.');
-        foreach (data_get($round->routing, 'stops', []) as $visit) {
-            if (($visit['kind'] ?? 'pickup') !== 'delivery') continue;
-            $order = Order::where('company_uuid', $round->company_uuid)->where('uuid', $visit['order_uuid'])->first();
-            abort_unless($order && in_array($order->status, DriverNavigation::TERMINAL_STATUSES), 409, 'Finish the saved delivery visits before returning to the depot.');
-        }
     }
 
     // Called only inside CollectionRounds' company/round transaction and assigned-driver guard.

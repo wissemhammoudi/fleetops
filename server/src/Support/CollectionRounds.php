@@ -251,7 +251,7 @@ class CollectionRounds
                 if (($active['kind'] ?? null) === 'depot' && ($active['round_uuid'] ?? null) === $round->uuid) return $round;
                 self::revision($round, $input);
                 $stop = collect($round->stops)->firstWhere('status', 'collected');
-                DriverNavigation::claim($assigned, ['kind' => 'depot', 'order_uuid' => $stop['order_uuid'], 'round_uuid' => $round->uuid]);
+                DriverNavigation::claim($assigned, ['kind' => 'depot', 'order_uuid' => $stop['order_uuid'], 'round_uuid' => $round->uuid], true);
                 $routing = $round->routing ?? [];
                 $routing['depot_return_started_at'] = now()->toISOString();
                 $round->routing = $routing;
